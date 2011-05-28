@@ -12,6 +12,10 @@ typedef struct {
   const apr_uri_t* url;
   int             numConnections;
   int             verbose;
+  char*           httpVerb;
+  char*           contentType;
+  char*           sendData;
+  unsigned int    sendDataSize;
   unsigned long*  latencies;
   unsigned int    latenciesSize;
   unsigned int    latenciesCount;
@@ -20,6 +24,8 @@ typedef struct {
 /* Globals */
 
 #define USER_AGENT "apib 0.1"
+
+#define DEFAULT_CONTENT_TYPE "application/octet-stream"
 
 extern apr_pool_t* MainPool;
 extern volatile int Running;

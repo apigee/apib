@@ -14,3 +14,5 @@ apib: $(APIB_OBJS)
 
 clean:
 	rm -f *.o apib
+
+apib_main.c apib_iothread.c apib_reporting.c: apib.h

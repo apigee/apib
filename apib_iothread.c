@@ -33,6 +33,7 @@ typedef struct {
   int             state;
   int             bufPos;
   int             bufLen;
+  int             sendBufPos;
   char*           buf;
   int             httpStatus;
   int             chunked;
@@ -116,6 +117,7 @@ static void buildRequest(ConnectionInfo* conn)
 
   conn->bufPos = 0;
   conn->bufLen = SEND_BUF_SIZE;
+  conn->sendBufPos = 0;
 
   if (conn->ioArgs->url->path == NULL) {
     path = "/";
@@ -125,18 +127,31 @@ static void buildRequest(ConnectionInfo* conn)
 
   if (conn->ioArgs->url->query != NULL) {
     conn->bufPos += apr_snprintf(conn->buf, conn->bufLen - conn->bufPos, 
-				 "%s %s?%s HTTP/1.1\r\n", "GET", 
+				 "%s %s?%s HTTP/1.1\r\n", conn->ioArgs->httpVerb,
 				 path, conn->ioArgs->url->query);
   } else {
     conn->bufPos += apr_snprintf(conn->buf, conn->bufLen - conn->bufPos, 
-				 "%s %s HTTP/1.1\r\n", "GET", path);
+				 "%s %s HTTP/1.1\r\n", conn->ioArgs->httpVerb, path);
   }
 
   conn->bufPos += apr_snprintf(conn->buf + conn->bufPos, conn->bufLen - conn->bufPos,
 			       "User-Agent: %s\r\n", USER_AGENT);
   conn->bufPos += apr_snprintf(conn->buf + conn->bufPos, conn->bufLen - conn->bufPos,
 			       "Host: %s\r\n", conn->ioArgs->url->hostname);
-  conn->bufPos += apr_snprintf(conn->buf + conn->bufPos, conn->bufLen - conn->bufPos, "\r\n");
+
+  if (conn->ioArgs->sendDataSize > 0) {
+    char* cType = conn->ioArgs->contentType;
+
+    conn->bufPos += apr_snprintf(conn->buf + conn->bufPos, conn->bufLen - conn->bufPos, 
+				 "Content-Length: %i\r\n", conn->ioArgs->sendDataSize);
+    if (cType == NULL) {
+      cType = DEFAULT_CONTENT_TYPE;
+    }
+    conn->bufPos += apr_snprintf(conn->buf + conn->bufPos, conn->bufLen - conn->bufPos, 
+				 "Content-Type: %s\r\n", cType);
+  }
+  conn->bufPos += apr_snprintf(conn->buf + conn->bufPos, conn->bufLen - conn->bufPos, 
+			       "\r\n");
 
   assert(conn->bufPos <= conn->bufLen);
 
@@ -153,17 +168,42 @@ static void buildRequest(ConnectionInfo* conn)
 static int writeRequest(ConnectionInfo* conn)
 {
   apr_status_t s;
-  apr_size_t written = conn->bufLen;
+  apr_size_t written;
+  struct iovec bufs[2];
 
-  s = apr_socket_send(conn->sock, conn->buf + conn->bufPos, &written);
+  /* Buffer 0 is always the header, 1 is always the body */
+  /* We just set the sizes to zero when they're not relevant... */
+
+  bufs[0].iov_base = conn->buf + conn->bufPos;
+  bufs[0].iov_len = conn->bufLen - conn->bufPos;
+  bufs[1].iov_base = conn->ioArgs->sendData + conn->sendBufPos;
+  bufs[1].iov_len = conn->ioArgs->sendDataSize - conn->sendBufPos;
+
+  s = apr_socket_sendv(conn->sock, bufs, 2, &written);
   if (APR_STATUS_IS_EAGAIN(s)) {
     return 1;
   }
 
-  conn->bufPos += written;
 #if DEBUG
-  printf("Wrote %ul bytes with status %i\n", written, s);
+  printf("Headers: %i out of %i Body: %i out of %i sent %u\n",
+	 conn->bufPos, conn->bufLen, 
+	 conn->sendBufPos, conn->ioArgs->sendDataSize, written);
 #endif
+
+  /* Update positions even if we got an error since that's the spec */
+  if (conn->bufPos < conn->bufLen) {
+    if (written > (conn->bufLen - conn->bufPos)) {
+      written -= (conn->bufLen - conn->bufPos);
+      conn->bufPos = conn->bufLen;
+    } else {
+      conn->bufPos += written;
+      written = 0;
+    }
+  }
+  if (written > 0) {
+    conn->sendBufPos += written;
+  }
+
   if (s != APR_SUCCESS) {
 #if DEBUG
     char buf[128];
@@ -172,8 +212,9 @@ static int writeRequest(ConnectionInfo* conn)
 #endif
     SETSTATE(conn, STATE_FAILED);
     RecordSocketError();
-  } else if (written >= conn->bufLen) {
-    /* Did all the writing -- send again */
+  } else if ((conn->bufPos >= conn->bufLen) &&
+	     (conn->sendBufPos >= conn->ioArgs->sendDataSize)) {
+    /* Did all the writing -- ready to receive */
     SETSTATE(conn, STATE_RECV_READY);
   }
   return 0;

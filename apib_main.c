@@ -6,6 +6,7 @@
 #include <apr_general.h>
 #include <apr_getopt.h>
 #include <apr_pools.h>
+#include <apr_strings.h>
 #include <apr_thread_proc.h>
 #include <apr_time.h>
 
@@ -16,14 +17,18 @@
 apr_pool_t* MainPool;
 volatile int Running;
 
-#define VALID_OPTS "c:d:hk:vw:"
+#define VALID_OPTS "c:d:f:hk:t:vw:x:"
 
 #define VALID_OPTS_DESC \
-  "[-c connections] [-k threads] [-d seconds] [-h] <url>\n" \
+  "[-c connections] [-k threads] [-d seconds] [-w warmup secs]\n" \
+  "[-f file name] [-t content type] [-x verb] [-hv] <url>\n" \
   "  -c: Number of connections to open (default 1)\n" \
   "  -k: Number of I/O threads to spawn (default 1)\n" \
   "  -d: Number of seconds to run (default 60)\n" \
   "  -w: Warmup time in seconds (default 0)\n" \
+  "  -f: File to upload\n" \
+  "  -t: Content type (default: application/octet-stream)\n" \
+  "  -x: HTTP verb (default GET, or POST if -f is set)" \
   "  -v: Verbose (print requests and responses)\n" \
   "  -h: Print this help message"
 
@@ -68,6 +73,44 @@ static int setProcessLimits(int numConnections)
   }
 }
 
+static int readFile(const char* name, IOArgs* args)
+{
+  char errBuf[80];
+  apr_status_t s;
+  apr_file_t* f;
+  apr_finfo_t fInfo;
+
+  s = apr_file_open(&f, name, APR_READ | APR_BINARY, APR_OS_DEFAULT, MainPool);
+  if (s != APR_SUCCESS) {
+    apr_strerror(s, errBuf, 80);
+    fprintf(stderr, "Can't open input file %s: %i (%s)\n",
+	    name, s, errBuf);
+    return -1;
+  }
+
+  s = apr_file_info_get(&fInfo, APR_FINFO_SIZE, f);
+  if (s != APR_SUCCESS) {
+    apr_strerror(s, errBuf, 80);
+    fprintf(stderr, "Can't get file info: %i (%s)\n",
+	    s, errBuf);
+    return -1;
+  }
+
+  args->sendDataSize = fInfo.size;
+  args->sendData = (char*)apr_palloc(MainPool, sizeof(char) | fInfo.size);
+  
+  s = apr_file_read_full(f, args->sendData, fInfo.size, NULL);
+  if (s != APR_SUCCESS) {
+    apr_strerror(s, errBuf, 80);
+    fprintf(stderr, "Can't read input file: %i (%s)\n",
+	    s, errBuf);
+    return -1;
+  }
+
+  apr_file_close(f);
+  return 0;
+}
+
 static void waitAndReport(int duration, int warmup)
 {
   int durationLeft = duration;
@@ -102,6 +145,9 @@ int main(int ac, char const* const* av)
   int warmupTime = DEFAULT_WARMUP;
   int doHelp = 0;
   int verbose = 0;
+  char* verb = NULL;
+  char* fileName = NULL;
+  char* contentType = NULL;
   const char* url = NULL;
   IOArgs* ioArgs;
   apr_thread_t** ioThreads;
@@ -121,8 +167,14 @@ int main(int ac, char const* const* av)
       case 'd':
 	duration = atoi(curArg);
 	break;
+      case 'f':
+	fileName = apr_pstrdup(MainPool, curArg);
+	break;
       case 'h':
 	doHelp = 1;
+	break;
+      case 't':
+	contentType = apr_pstrdup(MainPool, curArg);
 	break;
       case 'k':
 	numThreads = atoi(curArg);
@@ -132,6 +184,9 @@ int main(int ac, char const* const* av)
 	break;
       case 'w':
 	warmupTime = atoi(curArg);
+	break;
+      case 'x':
+	verb = apr_pstrdup(MainPool, curArg);
 	break;
       }
     }
@@ -161,6 +216,10 @@ int main(int ac, char const* const* av)
 
       Running = 1;
 
+      if (numThreads > numConnections) {
+	numThreads = numConnections;
+      }
+
       ioArgs = (IOArgs*)apr_palloc(MainPool, sizeof(IOArgs) * numThreads);
       ioThreads = (apr_thread_t**)apr_palloc(MainPool, sizeof(apr_thread_t*) * numThreads);
       for (int i = 0; i < numThreads; i++) {
@@ -169,8 +228,28 @@ int main(int ac, char const* const* av)
 	  numConn++;
 	}
       
+	if (fileName != NULL) {
+	  if (readFile(fileName, &(ioArgs[i])) != 0) {
+	    return 3;
+	  }
+	} else {
+	  ioArgs[i].sendData = NULL;
+	  ioArgs[i].sendDataSize = 0;
+	}
+
+	if (verb == NULL) {
+	  if (fileName == NULL) {
+	    ioArgs[i].httpVerb = "GET";
+	  } else {
+	    ioArgs[i].httpVerb = "POST";
+	  } 
+	} else {
+	  ioArgs[i].httpVerb = verb;
+	}
+
 	ioArgs[i].url = &parsedUrl;
 	ioArgs[i].numConnections = numConn;
+	ioArgs[i].contentType = contentType;
 	ioArgs[i].verbose = verbose;
 	ioArgs[i].latenciesCount = 0;
 	ioArgs[i].latenciesSize = DEFAULT_LATENCIES_SIZE;
