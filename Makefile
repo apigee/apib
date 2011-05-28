@@ -1,7 +1,8 @@
 CC = gcc
 LD = gcc
 OPT = -g
-CFLAGS = $(OPT) -std=gnu99 -pedantic -Wall -I. -I/usr/include/apr-1.0 -D_GNU_SOURCE
+INCL = -I/usr/include/apr-1.0 -I/usr/include/apr-1
+CFLAGS = $(OPT) -std=gnu99 -pedantic -Wall -I. ${INCL} -D_GNU_SOURCE
 LDFLAGS = $(OPT)
 LIBS = -laprutil-1 -lapr-1
 
