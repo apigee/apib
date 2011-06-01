@@ -42,6 +42,7 @@ typedef struct {
   int             contentRead;
   apr_time_t      requestStart;
   apr_status_t    panicStatus;
+  unsigned long   wakeups;
 } ConnectionInfo;
 
 #if DEBUG
@@ -73,10 +74,12 @@ static int makeConnection(ConnectionInfo* conn, apr_pollfd_t* fd,
   if (s != APR_SUCCESS) {
     goto panic;
   }
+/*
   s = apr_socket_opt_set(sock, APR_TCP_NODELAY, 1);
   if (s != APR_SUCCESS) {
     goto panic;
   }
+*/
   s = apr_socket_connect(sock, addr);
 
   SETSTATE(conn, STATE_CONNECTING);
@@ -180,6 +183,7 @@ static int writeRequest(ConnectionInfo* conn)
   bufs[1].iov_len = conn->ioArgs->sendDataSize - conn->sendBufPos;
 
   s = apr_socket_sendv(conn->sock, bufs, 2, &written);
+  conn->ioArgs->writeCount++;
   if (APR_STATUS_IS_EAGAIN(s)) {
     return 1;
   }
@@ -309,6 +313,7 @@ static int readRequest(ConnectionInfo* conn)
   read = conn->bufLen - conn->bufPos;
 
   s = apr_socket_recv(conn->sock, conn->buf + conn->bufPos, &read);
+  conn->ioArgs->readCount++;
   if (APR_STATUS_IS_EAGAIN(s)) {
     return 1;
   }
@@ -374,8 +379,7 @@ static int readRequest(ConnectionInfo* conn)
   return 0;
 }
 
-static int processConnection(ConnectionInfo* conn, const apr_pollfd_t* poll, 
-			     apr_pollfd_t* newPoll,
+static int processConnection(ConnectionInfo* conn, apr_pollfd_t* poll, 
                              apr_sockaddr_t* addr, apr_pool_t* p)
 {
   char errBuf[128];
@@ -385,9 +389,8 @@ static int processConnection(ConnectionInfo* conn, const apr_pollfd_t* poll,
     printf("Connection error from poll\n");
 #endif
     cleanupConnection(conn);
-    if (makeConnection(conn, newPoll, addr, p)) {
-      newPoll->reqevents = APR_POLLOUT;
-      return 1;
+    if (makeConnection(conn, poll, addr, p)) {
+      return APR_POLLOUT;
     }
   }
 
@@ -400,17 +403,13 @@ static int processConnection(ConnectionInfo* conn, const apr_pollfd_t* poll,
       return -1;
       
     case STATE_NONE:
-      if (makeConnection(conn, newPoll, addr, p)) {
-	newPoll->reqevents = APR_POLLOUT;
-	return 1;
+      if (makeConnection(conn, poll, addr, p)) {
+	return APR_POLLOUT;
       }
-      break;
-
-    case STATE_FAILED:
-      cleanupConnection(conn);
-      if (makeConnection(conn, newPoll, addr, p)) {
-	newPoll->reqevents = APR_POLLOUT;
-	return 1;
+      break; 
+    case STATE_FAILED: cleanupConnection(conn);
+      if (makeConnection(conn, poll, addr, p)) {
+	return APR_POLLOUT;
       }
       break;
       
@@ -421,8 +420,11 @@ static int processConnection(ConnectionInfo* conn, const apr_pollfd_t* poll,
 
     case STATE_SENDING:
       if (writeRequest(conn)) {
-	newPoll->reqevents = APR_POLLOUT;
-	return 1;
+        if (conn->state == STATE_RECV_READY) {
+          return APR_POLLIN;
+        } else {
+	  return APR_POLLOUT;
+        }
       }
       break;
 
@@ -434,8 +436,7 @@ static int processConnection(ConnectionInfo* conn, const apr_pollfd_t* poll,
     case STATE_RECV_HDRS:
     case STATE_RECV_BODY:
       if (readRequest(conn)) {
-	newPoll->reqevents = APR_POLLIN;
-	return 1;
+	return APR_POLLIN;
       }
       break;
     
@@ -460,11 +461,14 @@ void RunIO(IOArgs* args)
   ConnectionInfo*   conns;
   apr_pollfd_t*     polls;
   int               i;
+  int               p;
   int               ps;
   int               pollSize;
   const apr_pollfd_t*     pollResult;
   
   apr_pool_create(&memPool, MainPool);
+
+  args->readCount = args->writeCount = 0;
 
   if (args->url->port_str == NULL) {
     port = 80; /* TODO HTTPS */
@@ -486,9 +490,9 @@ void RunIO(IOArgs* args)
     fprintf(stderr, "Error creating pollset: %s\n", errBuf);
     goto done;
   }
-  if (args->verbose) {
+  /*if (args->verbose) {
     printf("Created a pollset of type %s\n", apr_pollset_method_name(pollSet));
-  }
+  } */
 
   conns = (ConnectionInfo*)apr_palloc(memPool, sizeof(ConnectionInfo) * args->numConnections);
   polls = (apr_pollfd_t*)apr_palloc(memPool, sizeof(apr_pollfd_t) * args->numConnections);
@@ -499,15 +503,16 @@ void RunIO(IOArgs* args)
     conns[i].connPool = NULL;
     conns[i].buf = (char*)apr_palloc(memPool, SEND_BUF_SIZE);
     conns[i].state = STATE_NONE;
+    conns[i].wakeups = 0;
 
     polls[i].p = memPool;
     polls[i].desc_type = APR_POLL_SOCKET;
     polls[i].reqevents = polls[i].rtnevents = 0;
-    polls[i].client_data = &(conns[i]);
+    polls[i].client_data = i;
 
-    ps = processConnection(&(conns[i]), &(polls[i]), &(polls[i]), addr, memPool);
+    ps = processConnection(&(conns[i]), &(polls[i]), addr, memPool);
     if (ps >= 0) {
-	polls[i].reqevents |= (APR_POLLHUP | APR_POLLERR);
+	polls[i].reqevents = ps | (APR_POLLHUP | APR_POLLERR);
 	apr_pollset_add(pollSet, &(polls[i]));
     } else {
       goto done;
@@ -520,21 +525,28 @@ void RunIO(IOArgs* args)
     printf("Polled %i result\n", pollSize);
 #endif
     for (i = 0; i < pollSize; i++) {
-      ps = processConnection((ConnectionInfo*)pollResult[i].client_data, &(pollResult[i]),
-			     &(polls[i]), addr, memPool);
-      if (ps > 0) {
-	apr_pollset_remove(pollSet, &(pollResult[i]));
-	polls[i].rtnevents = 0;
-	polls[i].reqevents |= (APR_POLLHUP | APR_POLLERR);
-	apr_pollset_add(pollSet, &(polls[i]));
-      } else if (ps < 0) {
+      p = (int)pollResult[i].client_data;
+      ps = processConnection(&(conns[p]), &(polls[p]),
+			     addr, memPool);
+      if (ps >= 0) {
+        ps |= (APR_POLLHUP | APR_POLLERR);
+        if (ps != pollResult[i].reqevents) {
+          polls[p].rtnevents = 0;
+          polls[p].reqevents = ps;
+	  apr_pollset_remove(pollSet, &(pollResult[i]));
+	  apr_pollset_add(pollSet, &(polls[p]));
+        }
+      } else {
 	goto done;
       }
     }
   }
 
+  printf("Thread read count = %lu write count = %lu\n",
+         args->readCount, args->writeCount);
+
   apr_pollset_destroy(pollSet);
-   
+
   done:
     apr_pool_destroy(memPool);
 

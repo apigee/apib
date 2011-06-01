@@ -45,7 +45,7 @@ void RecordResult(IOArgs* args, int code, unsigned long latency)
   if (reporting) {
     if (args->latenciesCount >= args->latenciesSize) {
       args->latenciesSize *= 2;
-      args->latencies = 
+      args->latencies =
 	(unsigned long*)realloc(args->latencies, 
 				sizeof(unsigned long) * args->latenciesSize);
     }

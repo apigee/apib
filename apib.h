@@ -19,6 +19,8 @@ typedef struct {
   unsigned long*  latencies;
   unsigned int    latenciesSize;
   unsigned int    latenciesCount;
+  unsigned long   readCount;
+  unsigned long   writeCount;
 } IOArgs;
 
 /* Globals */

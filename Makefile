@@ -1,6 +1,6 @@
 CC = gcc
 LD = gcc
-OPT = -g
+OPT = -g 
 INCL = -I/usr/include/apr-1.0 -I/usr/include/apr-1
 CFLAGS = $(OPT) -std=gnu99 -pedantic -Wall -I. ${INCL} -D_GNU_SOURCE
 LDFLAGS = $(OPT)
@@ -16,4 +16,4 @@ apib: $(APIB_OBJS)
 clean:
 	rm -f *.o apib
 
-apib_main.c apib_iothread.c apib_reporting.c: apib.h
+apib_main.o apib_iothread.o apib_reporting.o: apib.h
