@@ -1,6 +1,7 @@
 CC = gcc
 LD = gcc
-OPT = -g 
+OPT = -g
+OPT = -O3 
 INCL = -I/usr/include/apr-1.0 -I/usr/include/apr-1
 CFLAGS = $(OPT) -std=gnu99 -pedantic -Wall -I. ${INCL} -D_GNU_SOURCE
 LDFLAGS = $(OPT)

@@ -87,6 +87,10 @@ void RecordStop(void)
 
 void ReportInterval(FILE* out, int totalDuration, int warmup)
 {
+  if (ShortOutput) {
+    return;
+  }
+
   apr_uint32_t count = intervalSuccessful;
   apr_time_t now = apr_time_now();
   apr_time_t e = now - intervalStartTime;
@@ -124,11 +128,8 @@ static unsigned long getAverageLatency(void)
   return totalLatency / (unsigned long long)latenciesCount;
 }
 
-void PrintResults(FILE* out)
+static void PrintNormalResults(FILE* out, double elapsed)
 {
-  apr_time_t e = stopTime - startTime;
-  double elapsed = microToSecond(e);
-
   fprintf(out, "Duration:             %.3lf seconds\n", elapsed);
   fprintf(out, "Attempted requests:   %u\n", completedRequests);
   fprintf(out, "Successful requests:  %u\n", successfulRequests);
@@ -152,6 +153,45 @@ void PrintResults(FILE* out)
 	  microToMilli(getLatencyPercent(98)));
   fprintf(out, "99%% latency:          %.3lf milliseconds\n",
 	  microToMilli(getLatencyPercent(99)));
+}
+
+static void PrintShortResults(FILE* out, double elapsed)
+{
+  /*
+  name,throughput,avg. latency,threads,connections,duration,completed,successful,errors,sockets,min. latency,max. latency,50%,90%,98%,99%
+   */
+  fprintf(out,
+	  "%s,%.3lf,%.3lf,%u,%u,%.3lf,%u,%u,%u,%u,%.3lf,%.3lf,%.3lf,%.3lf,%.3lf,%.3lf\n",
+	  RunName, successfulRequests / elapsed, 
+	  microToMilli(getAverageLatency()),
+	  NumThreads, NumConnections, elapsed,
+	  completedRequests, successfulRequests,
+	  unsuccessfulRequests, connectionsOpened,
+	  microToMilli(latencies[0]), microToMilli(latencies[latenciesCount - 1]),
+	  microToMilli(getLatencyPercent(50)),
+	  microToMilli(getLatencyPercent(90)),
+	  microToMilli(getLatencyPercent(98)),
+	  microToMilli(getLatencyPercent(99)));
+}
+
+void PrintReportingHeader(FILE* out)
+{
+  fprintf(out, "Name,Throughput,Avg. Latency,Threads,Connections,Duration," \
+          "Completed,Successful,Errors,Sockets," \
+          "Min. latency,Max. latency,50%% Latency,90%% Latency,"\
+          "98%% Latency,99%% Latency\n");
+}
+
+void PrintResults(FILE* out)
+{
+  apr_time_t e = stopTime - startTime;
+  double elapsed = microToSecond(e);
+
+  if (ShortOutput) {
+    PrintShortResults(out, elapsed);
+  } else {
+    PrintNormalResults(out, elapsed);
+  }
 }
 
 static int compareULongs(const void* a1, const void* a2)

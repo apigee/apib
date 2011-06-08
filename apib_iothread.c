@@ -542,8 +542,10 @@ void RunIO(IOArgs* args)
     }
   }
 
+#if DEBUG
   printf("Thread read count = %lu write count = %lu\n",
          args->readCount, args->writeCount);
+#endif
 
   apr_pollset_destroy(pollSet);
 

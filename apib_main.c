@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <sys/time.h>
 #include <sys/resource.h>
+#include <assert.h>
 
 #include <apr_general.h>
 #include <apr_getopt.h>
@@ -14,23 +15,35 @@
 
 /* Globals */
 
-apr_pool_t* MainPool;
-volatile int Running;
+apr_pool_t*      MainPool;
+volatile int     Running;
+int              ShortOutput;
+char*            RunName;
+int              NumConnections;
+int              NumThreads;
 
-#define VALID_OPTS "c:d:f:hk:t:vw:x:"
+#define VALID_OPTS "c:d:f:hk:t:vw:x:N:ST"
 
 #define VALID_OPTS_DESC \
   "[-c connections] [-k threads] [-d seconds] [-w warmup secs]\n" \
-  "[-f file name] [-t content type] [-x verb] [-hv] <url>\n" \
+  "[-f file name] [-t content type] [-x verb]\n" \
+  "[-N name] [-S] [-hv] <url>\n" \
   "  -c: Number of connections to open (default 1)\n" \
   "  -k: Number of I/O threads to spawn (default 1)\n" \
   "  -d: Number of seconds to run (default 60)\n" \
   "  -w: Warmup time in seconds (default 0)\n" \
   "  -f: File to upload\n" \
   "  -t: Content type (default: application/octet-stream)\n" \
-  "  -x: HTTP verb (default GET, or POST if -f is set)" \
+  "  -x: HTTP verb (default GET, or POST if -f is set)\n" \
+  "  -N: Name of test run (placed in output)\n" \
+  "  -S: Short output (one line, CSV format)\n" \
+  "  -T: Print header line of short output format (for CSV parsing)\n" \
   "  -v: Verbose (print requests and responses)\n" \
-  "  -h: Print this help message"
+  "  -h: Print this help message\n" \
+  "\n" \
+  "  if -S is used then output is CSV-separated on one line:\n" \
+  "  name,throughput,avg. latency,threads,connections,duration,completed,successful,errors,sockets,min. latency,max. latency,50%,90%,98%,99%\n"
+
 
 #define DEFAULT_NUM_CONNECTIONS 1
 #define DEFAULT_NUM_THREADS 1
@@ -139,8 +152,6 @@ int main(int ac, char const* const* av)
   const char* curArg;
 
   /* Arguments */
-  int numConnections = DEFAULT_NUM_CONNECTIONS;
-  int numThreads = DEFAULT_NUM_THREADS;
   int duration = DEFAULT_DURATION;
   int warmupTime = DEFAULT_WARMUP;
   int doHelp = 0;
@@ -149,6 +160,12 @@ int main(int ac, char const* const* av)
   char* fileName = NULL;
   char* contentType = NULL;
   const char* url = NULL;
+
+  NumConnections = DEFAULT_NUM_CONNECTIONS;
+  NumThreads = DEFAULT_NUM_THREADS;
+  ShortOutput = FALSE;
+  RunName = "";
+
   IOArgs* ioArgs;
   apr_thread_t** ioThreads;
   apr_uri_t parsedUrl;
@@ -162,7 +179,7 @@ int main(int ac, char const* const* av)
     if (s == APR_SUCCESS) {
       switch (curOption) {
       case 'c':
-	numConnections = atoi(curArg);
+	NumConnections = atoi(curArg);
 	break;
       case 'd':
 	duration = atoi(curArg);
@@ -177,7 +194,7 @@ int main(int ac, char const* const* av)
 	contentType = apr_pstrdup(MainPool, curArg);
 	break;
       case 'k':
-	numThreads = atoi(curArg);
+	NumThreads = atoi(curArg);
 	break;
       case 'v':
 	verbose = 1;
@@ -187,6 +204,20 @@ int main(int ac, char const* const* av)
 	break;
       case 'x':
 	verb = apr_pstrdup(MainPool, curArg);
+	break;
+      case 'N':
+	RunName = apr_pstrdup(MainPool, curArg);
+	break;
+      case 'S':
+	ShortOutput = TRUE;
+	break;
+      case 'T':
+	PrintReportingHeader(stdout);
+	apr_terminate();
+	return 0;
+	break;
+      default:
+	assert(1);
 	break;
       }
     }
@@ -210,21 +241,21 @@ int main(int ac, char const* const* av)
 
     } else {
 
-      if (setProcessLimits(numConnections) != 0) {
+      if (setProcessLimits(NumConnections) != 0) {
 	return 2;
       }
 
       Running = 1;
 
-      if (numThreads > numConnections) {
-	numThreads = numConnections;
+      if (NumThreads > NumConnections) {
+	NumThreads = NumConnections;
       }
 
-      ioArgs = (IOArgs*)apr_palloc(MainPool, sizeof(IOArgs) * numThreads);
-      ioThreads = (apr_thread_t**)apr_palloc(MainPool, sizeof(apr_thread_t*) * numThreads);
-      for (int i = 0; i < numThreads; i++) {
-	int numConn = numConnections / numThreads;
-	if (i < (numConnections % numThreads)) {
+      ioArgs = (IOArgs*)apr_palloc(MainPool, sizeof(IOArgs) * NumThreads);
+      ioThreads = (apr_thread_t**)apr_palloc(MainPool, sizeof(apr_thread_t*) * NumThreads);
+      for (int i = 0; i < NumThreads; i++) {
+	int numConn = NumConnections / NumThreads;
+	if (i < (NumConnections % NumThreads)) {
 	  numConn++;
 	}
       
@@ -271,7 +302,7 @@ int main(int ac, char const* const* av)
 
       Running = 0;
 
-      for (int i = 0; i < numThreads; i++) {
+      for (int i = 0; i < NumThreads; i++) {
 	apr_status_t err;
 	apr_thread_join(&err, ioThreads[i]);
       }
@@ -279,9 +310,11 @@ int main(int ac, char const* const* av)
 
   } else {
     fprintf(stderr, "Usage: %s %s\n", argv[0], VALID_OPTS_DESC);
+    apr_terminate();
+    return 0;
   }
 
-  ConsolidateLatencies(ioArgs, numThreads);
+  ConsolidateLatencies(ioArgs, NumThreads);
   PrintResults(stdout);
 
   apr_pool_destroy(MainPool);

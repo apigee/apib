@@ -29,8 +29,12 @@ typedef struct {
 
 #define DEFAULT_CONTENT_TYPE "application/octet-stream"
 
-extern apr_pool_t* MainPool;
-extern volatile int Running;
+extern apr_pool_t*     MainPool;
+extern volatile int    Running;
+extern int             NumConnections;
+extern int             NumThreads;
+extern int             ShortOutput;
+extern char*           RunName;
 
 /* Internal methods */
 
@@ -47,5 +51,6 @@ extern void ConsolidateLatencies(IOArgs* args, int numThreads);
 extern void PrintResults(FILE* out);
 extern void ReportInterval(FILE* out, int totalDuration, int warmup);
 
+extern void PrintReportingHeader(FILE* out);
 
 #endif
