@@ -6,6 +6,8 @@
 #include <apr_pools.h>
 #include <apr_uri.h>
 
+#include <openssl/ssl.h>
+
 /* Structures */
 
 typedef struct {
@@ -16,6 +18,7 @@ typedef struct {
   char*           contentType;
   char*           sendData;
   unsigned int    sendDataSize;
+  SSL_CTX*        sslCtx;
   unsigned long*  latencies;
   unsigned int    latenciesSize;
   unsigned int    latenciesCount;
@@ -52,5 +55,7 @@ extern void PrintResults(FILE* out);
 extern void ReportInterval(FILE* out, int totalDuration, int warmup);
 
 extern void PrintReportingHeader(FILE* out);
+
+extern void EndReporting(void);
 
 #endif

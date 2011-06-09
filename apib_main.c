@@ -11,6 +11,8 @@
 #include <apr_thread_proc.h>
 #include <apr_time.h>
 
+#include <openssl/ssl.h>
+
 #include <apib.h>
 
 /* Globals */
@@ -73,16 +75,48 @@ static int setProcessLimits(int numConnections)
     limits.rlim_cur = limits.rlim_max;
     err = setrlimit(RLIMIT_NOFILE, &limits);
     if (err == 0) {
-      printf("Set file descriptor limit to %llu\n", limits.rlim_cur);
+      printf("Set file descriptor limit to %lu\n", limits.rlim_cur);
       return 0;
     } else {
       printf("Error setting file descriptor limit: %i\n", err);
       return -1;
     }
   } else {
-    printf("Current hard file descriptor limit is %llu: it is too low. Try sudo.\n", 
+    printf("Current hard file descriptor limit is %lu: it is too low. Try sudo.\n", 
 	   limits.rlim_max);
     return -1;
+  }
+}
+
+static void sslInfoCallback(const SSL* ssl, int where, int ret)
+{
+  const char* op;
+  
+  if (where & SSL_CB_READ) {
+    op = "READ";
+  } else if (where & SSL_CB_WRITE) {
+    op = "WRITE";
+  } else if (where & SSL_CB_HANDSHAKE_START) {
+    op = "HANDSHAKE_START";
+  } else if (where & SSL_CB_HANDSHAKE_DONE) {
+    op = "HANDSHAKE_DONE";
+  } else {
+    op = "default";
+  }
+  printf("  ssl: op = %s ret = %i %s\n", op, ret, SSL_state_string_long(ssl));
+}
+
+static void createSslContext(IOArgs* args, int isFirst)
+{
+  if (isFirst) {
+    SSL_load_error_strings();
+    SSL_library_init();
+  }
+  args->sslCtx = SSL_CTX_new(SSLv23_client_method());
+  SSL_CTX_set_options(args->sslCtx, SSL_OP_ALL);
+  SSL_CTX_set_mode(args->sslCtx, SSL_MODE_ENABLE_PARTIAL_WRITE);
+  if (args->verbose) {
+    SSL_CTX_set_info_callback(args->sslCtx, sslInfoCallback);
   }
 }
 
@@ -141,6 +175,20 @@ static void waitAndReport(int duration, int warmup)
   }
 }
 
+static void cleanup(IOArgs* args)
+{
+  if (args == NULL) {
+    return;
+  }
+  for (int i = 0; i < NumThreads; i++) {
+    if (args[i].sslCtx != NULL) {
+      /* TODO we should do this but it caused valgrind to puke if
+         we already freed all the SSL handles for each connection... */
+      /*      SSL_CTX_free(args[i].sslCtx); */
+    }
+  }
+}
+
 int main(int ac, char const* const* av)
 {
   int argc = ac;
@@ -166,7 +214,7 @@ int main(int ac, char const* const* av)
   ShortOutput = FALSE;
   RunName = "";
 
-  IOArgs* ioArgs;
+  IOArgs* ioArgs = NULL;
   apr_thread_t** ioThreads;
   apr_uri_t parsedUrl;
 
@@ -287,6 +335,12 @@ int main(int ac, char const* const* av)
 	ioArgs[i].latencies = 
 	  (unsigned long*)malloc(sizeof(unsigned long) * DEFAULT_LATENCIES_SIZE);
 
+	if (!strcmp(parsedUrl.scheme, "https")) {
+	  createSslContext(&(ioArgs[i]), (i == 0));
+	} else {
+	  ioArgs[i].sslCtx = NULL;
+	}
+
 	apr_thread_create(&(ioThreads[i]), NULL, IOThreadFunc,
 			  &(ioArgs[i]), MainPool);
       }
@@ -305,6 +359,9 @@ int main(int ac, char const* const* av)
       for (int i = 0; i < NumThreads; i++) {
 	apr_status_t err;
 	apr_thread_join(&err, ioThreads[i]);
+	if (ioArgs[i].sslCtx != NULL) {
+	  SSL_CTX_free(ioArgs[i].sslCtx);
+	}
       }
     }
 
@@ -316,6 +373,8 @@ int main(int ac, char const* const* av)
 
   ConsolidateLatencies(ioArgs, NumThreads);
   PrintResults(stdout);
+  EndReporting();
+  cleanup(ioArgs);
 
   apr_pool_destroy(MainPool);
   apr_terminate();

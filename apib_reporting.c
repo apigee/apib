@@ -211,6 +211,10 @@ void ConsolidateLatencies(IOArgs* args, int numThreads)
 {
   unsigned int latenciesSize = args[0].latenciesSize;
 
+  if (args == NULL) {
+    return;
+  }
+
   latencies = (unsigned long*)malloc(sizeof(unsigned long) * latenciesSize);
 
   for (int i = 0; i < numThreads; i++) {
@@ -230,4 +234,11 @@ void ConsolidateLatencies(IOArgs* args, int numThreads)
 
   qsort(latencies, latenciesCount, sizeof(unsigned long),
 	compareULongs);
+}
+
+void EndReporting(void)
+{
+  if (latencies != NULL) {
+    free(latencies);
+  }
 }

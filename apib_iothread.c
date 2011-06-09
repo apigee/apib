@@ -2,34 +2,47 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include <ctype.h>
 
 #include <apib.h>
 
 #include <apr_network_io.h>
 #include <apr_poll.h>
 #include <apr_pools.h>
+#include <apr_portable.h>
 #include <apr_strings.h>
+
+#include <openssl/err.h>
+#include <openssl/ssl.h>
 
 #define DEBUG 0
 
 #define SEND_BUF_SIZE     65536
 
-#define STATE_NONE        0
-#define STATE_CONNECTING  1
-#define STATE_SENDING     2
-#define STATE_RECV_READY  3
-#define STATE_RECV_START  4
-#define STATE_RECV_HDRS   5
-#define STATE_RECV_BODY   6
-#define STATE_SEND_READY  7
-#define STATE_FAILED      8
-#define STATE_PANIC       99
+#define STATE_NONE          0
+#define STATE_CONNECTING    1
+#define STATE_SSL_HANDSHAKE 2
+#define STATE_SENDING       3
+#define STATE_RECV_READY    4
+#define STATE_RECV_START    5
+#define STATE_RECV_HDRS     6
+#define STATE_RECV_BODY     7
+#define STATE_SEND_READY    8
+#define STATE_CLOSING       9
+#define STATE_FAILED        10
+#define STATE_PANIC         99
+
+#define STATUS_WANT_READ  1
+#define STATUS_WANT_WRITE 2
+#define STATUS_CONTINUE   0
 
 typedef struct {
   IOArgs*   ioArgs;
   apr_pool_t*     transPool;
   apr_pool_t*     connPool;
   apr_socket_t*   sock;
+  int             isSsl;
+  SSL*            ssl;
   int             state;
   int             bufPos;
   int             bufLen;
@@ -49,13 +62,41 @@ typedef struct {
 #define SETSTATE(c, s) \
   printf("%lx %i -> %i (line %i)\n", (unsigned long)c, c->state, s, __LINE__);	\
   c->state = s;
+#define MASKSTATE(c, s) \
+  printf("%lx MASK %i -> %i (line %i)\n", (unsigned long)c, c->state, s, __LINE__); \
+  c->state |= s;
+#define UNMASKSTATE(c, s) \
+  printf("%lx UNMASK %i -> %i (line %i)\n", (unsigned long)c, c->state, s, __LINE__); \
+  c->state &= ~s;
 #else
 #define SETSTATE(c, s) \
   c->state = s;
+#define MASKSTATE(c, s) \
+  c->state |= s;
+#define UNMASKSTATE(c, s) \
+  c->state &= ~s;
 #endif
 
-static int makeConnection(ConnectionInfo* conn, apr_pollfd_t* fd,
-			  apr_sockaddr_t* addr, apr_pool_t* p)
+static char* trimString(char* s)
+{
+  char* ret = s;
+  unsigned int len;
+
+  while (isspace(*ret)) {
+    ret++;
+  }
+
+  len = strlen(s);
+  while (isspace(ret[len - 1])) {
+    ret[len - 1] = 0;
+    len--;
+  }
+
+  return ret;
+}
+
+static void makeConnection(ConnectionInfo* conn, apr_pollfd_t* fd,
+			   apr_sockaddr_t* addr, apr_pool_t* p)
 {
   apr_status_t s;
   apr_socket_t* sock;
@@ -80,29 +121,84 @@ static int makeConnection(ConnectionInfo* conn, apr_pollfd_t* fd,
     goto panic;
   }
 */
-  s = apr_socket_connect(sock, addr);
 
-  SETSTATE(conn, STATE_CONNECTING);
+  if (conn->isSsl) {
+    int fd;
+
+    conn->ssl = SSL_new(conn->ioArgs->sslCtx);
+    apr_os_sock_get(&fd, sock);
+    SSL_set_fd(conn->ssl, fd);
+    SSL_set_connect_state(conn->ssl);
+  }
+
   conn->sock = sock;
   fd->desc.s = sock;
 
   RecordConnectionOpen();
 
-  if (s == APR_EINPROGRESS) {
-    return 1;
-  } else if (s != APR_SUCCESS) {
-    goto panic;
-  }
-  return 0;
+  SETSTATE(conn, STATE_CONNECTING);
+  return;
 
- panic:
+panic:
   conn->panicStatus = s;
   SETSTATE(conn, STATE_PANIC);
-  return 0;
+}
+
+
+
+static int setupConnection(ConnectionInfo* conn, apr_sockaddr_t* addr)
+{
+  apr_status_t s;
+
+  s = apr_socket_connect(conn->sock, addr);
+
+  if (s == APR_EINPROGRESS) {
+    return STATUS_WANT_WRITE;
+  } else if (s != APR_SUCCESS) {
+    conn->panicStatus = s;
+    SETSTATE(conn, STATE_PANIC);
+  }
+  
+  if (conn->isSsl) {
+    SETSTATE(conn, STATE_SSL_HANDSHAKE);
+  } else {
+    SETSTATE(conn, STATE_SEND_READY);
+  }
+
+  return STATUS_CONTINUE;
+}
+
+static int handshakeSsl(ConnectionInfo* conn)
+{
+  int sslStatus;
+  int sslErr;
+
+  sslStatus = SSL_do_handshake(conn->ssl); 
+  if (sslStatus <= 0) {
+    sslErr = SSL_get_error(conn->ssl, sslStatus);
+    switch(sslErr) {
+    case SSL_ERROR_WANT_READ:
+      return STATUS_WANT_READ;
+    case SSL_ERROR_WANT_WRITE:
+      return STATUS_WANT_WRITE;
+    default:
+      conn->panicStatus = ERR_get_error();
+      SETSTATE(conn, STATE_PANIC);
+      return STATUS_CONTINUE;
+    }
+    assert(FALSE);
+  }
+
+  SETSTATE(conn, STATE_SEND_READY);
+  return STATUS_CONTINUE;
 }
 
 static void cleanupConnection(ConnectionInfo* conn)
 {
+  if (conn->isSsl) {
+    SSL_shutdown(conn->ssl);
+    SSL_free(conn->ssl);
+  }
   apr_socket_close(conn->sock);
   if (conn->transPool != NULL) {
     apr_pool_destroy(conn->transPool);
@@ -168,7 +264,65 @@ static void buildRequest(ConnectionInfo* conn)
   }
 }
 
-static int writeRequest(ConnectionInfo* conn)
+static int writeRequestSsl(ConnectionInfo* conn)
+{
+  int sslStatus;
+  int sslErr;
+
+  if (conn->bufLen > conn->bufPos) {
+#if DEBUG
+    printf("Writing %i bytes to SSL\n", conn->bufLen - conn->bufPos);
+#endif
+    sslStatus = SSL_write(conn->ssl, conn->buf + conn->bufPos,
+			  conn->bufLen - conn->bufPos);
+  } else {
+#if DEBUG
+    printf("Writing %i bytes to SSL\n", conn->ioArgs->sendDataSize - conn->sendBufPos);
+#endif
+    sslStatus = SSL_write(conn->ssl, conn->ioArgs->sendData + conn->sendBufPos,
+			  conn->ioArgs->sendDataSize - conn->sendBufPos);
+  }
+  conn->ioArgs->writeCount++;
+  
+#if DEBUG
+  printf("SSL return %i\n", sslStatus);
+#endif
+
+  if (sslStatus <= 0) {
+    sslErr = SSL_get_error(conn->ssl, sslStatus);
+    switch (sslErr) {
+    case SSL_ERROR_WANT_WRITE:
+      /* Equivalent to EAGAIN */
+      return STATUS_WANT_WRITE;
+    case SSL_ERROR_WANT_READ:
+      return STATUS_WANT_READ;
+    default:
+#if DEBUG 
+      fprintf(stderr, "SSL write error: %i\n", sslErr);
+      ERR_error_string_n(ERR_get_error(), buf, 128);
+      fprintf(stderr, "  SSL error: %s\n", buf);
+#endif
+      SETSTATE(conn, STATE_FAILED);
+      RecordSocketError();
+      return STATUS_CONTINUE;
+    }
+  }
+
+  if (conn->bufLen > conn->bufPos) {
+    conn->bufPos += sslStatus;
+  } else {
+    conn->sendBufPos += sslStatus;
+  }
+  if ((conn->bufPos >= conn->bufLen) &&
+      (conn->sendBufPos >= conn->ioArgs->sendDataSize)) {
+    /* Did all the writing -- ready to receive */
+    SETSTATE(conn, STATE_RECV_READY);
+    return STATUS_WANT_READ;
+  }
+  return STATUS_WANT_WRITE;
+}
+
+static int writeRequestNonSsl(ConnectionInfo* conn)
 {
   apr_status_t s;
   apr_size_t written;
@@ -185,7 +339,7 @@ static int writeRequest(ConnectionInfo* conn)
   s = apr_socket_sendv(conn->sock, bufs, 2, &written);
   conn->ioArgs->writeCount++;
   if (APR_STATUS_IS_EAGAIN(s)) {
-    return 1;
+    return STATUS_WANT_WRITE;
   }
 
 #if DEBUG
@@ -220,8 +374,18 @@ static int writeRequest(ConnectionInfo* conn)
 	     (conn->sendBufPos >= conn->ioArgs->sendDataSize)) {
     /* Did all the writing -- ready to receive */
     SETSTATE(conn, STATE_RECV_READY);
+    return STATUS_WANT_READ;
   }
-  return 0;
+  return STATUS_WANT_WRITE;
+}
+
+static int writeRequest(ConnectionInfo* conn)
+{
+  if (conn->isSsl) {
+    return writeRequestSsl(conn);
+  } else {
+    return writeRequestNonSsl(conn);
+  }
 }
 
 static void startReadRequest(ConnectionInfo* conn) 
@@ -258,6 +422,10 @@ static void processRequestLine(ConnectionInfo* conn, char* lineBuf)
   char* last;
   char* tok;
   
+  if (conn->ioArgs->verbose) {
+    printf("%s", lineBuf);
+  }
+
   /* Should get "HTTP/1.1". Check later? */
   apr_strtok(lineBuf, " \r\n", &last);
   tok = apr_strtok(NULL, " \r\n", &last);
@@ -288,11 +456,19 @@ static void processHeader(ConnectionInfo* conn, char* lineBuf)
     return;
   }
 
-  if (!strcmp(name, "Content-Length")) {
+  value = trimString(value);
+
+  if (conn->ioArgs->verbose) {
+    printf("\"%s\" : \"%s\"\n", name, value);
+  }
+
+  if (!strcasecmp(name, "Content-Length")) {
     conn->contentLength = atoi(value);
-  } else if (!strcmp(name, "Connection") && !strcasecmp(value, "close")) {
-    conn->closeRequested = 1;
-  } else if (!strcmp(name, "Transfer-Encoding") && !strcasecmp(value, "chunked")) {
+  } else if (!strcasecmp(name, "Connection")) {
+    if (!strcasecmp(value, "close")) {
+      conn->closeRequested = 1;
+    }
+  } else if (!strcasecmp(name, "Transfer-Encoding") && !strcasecmp(value, "chunked")) {
     conn->chunked = 1;
   }
 }
@@ -305,27 +481,65 @@ static void requestComplete(ConnectionInfo* conn)
 
 static int readRequest(ConnectionInfo* conn)
 {
-  apr_status_t s;
   apr_size_t read;
   char lineBuf[4096];
   int lineLen;
 
   read = conn->bufLen - conn->bufPos;
 
-  s = apr_socket_recv(conn->sock, conn->buf + conn->bufPos, &read);
-  conn->ioArgs->readCount++;
-  if (APR_STATUS_IS_EAGAIN(s)) {
-    return 1;
-  }
+  if (conn->isSsl) {
+    int sslStatus;
+    int sslErr;
 
-  if (s != APR_SUCCESS) {
 #if DEBUG
-    apr_strerror(s, lineBuf, 4096);
-    fprintf(stderr, "Receive error: %s\n", lineBuf);
+    printf("Reading from SSL. State = %s Shutdown = %i\n", SSL_state_string_long(conn->ssl),
+	   SSL_get_shutdown(conn->ssl));
 #endif
-    SETSTATE(conn, STATE_FAILED);
-    RecordSocketError();
-    return 0;
+    sslStatus = SSL_read(conn->ssl, conn->buf + conn->bufPos, read);
+    conn->ioArgs->readCount++;
+    if (sslStatus <= 0) {
+      sslErr = SSL_get_error(conn->ssl, sslStatus);
+      switch (sslErr) {
+      case SSL_ERROR_WANT_READ:
+	return STATUS_WANT_READ;
+      case SSL_ERROR_WANT_WRITE:
+	return STATUS_WANT_WRITE;
+      default:
+#if DEBUG
+	fprintf(stderr, "SSL receive error: %i\n", sslErr);
+	ERR_error_string_n(ERR_get_error(), lineBuf, 4096);
+	fprintf(stderr, "  SSL error: %s\n", lineBuf);
+#endif
+	SETSTATE(conn, STATE_FAILED);
+	RecordSocketError();
+	return STATUS_CONTINUE;
+      }
+      assert(TRUE);
+    }
+
+#if DEBUG
+    printf("Read %i pending %i\n", sslStatus, SSL_pending(conn->ssl));
+#endif
+    read = sslStatus;
+
+  } else {
+    apr_status_t s;
+
+    s = apr_socket_recv(conn->sock, conn->buf + conn->bufPos, &read);
+    conn->ioArgs->readCount++;
+    if (APR_STATUS_IS_EAGAIN(s)) {
+      return STATUS_WANT_WRITE;
+    }
+
+    if (s != APR_SUCCESS) {
+#if DEBUG
+      apr_strerror(s, lineBuf, 4096);
+      fprintf(stderr, "Receive error: %s\n", lineBuf);
+#endif
+      SETSTATE(conn, STATE_FAILED);
+      RecordSocketError();
+      return STATUS_CONTINUE;
+    }
   }
 
   conn->bufPos = 0;
@@ -335,9 +549,6 @@ static int readRequest(ConnectionInfo* conn)
     lineLen = readHttpLine(conn, lineBuf);
     if (lineLen > 0) {
       /* Successfully read a line -- process it */
-      if (conn->ioArgs->verbose) {
-	printf("%s", lineBuf);
-      }
       conn->bufPos += lineLen;
       if (conn->state == STATE_RECV_START) {
 	processRequestLine(conn, lineBuf);
@@ -354,7 +565,7 @@ static int readRequest(ConnectionInfo* conn)
       memmove(conn->buf, conn->buf + conn->bufPos, conn->bufLen - conn->bufPos);
       conn->bufPos = conn->bufLen - conn->bufPos;
       conn->bufLen = SEND_BUF_SIZE;
-      break;
+      return STATUS_CONTINUE;
     }
   }
 
@@ -365,18 +576,25 @@ static int readRequest(ConnectionInfo* conn)
     printf("Read %i body bytes out of %i\n", conn->bufLen - conn->bufPos, 
 	   conn->contentLength);
 #endif
+    if (conn->ioArgs->verbose) {
+      printf("  %i bytes of content\n", conn->bufLen - conn->bufPos);
+    }
     conn->contentRead += (conn->bufLen - conn->bufPos);
     if (conn->contentRead >= conn->contentLength) {
       /* Done reading -- can go back to sending! */
       requestComplete(conn);
       if (conn->closeRequested) {
-	SETSTATE(conn, STATE_FAILED);
+	SETSTATE(conn, STATE_CLOSING);
       } else {
 	SETSTATE(conn, STATE_SEND_READY);
       }
+    } else {
+      /* Need to read more from the body */
+      conn->bufPos = 0;
+      conn->bufLen = SEND_BUF_SIZE;
     }
   }
-  return 0;
+  return STATUS_CONTINUE;
 }
 
 static int processConnection(ConnectionInfo* conn, apr_pollfd_t* poll, 
@@ -389,12 +607,16 @@ static int processConnection(ConnectionInfo* conn, apr_pollfd_t* poll,
     printf("Connection error from poll\n");
 #endif
     cleanupConnection(conn);
-    if (makeConnection(conn, poll, addr, p)) {
-      return APR_POLLOUT;
-    }
+    makeConnection(conn, poll, addr, p);
   }
 
   while (TRUE) {
+    int s = STATUS_CONTINUE;
+
+#if DEBUG
+    printf("  state %i\n", conn->state);
+#endif
+
     switch (conn->state) {
     case STATE_PANIC:
       apr_strerror(conn->panicStatus, errBuf, 128);
@@ -403,29 +625,29 @@ static int processConnection(ConnectionInfo* conn, apr_pollfd_t* poll,
       return -1;
       
     case STATE_NONE:
-      if (makeConnection(conn, poll, addr, p)) {
-	return APR_POLLOUT;
-      }
+      makeConnection(conn, poll, addr, p);
       break; 
-    case STATE_FAILED: cleanupConnection(conn);
-      if (makeConnection(conn, poll, addr, p)) {
-	return APR_POLLOUT;
-      }
+
+    case STATE_FAILED: 
+    case STATE_CLOSING:
+      cleanupConnection(conn);
+      makeConnection(conn, poll, addr, p);
       break;
       
     case STATE_CONNECTING:
+      s = setupConnection(conn, addr);
+      break;
+
+    case STATE_SSL_HANDSHAKE:
+      s = handshakeSsl(conn);
+      break;
+
     case STATE_SEND_READY:
       buildRequest(conn);
       break;
 
     case STATE_SENDING:
-      if (writeRequest(conn)) {
-        if (conn->state == STATE_RECV_READY) {
-          return APR_POLLIN;
-        } else {
-	  return APR_POLLOUT;
-        }
-      }
+      s = writeRequest(conn);
       break;
 
     case STATE_RECV_READY:
@@ -435,15 +657,23 @@ static int processConnection(ConnectionInfo* conn, apr_pollfd_t* poll,
     case STATE_RECV_START:
     case STATE_RECV_HDRS:
     case STATE_RECV_BODY:
-      if (readRequest(conn)) {
-	return APR_POLLIN;
-      }
+      s = readRequest(conn);
       break;
     
     default:
       fprintf(stderr, "Internal state error on poll result: %i\n", conn->state);
       cleanupConnection(conn);
       SETSTATE(conn, STATE_PANIC);
+      break;
+    }
+    
+    switch (s) {
+    case STATUS_WANT_READ:
+      return APR_POLLIN;
+    case STATUS_WANT_WRITE:
+      return APR_POLLOUT;
+    default:
+      /* Continue looping */
       break;
     }
   }
@@ -463,6 +693,7 @@ void RunIO(IOArgs* args)
   int               i;
   int               p;
   int               ps;
+  int               isSsl;
   int               pollSize;
   const apr_pollfd_t*     pollResult;
   
@@ -470,8 +701,19 @@ void RunIO(IOArgs* args)
 
   args->readCount = args->writeCount = 0;
 
+  if (!strcmp(args->url->scheme, "https")) {
+    isSsl = TRUE;
+  } else {
+    isSsl = FALSE;
+    assert(!strcmp(args->url->scheme, "http"));
+  }
+
   if (args->url->port_str == NULL) {
-    port = 80; /* TODO HTTPS */
+    if (isSsl) {
+      port = 443;
+    } else {
+      port = 80;
+    }
   } else {
     port = atoi(args->url->port_str);
   }
@@ -504,11 +746,12 @@ void RunIO(IOArgs* args)
     conns[i].buf = (char*)apr_palloc(memPool, SEND_BUF_SIZE);
     conns[i].state = STATE_NONE;
     conns[i].wakeups = 0;
+    conns[i].isSsl = isSsl;
 
     polls[i].p = memPool;
     polls[i].desc_type = APR_POLL_SOCKET;
     polls[i].reqevents = polls[i].rtnevents = 0;
-    polls[i].client_data = i;
+    polls[i].client_data = (void*)i;
 
     ps = processConnection(&(conns[i]), &(polls[i]), addr, memPool);
     if (ps >= 0) {
@@ -546,6 +789,10 @@ void RunIO(IOArgs* args)
   printf("Thread read count = %lu write count = %lu\n",
          args->readCount, args->writeCount);
 #endif
+
+  for (i = 0; i < args->numConnections; i++) {
+    cleanupConnection(&(conns[i]));
+  }
 
   apr_pollset_destroy(pollSet);
 
