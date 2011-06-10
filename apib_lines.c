@@ -16,6 +16,7 @@ static int isChar(const char c, const char* match)
 void linep_Start(LineState* l, char* line, unsigned int size,
 		 unsigned int len)
 {
+  l->httpMode = 0;
   l->buf = line;
   l->bufSize = size;
   l->bufLen = len;
@@ -24,15 +25,25 @@ void linep_Start(LineState* l, char* line, unsigned int size,
   l->lineComplete = 0;
 }
 
+void linep_SetHttpMode(LineState* l, int on)
+{
+  l->httpMode = on;
+}
+
+static void nullLast(LineState* l) 
+{
+  l->buf[l->lineEnd] = 0;
+  l->lineEnd++;
+}
+
 int linep_NextLine(LineState* l)
 {
+  if (l->lineEnd > 0) {
+    l->lineStart = l->lineEnd;
+  }
   if (l->lineEnd >= l->bufLen) {
     l->lineComplete = 0;
     return 0;
-  }
-
-  if (l->lineEnd > 0) {
-    l->lineStart = l->lineEnd;
   }
   
   /* Move to the first newline character */
@@ -46,11 +57,21 @@ int linep_NextLine(LineState* l)
     return 0;
   }
 
-  /* Overwrite all newlines with nulls */
-  while ((l->lineEnd < l->bufLen) &&
-	 isChar(l->buf[l->lineEnd], "\r\n")) {
-    l->buf[l->lineEnd] = 0;
-    l->lineEnd++;
+  if (l->httpMode) {
+    if (l->buf[l->lineEnd] == '\r') {
+      nullLast(l);
+      if (l->buf[l->lineEnd] == '\n') {
+	nullLast(l);
+      }
+    } else {
+      nullLast(l);
+    }      
+  } else {
+    /* Overwrite all newlines with nulls */
+    while ((l->lineEnd < l->bufLen) &&
+	   isChar(l->buf[l->lineEnd], "\r\n")) {
+      nullLast(l);
+    }
   }
 
   l->tokStart = l->tokEnd = l->lineStart;
@@ -91,7 +112,7 @@ char* linep_NextToken(LineState* l, const char* toks)
   return l->buf + l->tokStart;
 }
 
-unsigned int linep_Reset(LineState* l)
+int linep_Reset(LineState* l)
 {
   unsigned int remaining;
   if (!l->lineComplete) {
@@ -103,7 +124,7 @@ unsigned int linep_Reset(LineState* l)
   l->bufLen = remaining;
   l->lineStart = l->lineEnd = 0;
   l->lineComplete = 0;
-  return remaining;
+  return (remaining >= l->bufSize);
 }
 
 int linep_ReadFile(LineState* l, apr_file_t* file)
@@ -112,8 +133,37 @@ int linep_ReadFile(LineState* l, apr_file_t* file)
   apr_status_t s;
 
   s = apr_file_read(file, l->buf + l->bufLen, &len);
-  if (s == APR_SUCCESS) {
-    l->bufLen += len;
-  }
+  l->bufLen += len;
   return s;
+}
+
+int linep_ReadSocket(LineState* l, apr_socket_t* sock)
+{
+  unsigned int len = l->bufSize - l->bufLen;
+  apr_status_t s;
+
+  s = apr_socket_recv(sock, l->buf + l->bufLen, &len);
+  l->bufLen += len;
+  return s;
+}
+
+void linep_GetReadInfo(const LineState* l, char** buf, 
+		       unsigned int* remaining)
+{
+  if (buf != NULL) {
+    *buf = l->buf + l->bufLen;
+  }
+  if (remaining != NULL) {
+    *remaining = l->bufSize - l->bufLen;
+  }
+}
+
+void linep_GetDataRemaining(const LineState* l, unsigned int* remaining)
+{
+  *remaining = l->bufLen - l->lineEnd;
+}
+
+void linep_SetReadLength(LineState* l, unsigned int len)
+{
+  l->bufLen += len;
 }

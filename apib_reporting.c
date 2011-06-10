@@ -3,9 +3,12 @@
 #include <string.h>
 
 #include <apr_atomic.h>
+#include <apr_network_io.h>
 #include <apr_time.h>
 
 #include <apib.h>
+
+#define NUM_CPU_SAMPLES 32
 
 static volatile int reporting = 0;
 static volatile apr_uint32_t completedRequests = 0;
@@ -22,6 +25,31 @@ static apr_time_t intervalStartTime;
 static unsigned long* latencies = NULL;
 static unsigned int   latenciesCount = 0;
 
+static double* clientCpuSamples = NULL;
+static unsigned int clientCpuSampleCount = 0;
+static unsigned int clientCpuSampleSize = 0;
+static CPUUsage cpuUsage;
+
+static double* remoteCpuSamples = NULL;
+static unsigned int remoteCpuSampleCount = 0;
+static unsigned int remoteCpuSampleSize = 0;
+static apr_socket_t* remoteCpuSocket = NULL;
+static const char* remoteMonitorHost = NULL;
+
+static double* addSample(double sample, double* samples,
+			 unsigned int* count, unsigned int* size)
+{
+  double* ret = samples;
+
+  if (*count >= *size) {
+    *size *= 2;
+    ret = (double*)realloc(samples, sizeof(double) * *size);
+  }
+  samples[*count] = sample;
+  (*count)++;
+  return ret;
+}
+
 static double microToMilli(unsigned long m)
 {
   return (double)(m / 1000l) + ((m % 1000l) / 1000.0);
@@ -30,6 +58,62 @@ static double microToMilli(unsigned long m)
 static double microToSecond(unsigned long m)
 {
   return (double)(m / 1000000l) + ((m % 1000000l) / 1000000.0);
+}
+
+static void connectMonitor(void)
+{
+  apr_status_t s;
+  apr_sockaddr_t* addr;
+  char* host;
+  char* scope;
+  apr_port_t port;
+
+  s = apr_parse_addr_port(&host, &scope, &port, remoteMonitorHost, MainPool);
+  if (s != APR_SUCCESS) {
+    return;
+  }
+
+  s = apr_sockaddr_info_get(&addr, host, APR_INET, port, 0, MainPool);
+  if (s != APR_SUCCESS) {
+    return;
+  }
+
+  s = apr_socket_create(&remoteCpuSocket, APR_INET, 
+			SOCK_STREAM, APR_PROTO_TCP, MainPool);
+  if (s != APR_SUCCESS) {
+    return;
+  }
+
+  s = apr_socket_connect(remoteCpuSocket, addr);
+  if (s != APR_SUCCESS) {
+    remoteCpuSocket = NULL;
+  }
+}
+
+static double getRemoteCpu(void)
+{
+  char buf[64];
+  apr_status_t s;
+  unsigned int len;
+
+  len = 4;
+  s = apr_socket_send(remoteCpuSocket, "CPU\n", &len);
+  if (s != APR_SUCCESS) {
+    goto failure;
+  }
+
+  len = 64;
+  s = apr_socket_recv(remoteCpuSocket, buf, &len);
+  if (s != APR_SUCCESS) {
+    goto failure;
+  }
+
+  return strtod(buf, NULL);
+
+ failure:
+  apr_socket_close(remoteCpuSocket);
+  remoteCpuSocket = NULL;
+  return 0.0;
 }
 
 void RecordResult(IOArgs* args, int code, unsigned long latency)
@@ -64,6 +148,14 @@ void RecordConnectionOpen(void)
   apr_atomic_inc32(&connectionsOpened);
 }
 
+void RecordInit(const char* monitorHost)
+{
+  cpu_Init(MainPool);
+  if (monitorHost != NULL) {
+    remoteMonitorHost = monitorHost;
+  }
+}
+
 void RecordStart(int startReporting)
 {
   /* When we warm up we want to zero these out before continuing */
@@ -75,8 +167,22 @@ void RecordStart(int startReporting)
   connectionsOpened = 0;
 
   reporting = startReporting;  
+  cpu_GetUsage(&cpuUsage, MainPool);
+  if (remoteMonitorHost != NULL) {
+    if (remoteCpuSocket == NULL) {
+      connectMonitor();
+    } else {
+      /* Just re-set the CPU time */
+      getRemoteCpu();
+    }
+  }
   startTime = apr_time_now();
   intervalStartTime = startTime;
+
+  clientCpuSampleSize = NUM_CPU_SAMPLES;
+  clientCpuSamples = (double*)malloc(sizeof(double) * NUM_CPU_SAMPLES);
+  remoteCpuSampleSize = NUM_CPU_SAMPLES;
+  remoteCpuSamples = (double*)malloc(sizeof(double) * NUM_CPU_SAMPLES);
 }
 
 void RecordStop(void)
@@ -97,6 +203,8 @@ void ReportInterval(FILE* out, int totalDuration, int warmup)
   int soFar = apr_time_sec(now - startTime);
   double elapsed = microToSecond(e);
   char* warm;
+  double cpu = 0.0;
+  double remoteCpu = 0.0;
 
   if (warmup) {
     warm = "Warming up: ";
@@ -104,10 +212,27 @@ void ReportInterval(FILE* out, int totalDuration, int warmup)
     warm = "";
   }
 
+  if (!warmup) {
+    if (remoteCpuSocket != NULL) {
+      remoteCpu = getRemoteCpu();
+      remoteCpuSamples = addSample(remoteCpu, remoteCpuSamples,
+				   &remoteCpuSampleCount, &remoteCpuSampleSize);
+    }
+    cpu = cpu_GetInterval(&cpuUsage, MainPool);
+    clientCpuSamples = addSample(cpu, clientCpuSamples,
+				 &clientCpuSampleCount, &clientCpuSampleSize);
+  }
+
   intervalSuccessful = 0;
   intervalStartTime = now;
-  fprintf(out, "%s(%u / %i) %.3lf\n",
-	  warm, soFar, totalDuration, count / elapsed);
+  if (remoteCpu != 0.0) {
+  fprintf(out, "%s(%u / %i) %.3lf %.0lf%% cpu %.0lf%% remote cpu\n",
+	  warm, soFar, totalDuration, count / elapsed, 
+	  cpu * 100.0, remoteCpu * 100.0);
+  } else {
+    fprintf(out, "%s(%u / %i) %.3lf %.0lf%% cpu\n",
+	    warm, soFar, totalDuration, count / elapsed, cpu * 100.0);
+  }
 }
 
 static unsigned long getLatencyPercent(int percent)
@@ -126,6 +251,17 @@ static unsigned long getAverageLatency(void)
   }
 
   return totalLatency / (unsigned long long)latenciesCount;
+}
+
+static double getAverageCpu(double* samples, unsigned int count)
+{
+  double total = 0.0;
+
+  for (unsigned int i = 0; i < count; i++) {
+    total += samples[i];
+  }
+
+  return total / count;
 }
 
 static void PrintNormalResults(FILE* out, double elapsed)
@@ -153,6 +289,19 @@ static void PrintNormalResults(FILE* out, double elapsed)
 	  microToMilli(getLatencyPercent(98)));
   fprintf(out, "99%% latency:          %.3lf milliseconds\n",
 	  microToMilli(getLatencyPercent(99)));
+  fprintf(out, "\n");
+  if (clientCpuSampleCount > 0) {
+    fprintf(out, "Client CPU average:    %.0lf%%\n",
+	    getAverageCpu(clientCpuSamples, clientCpuSampleCount) * 100.0);
+    fprintf(out, "Client CPU max:        %.0lf%%\n",
+	    clientCpuSamples[clientCpuSampleCount - 1] * 100.0);
+  }
+  if (remoteCpuSampleCount > 0) {
+    fprintf(out, "Remote CPU average:    %.0lf%%\n",
+	    getAverageCpu(remoteCpuSamples, remoteCpuSampleCount) * 100.0);
+    fprintf(out, "Remote CPU max:        %.0lf%%\n",
+	    remoteCpuSamples[remoteCpuSampleCount - 1] * 100.0);
+  }
 }
 
 static void PrintShortResults(FILE* out, double elapsed)
@@ -207,6 +356,19 @@ static int compareULongs(const void* a1, const void* a2)
   return 0;
 }
 
+static int compareDoubles(const void* a1, const void* a2)
+{
+  const double* d1 = (const double*)a1;
+  const double* d2 = (const double*)a2;
+
+  if (*d1 < *d2) {
+    return -1;
+  } else if (*d1 > *d2) {
+    return 1;
+  }
+  return 0;
+}
+
 void ConsolidateLatencies(IOArgs* args, int numThreads)
 {
   unsigned int latenciesSize = args[0].latenciesSize;
@@ -234,11 +396,23 @@ void ConsolidateLatencies(IOArgs* args, int numThreads)
 
   qsort(latencies, latenciesCount, sizeof(unsigned long),
 	compareULongs);
+
+  qsort(clientCpuSamples, clientCpuSampleCount, sizeof(double),
+	compareDoubles);
+  qsort(remoteCpuSamples, remoteCpuSampleCount, sizeof(double),
+	compareDoubles);
 }
 
 void EndReporting(void)
 {
+  if (remoteCpuSocket != NULL) {
+    apr_socket_close(remoteCpuSocket);
+  }
   if (latencies != NULL) {
     free(latencies);
+    free(clientCpuSamples);
+    if (remoteCpuSamples != NULL) {
+      free(remoteCpuSamples);
+    }
   }
 }

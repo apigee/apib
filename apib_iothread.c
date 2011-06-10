@@ -56,6 +56,7 @@ typedef struct {
   apr_time_t      requestStart;
   apr_status_t    panicStatus;
   unsigned long   wakeups;
+  LineState       line;
 } ConnectionInfo;
 
 #if DEBUG
@@ -268,6 +269,7 @@ static int writeRequestSsl(ConnectionInfo* conn)
 {
   int sslStatus;
   int sslErr;
+  char buf[128];
 
   if (conn->bufLen > conn->bufPos) {
 #if DEBUG
@@ -390,45 +392,22 @@ static int writeRequest(ConnectionInfo* conn)
 
 static void startReadRequest(ConnectionInfo* conn) 
 {
-  conn->bufPos = 0;
-  conn->bufLen = SEND_BUF_SIZE;
   SETSTATE(conn, STATE_RECV_START);
+  linep_Start(&(conn->line), conn->buf, SEND_BUF_SIZE, 0);
+  linep_SetHttpMode(&(conn->line), 1);
 }
 
-static int readHttpLine(ConnectionInfo* conn, char* lineBuf)
+static void processRequestLine(ConnectionInfo* conn)
 {
-  int cr = 0;
-  int p = conn->bufPos;
-
-  while (p < conn->bufLen) {
-    if (conn->buf[p] == '\r') {
-      cr = 1;
-    } else if (cr && (conn->buf[p] == '\n')) {
-      /* End of line */
-      int len = p - conn->bufPos + 1;
-      strncpy(lineBuf, conn->buf + conn->bufPos, len);
-      lineBuf[len] = 0;
-      return len;
-    } else {
-      cr = 0;
-    }
-    p++;
-  }
-  return 0;
-}
-
-static void processRequestLine(ConnectionInfo* conn, char* lineBuf)
-{
-  char* last;
   char* tok;
   
   if (conn->ioArgs->verbose) {
-    printf("%s", lineBuf);
+    printf("%s\n", linep_GetLine(&(conn->line)));
   }
 
   /* Should get "HTTP/1.1". Check later? */
-  apr_strtok(lineBuf, " \r\n", &last);
-  tok = apr_strtok(NULL, " \r\n", &last);
+  linep_NextToken(&(conn->line), " ");
+  tok = linep_NextToken(&(conn->line), " ");
   if (tok == NULL) {
     /* Something very weird */
     conn->httpStatus = 999;
@@ -442,14 +421,13 @@ static void processRequestLine(ConnectionInfo* conn, char* lineBuf)
   conn->closeRequested = 0;
 }
 
-static void processHeader(ConnectionInfo* conn, char* lineBuf)
+static void processHeader(ConnectionInfo* conn)
 {
-  char* last;
   char* name;
   char* value;
 
-  name = apr_strtok(lineBuf, " :", &last);
-  value = apr_strtok(NULL, "\r\n", &last);
+  name = linep_NextToken(&(conn->line), " :");
+  value = linep_NextToken(&(conn->line), "\r\n");
 
   if (value == NULL) {
     /* Another weird response so don't go on */
@@ -481,11 +459,11 @@ static void requestComplete(ConnectionInfo* conn)
 
 static int readRequest(ConnectionInfo* conn)
 {
-  apr_size_t read;
-  char lineBuf[4096];
-  int lineLen;
+  apr_size_t readLen;
+  char* readBuf;
+  char buf[128];
 
-  read = conn->bufLen - conn->bufPos;
+  linep_GetReadInfo(&(conn->line), &readBuf, &readLen);
 
   if (conn->isSsl) {
     int sslStatus;
@@ -495,7 +473,7 @@ static int readRequest(ConnectionInfo* conn)
     printf("Reading from SSL. State = %s Shutdown = %i\n", SSL_state_string_long(conn->ssl),
 	   SSL_get_shutdown(conn->ssl));
 #endif
-    sslStatus = SSL_read(conn->ssl, conn->buf + conn->bufPos, read);
+    sslStatus = SSL_read(conn->ssl, readBuf, readLen);
     conn->ioArgs->readCount++;
     if (sslStatus <= 0) {
       sslErr = SSL_get_error(conn->ssl, sslStatus);
@@ -507,8 +485,8 @@ static int readRequest(ConnectionInfo* conn)
       default:
 #if DEBUG
 	fprintf(stderr, "SSL receive error: %i\n", sslErr);
-	ERR_error_string_n(ERR_get_error(), lineBuf, 4096);
-	fprintf(stderr, "  SSL error: %s\n", lineBuf);
+	ERR_error_string_n(ERR_get_error(), buf, 128);
+	fprintf(stderr, "  SSL error: %s\n", buf);
 #endif
 	SETSTATE(conn, STATE_FAILED);
 	RecordSocketError();
@@ -520,12 +498,12 @@ static int readRequest(ConnectionInfo* conn)
 #if DEBUG
     printf("Read %i pending %i\n", sslStatus, SSL_pending(conn->ssl));
 #endif
-    read = sslStatus;
+    readLen = sslStatus;
 
   } else {
     apr_status_t s;
 
-    s = apr_socket_recv(conn->sock, conn->buf + conn->bufPos, &read);
+    s = apr_socket_recv(conn->sock, readBuf, &readLen);
     conn->ioArgs->readCount++;
     if (APR_STATUS_IS_EAGAIN(s)) {
       return STATUS_WANT_WRITE;
@@ -533,8 +511,8 @@ static int readRequest(ConnectionInfo* conn)
 
     if (s != APR_SUCCESS) {
 #if DEBUG
-      apr_strerror(s, lineBuf, 4096);
-      fprintf(stderr, "Receive error: %s\n", lineBuf);
+      apr_strerror(s, buf, 128);
+      fprintf(stderr, "Receive error: %s\n", buf);
 #endif
       SETSTATE(conn, STATE_FAILED);
       RecordSocketError();
@@ -542,44 +520,44 @@ static int readRequest(ConnectionInfo* conn)
     }
   }
 
-  conn->bufPos = 0;
-  conn->bufLen = read;
+  linep_SetReadLength(&(conn->line), readLen);
 
-  while ((conn->state == STATE_RECV_START) || (conn->state == STATE_RECV_HDRS)) {
-    lineLen = readHttpLine(conn, lineBuf);
-    if (lineLen > 0) {
-      /* Successfully read a line -- process it */
-      conn->bufPos += lineLen;
-      if (conn->state == STATE_RECV_START) {
-	processRequestLine(conn, lineBuf);
-	SETSTATE(conn, STATE_RECV_HDRS);
-      } else if (!strcmp(lineBuf, "\r\n")) {
-	/* Blank line -- end of headers */
-	SETSTATE(conn, STATE_RECV_BODY);
-	conn->contentRead = 0;
-      } else {
-	processHeader(conn, lineBuf);
-      }
+  while (((conn->state == STATE_RECV_START) || conn->state == STATE_RECV_HDRS) &&
+	 linep_NextLine(&(conn->line))) {
+    char* line = linep_GetLine(&(conn->line));
+    if (conn->state == STATE_RECV_START) {
+      processRequestLine(conn);
+      SETSTATE(conn, STATE_RECV_HDRS);
+    } else if (!strcmp(line, "")) {
+      /* Blank line -- end of headers */
+      SETSTATE(conn, STATE_RECV_BODY);
+      conn->contentRead = 0;
+      break;
     } else {
-      /* Line incomplete -- copy and return for more later */
-      memmove(conn->buf, conn->buf + conn->bufPos, conn->bufLen - conn->bufPos);
-      conn->bufPos = conn->bufLen - conn->bufPos;
-      conn->bufLen = SEND_BUF_SIZE;
-      return STATUS_CONTINUE;
+      processHeader(conn);
     }
+  }
+  if (conn->state != STATE_RECV_BODY) {
+    /* There are more lines to read and we haven't found a complete one yet */
+    if (linep_Reset(&(conn->line))) {
+      /* Line is too long for our buffer */
+      SETSTATE(conn, STATE_PANIC);
+    }
+    return STATUS_CONTINUE;
   }
 
   if (conn->state == STATE_RECV_BODY) {
     /* Do different types of content length later */
     assert(conn->contentLength >= 0);
+    linep_GetDataRemaining(&(conn->line), &readLen);
 #if DEBUG
-    printf("Read %i body bytes out of %i\n", conn->bufLen - conn->bufPos, 
+    printf("Read %i body bytes out of %i\n", readLen,
 	   conn->contentLength);
 #endif
     if (conn->ioArgs->verbose) {
-      printf("  %i bytes of content\n", conn->bufLen - conn->bufPos);
+      printf("  %i bytes of content\n", readLen);
     }
-    conn->contentRead += (conn->bufLen - conn->bufPos);
+    conn->contentRead += readLen;
     if (conn->contentRead >= conn->contentLength) {
       /* Done reading -- can go back to sending! */
       requestComplete(conn);
@@ -590,8 +568,7 @@ static int readRequest(ConnectionInfo* conn)
       }
     } else {
       /* Need to read more from the body */
-      conn->bufPos = 0;
-      conn->bufLen = SEND_BUF_SIZE;
+      linep_Start(&(conn->line), conn->buf, SEND_BUF_SIZE, 0);
     }
   }
   return STATUS_CONTINUE;

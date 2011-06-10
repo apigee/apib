@@ -24,12 +24,12 @@ char*            RunName;
 int              NumConnections;
 int              NumThreads;
 
-#define VALID_OPTS "c:d:f:hk:t:vw:x:N:ST"
+#define VALID_OPTS "c:d:f:hk:t:vw:x:M:N:ST"
 
 #define VALID_OPTS_DESC \
   "[-c connections] [-k threads] [-d seconds] [-w warmup secs]\n" \
   "[-f file name] [-t content type] [-x verb]\n" \
-  "[-N name] [-S] [-hv] <url>\n" \
+  "[-N name] [-S] [-M host:port] [-hv] <url>\n" \
   "  -c: Number of connections to open (default 1)\n" \
   "  -k: Number of I/O threads to spawn (default 1)\n" \
   "  -d: Number of seconds to run (default 60)\n" \
@@ -40,6 +40,7 @@ int              NumThreads;
   "  -N: Name of test run (placed in output)\n" \
   "  -S: Short output (one line, CSV format)\n" \
   "  -T: Print header line of short output format (for CSV parsing)\n" \
+  "  -M: Host and port of host running apibmon for CPU monitoring\n" \
   "  -v: Verbose (print requests and responses)\n" \
   "  -h: Print this help message\n" \
   "\n" \
@@ -208,6 +209,7 @@ int main(int ac, char const* const* av)
   char* fileName = NULL;
   char* contentType = NULL;
   const char* url = NULL;
+  char* monitorHost = NULL;
 
   NumConnections = DEFAULT_NUM_CONNECTIONS;
   NumThreads = DEFAULT_NUM_THREADS;
@@ -252,6 +254,9 @@ int main(int ac, char const* const* av)
 	break;
       case 'x':
 	verb = apr_pstrdup(MainPool, curArg);
+	break;
+      case 'M':
+	monitorHost = apr_pstrdup(MainPool, curArg);
 	break;
       case 'N':
 	RunName = apr_pstrdup(MainPool, curArg);
@@ -345,6 +350,7 @@ int main(int ac, char const* const* av)
 			  &(ioArgs[i]), MainPool);
       }
 
+      RecordInit(monitorHost);
       if (warmupTime > 0) {
 	RecordStart(FALSE);
 	waitAndReport(warmupTime, TRUE);

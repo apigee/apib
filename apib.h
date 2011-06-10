@@ -8,6 +8,8 @@
 
 #include <openssl/ssl.h>
 
+#include <apib_common.h>
+
 /* Structures */
 
 typedef struct {
@@ -43,6 +45,7 @@ extern char*           RunName;
 
 extern void RunIO(IOArgs* args);
 
+extern void RecordInit(const char* monitorHost);
 extern void RecordStart(int startReporting);
 extern void RecordStop(void);
 
