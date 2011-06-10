@@ -36,6 +36,9 @@ static unsigned int remoteCpuSampleSize = 0;
 static apr_socket_t* remoteCpuSocket = NULL;
 static const char* remoteMonitorHost = NULL;
 
+static unsigned long long totalBytesSent = 0LL;
+static unsigned long long totalBytesReceived = 0LL;
+
 static double* addSample(double sample, double* samples,
 			 unsigned int* count, unsigned int* size)
 {
@@ -302,6 +305,15 @@ static void PrintNormalResults(FILE* out, double elapsed)
     fprintf(out, "Remote CPU max:        %.0lf%%\n",
 	    remoteCpuSamples[remoteCpuSampleCount - 1] * 100.0);
   }
+  fprintf(out, "\n");
+  fprintf(out, "Total bytes sent:      %.2lf megabytes\n",
+	  totalBytesSent / 1048576.0);
+  fprintf(out, "Total bytes received:  %.2lf megabytes\n",
+	  totalBytesReceived / 1048576.0);
+  fprintf(out, "Send bandwidth:        %.2lf megabits / second\n",
+	  (totalBytesSent * 8.0 / 1048576.0) / elapsed);
+  fprintf(out, "Receive bandwidth:     %.2lf megabits / second\n",
+	  (totalBytesReceived * 8.0 / 1048576.0) / elapsed);
 }
 
 static void PrintShortResults(FILE* out, double elapsed)
@@ -392,6 +404,9 @@ void ConsolidateLatencies(IOArgs* args, int numThreads)
 	   sizeof(unsigned long) * args[i].latenciesCount);
     latenciesCount += args[i].latenciesCount;
     free(args[i].latencies);
+
+    totalBytesSent += args[i].writeBytes;
+    totalBytesReceived += args[i].readBytes;
   }
 
   qsort(latencies, latenciesCount, sizeof(unsigned long),

@@ -285,6 +285,7 @@ static int writeRequestSsl(ConnectionInfo* conn)
 			  conn->ioArgs->sendDataSize - conn->sendBufPos);
   }
   conn->ioArgs->writeCount++;
+  conn->ioArgs->writeBytes += sslStatus;
   
 #if DEBUG
   printf("SSL return %i\n", sslStatus);
@@ -340,6 +341,7 @@ static int writeRequestNonSsl(ConnectionInfo* conn)
 
   s = apr_socket_sendv(conn->sock, bufs, 2, &written);
   conn->ioArgs->writeCount++;
+  conn->ioArgs->writeBytes += written;
   if (APR_STATUS_IS_EAGAIN(s)) {
     return STATUS_WANT_WRITE;
   }
@@ -520,6 +522,7 @@ static int readRequest(ConnectionInfo* conn)
     }
   }
 
+  conn->ioArgs->readBytes += readLen;
   linep_SetReadLength(&(conn->line), readLen);
 
   while (((conn->state == STATE_RECV_START) || conn->state == STATE_RECV_HDRS) &&

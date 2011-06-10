@@ -339,6 +339,8 @@ int main(int ac, char const* const* av)
 	ioArgs[i].latenciesSize = DEFAULT_LATENCIES_SIZE;
 	ioArgs[i].latencies = 
 	  (unsigned long*)malloc(sizeof(unsigned long) * DEFAULT_LATENCIES_SIZE);
+	ioArgs[i].readCount = ioArgs[i].writeCount = 0;
+	ioArgs[i].readBytes = ioArgs[i].writeBytes = 0;
 
 	if (!strcmp(parsedUrl.scheme, "https")) {
 	  createSslContext(&(ioArgs[i]), (i == 0));
