@@ -13,8 +13,8 @@ static int isChar(const char c, const char* match)
   return 0;
 }
 
-void linep_Start(LineState* l, char* line, unsigned int size,
-		 unsigned int len)
+void linep_Start(LineState* l, char* line, apr_size_t size,
+		 apr_size_t len)
 {
   l->httpMode = 0;
   l->buf = line;

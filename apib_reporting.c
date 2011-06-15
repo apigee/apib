@@ -97,7 +97,7 @@ static double getRemoteCpu(void)
 {
   char buf[64];
   apr_status_t s;
-  unsigned int len;
+  apr_size_t len;
 
   len = 4;
   s = apr_socket_send(remoteCpuSocket, "CPU\n", &len);
