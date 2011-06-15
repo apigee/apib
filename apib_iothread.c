@@ -10,6 +10,7 @@
 #include <apr_poll.h>
 #include <apr_pools.h>
 #include <apr_portable.h>
+#include <apr_signal.h>
 #include <apr_strings.h>
 
 #include <openssl/err.h>
@@ -99,6 +100,11 @@ static char* trimString(char* s)
   return ret;
 }
 
+static int keepAlive(const ConnectionInfo* conn)
+{
+  return (KeepAlive != KEEP_ALIVE_NEVER);
+}
+
 static void makeConnection(ConnectionInfo* conn, apr_pollfd_t* fd,
 			   apr_sockaddr_t* addr, apr_pool_t* p)
 {
@@ -116,6 +122,10 @@ static void makeConnection(ConnectionInfo* conn, apr_pollfd_t* fd,
     goto panic;
   }
   s = apr_socket_opt_set(sock, APR_SO_REUSEADDR, 1);
+  if (s != APR_SUCCESS) {
+    goto panic;
+  }
+  s = apr_socket_opt_set(sock, APR_SO_LINGER, 0);
   if (s != APR_SUCCESS) {
     goto panic;
   }
@@ -253,6 +263,10 @@ static void buildRequest(ConnectionInfo* conn)
     conn->bufPos += apr_snprintf(conn->buf + conn->bufPos, conn->bufLen - conn->bufPos, 
 				 "Content-Type: %s\r\n", cType);
   }
+  if (!keepAlive(conn)) {
+    conn->bufPos += apr_snprintf(conn->buf + conn->bufPos, conn->bufLen - conn->bufPos,
+				 "Connection: close\r\n");
+  }
   conn->bufPos += apr_snprintf(conn->buf + conn->bufPos, conn->bufLen - conn->bufPos, 
 			       "\r\n");
 
@@ -379,6 +393,7 @@ static int writeRequestNonSsl(ConnectionInfo* conn)
 #endif
     SETSTATE(conn, STATE_FAILED);
     RecordSocketError();
+    return STATUS_CONTINUE;
   } else if ((conn->bufPos >= conn->bufLen) &&
 	     (conn->sendBufPos >= conn->ioArgs->sendDataSize)) {
     /* Did all the writing -- ready to receive */
@@ -463,7 +478,8 @@ static void requestComplete(ConnectionInfo* conn)
 {
   RecordResult(conn->ioArgs, conn->httpStatus, 
 	       apr_time_now() - conn->requestStart);
-  if (conn->closeRequested) {
+  if ((conn->closeRequested) ||
+      !keepAlive(conn)) {
     SETSTATE(conn, STATE_CLOSING);
   } else {
     SETSTATE(conn, STATE_SEND_READY);
@@ -613,6 +629,7 @@ static int readRequest(ConnectionInfo* conn)
 	printf("Read trailer line \"%s\"\n", line);
 #endif
 	if (!strcmp(line, "")) {
+	  /* Done reading -- back to sending */
 	  requestComplete(conn);
 	  return STATUS_CONTINUE;
 	}
@@ -770,6 +787,8 @@ void RunIO(IOArgs* args)
   int               pollSize;
   const apr_pollfd_t*     pollResult;
   
+  apr_signal_block(SIGPIPE);
+
   apr_pool_create(&memPool, MainPool);
 
   args->readCount = args->writeCount = 0;

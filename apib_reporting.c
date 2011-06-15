@@ -48,7 +48,7 @@ static double* addSample(double sample, double* samples,
     *size *= 2;
     ret = (double*)realloc(samples, sizeof(double) * *size);
   }
-  samples[*count] = sample;
+  ret[*count] = sample;
   (*count)++;
   return ret;
 }

@@ -23,15 +23,17 @@ int              ShortOutput;
 char*            RunName;
 int              NumConnections;
 int              NumThreads;
+int              KeepAlive;
 
-#define VALID_OPTS "c:d:f:hk:t:vw:x:M:N:ST"
+#define VALID_OPTS "c:d:f:hk:t:vw:x:K:M:N:ST"
 
 #define VALID_OPTS_DESC \
-  "[-c connections] [-k threads] [-d seconds] [-w warmup secs]\n" \
+  "[-c connections] [-k keep-alive] [-K threads] [-d seconds] [-w warmup secs]\n" \
   "[-f file name] [-t content type] [-x verb]\n" \
   "[-N name] [-S] [-M host:port] [-hv] <url>\n" \
   "  -c: Number of connections to open (default 1)\n" \
-  "  -k: Number of I/O threads to spawn (default 1)\n" \
+  "  -k: HTTP keep-alive setting. 0 for none, -1 for forever, otherwise seconds\n" \
+  "  -K: Number of I/O threads to spawn (default 1)\n" \
   "  -d: Number of seconds to run (default 60)\n" \
   "  -w: Warmup time in seconds (default 0)\n" \
   "  -f: File to upload\n" \
@@ -215,6 +217,7 @@ int main(int ac, char const* const* av)
   NumThreads = DEFAULT_NUM_THREADS;
   ShortOutput = FALSE;
   RunName = "";
+  KeepAlive = KEEP_ALIVE_ALWAYS;
 
   IOArgs* ioArgs = NULL;
   apr_thread_t** ioThreads;
@@ -240,11 +243,11 @@ int main(int ac, char const* const* av)
       case 'h':
 	doHelp = 1;
 	break;
+      case 'k':
+	KeepAlive = atoi(curArg);
+	break;
       case 't':
 	contentType = apr_pstrdup(MainPool, curArg);
-	break;
-      case 'k':
-	NumThreads = atoi(curArg);
 	break;
       case 'v':
 	verbose = 1;
@@ -254,6 +257,9 @@ int main(int ac, char const* const* av)
 	break;
       case 'x':
 	verb = apr_pstrdup(MainPool, curArg);
+	break;
+      case 'K':
+	NumThreads = atoi(curArg);
 	break;
       case 'M':
 	monitorHost = apr_pstrdup(MainPool, curArg);

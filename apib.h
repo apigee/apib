@@ -35,6 +35,8 @@ typedef struct {
 #define USER_AGENT "apib 0.1"
 
 #define DEFAULT_CONTENT_TYPE "application/octet-stream"
+#define KEEP_ALIVE_ALWAYS -1
+#define KEEP_ALIVE_NEVER 0
 
 extern apr_pool_t*     MainPool;
 extern volatile int    Running;
@@ -42,6 +44,7 @@ extern int             NumConnections;
 extern int             NumThreads;
 extern int             ShortOutput;
 extern char*           RunName;
+extern int             KeepAlive;
 
 /* Internal methods */
 
