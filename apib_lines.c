@@ -114,7 +114,7 @@ char* linep_NextToken(LineState* l, const char* toks)
 
 int linep_Reset(LineState* l)
 {
-  unsigned int remaining;
+  apr_size_t remaining;
   if (!l->lineComplete) {
     remaining = l->bufLen - l->lineStart;
     memmove(l->buf, l->buf + l->lineStart, remaining);
@@ -129,7 +129,7 @@ int linep_Reset(LineState* l)
 
 int linep_ReadFile(LineState* l, apr_file_t* file)
 {
-  unsigned int len = l->bufSize - l->bufLen;
+  apr_size_t len = l->bufSize - l->bufLen;
   apr_status_t s;
 
   s = apr_file_read(file, l->buf + l->bufLen, &len);
@@ -139,7 +139,7 @@ int linep_ReadFile(LineState* l, apr_file_t* file)
 
 int linep_ReadSocket(LineState* l, apr_socket_t* sock)
 {
-  unsigned int len = l->bufSize - l->bufLen;
+  apr_size_t len = l->bufSize - l->bufLen;
   apr_status_t s;
 
   s = apr_socket_recv(sock, l->buf + l->bufLen, &len);
@@ -148,7 +148,7 @@ int linep_ReadSocket(LineState* l, apr_socket_t* sock)
 }
 
 void linep_GetReadInfo(const LineState* l, char** buf, 
-		       unsigned int* remaining)
+		       apr_size_t* remaining)
 {
   if (buf != NULL) {
     *buf = l->buf + l->bufLen;
@@ -158,17 +158,17 @@ void linep_GetReadInfo(const LineState* l, char** buf,
   }
 }
 
-void linep_GetDataRemaining(const LineState* l, unsigned int* remaining)
+void linep_GetDataRemaining(const LineState* l, apr_size_t* remaining)
 {
   *remaining = l->bufLen - l->lineEnd;
 }
 
-void linep_Skip(LineState* l, unsigned int toSkip)
+void linep_Skip(LineState* l, apr_size_t toSkip)
 {
   l->lineEnd += toSkip;
 }
 
-void linep_SetReadLength(LineState* l, unsigned int len)
+void linep_SetReadLength(LineState* l, apr_size_t len)
 {
   l->bufLen += len;
 }

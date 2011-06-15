@@ -3,6 +3,7 @@
 #include <string.h>
 #include <unistd.h>
 
+#include <apr_env.h>
 #include <apr_file_io.h>
 #include <apr_pools.h>
 #include <apr_time.h>
@@ -22,6 +23,8 @@ static void setLL(LineState* line, long long* val)
   }
 }
 
+/* This is a bad way to count the CPUs because "cpuinfo" doesn't account
+ * for hyperthreading, etc. */
 int cpu_Count(apr_pool_t* pool)
 {
   apr_status_t s;
@@ -94,8 +97,15 @@ static int getTicks(CPUUsage* cpu, apr_pool_t* pool)
 
 void cpu_Init(apr_pool_t* pool)
 {
+  char* countStr;
+
   TicksPerSecond = sysconf(_SC_CLK_TCK);
-  CPUCount = cpu_Count(pool);
+
+  if (apr_env_get(&countStr, "CPU_COUNT", pool) == APR_SUCCESS) {
+    CPUCount = atoi(countStr);
+  } else {
+    CPUCount = cpu_Count(pool);
+  }
 }
 
 void cpu_GetUsage(CPUUsage* cpu, apr_pool_t* pool)

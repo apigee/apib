@@ -45,19 +45,19 @@ extern double cpu_GetInterval(CPUUsage* usage, apr_pool_t* pool);
 typedef struct {
   char*           buf;
   int             httpMode; /* Lines are terminated by only a single CRLF. */
-  unsigned int    bufLen; /* The number of valid bytes in the buffer */
-  unsigned int    bufSize; /* Number of allocated bytes in case it is different */
-  unsigned int    lineStart;
-  unsigned int    lineEnd;
+  apr_size_t      bufLen; /* The number of valid bytes in the buffer */
+  apr_size_t      bufSize; /* Number of allocated bytes in case it is different */
+  apr_size_t      lineStart;
+  apr_size_t      lineEnd;
   int             lineComplete;
-  unsigned int    tokStart;
-  unsigned int    tokEnd;
+  apr_size_t      tokStart;
+  apr_size_t      tokEnd;
 } LineState;
 
 /* Initialize or reset a LineState with new data. "size" is the size
  * of the buffer, and "len" is the amount that's currently filled with real stuff */
-extern void linep_Start(LineState* l, char* line, unsigned int size,
-			unsigned int len);
+extern void linep_Start(LineState* l, char* line, apr_size_t size,
+			apr_size_t len);
 
 /* If set to non-zero, then every line is terminated by a single CRLF. Otherwise
    we eat them all up and return no blank lines. Http relies on blank lines! */
@@ -87,16 +87,16 @@ extern int linep_ReadSocket(LineState* l, apr_socket_t* sock);
 
 /* Get info to fill the rest of the buffer */
 extern void linep_GetReadInfo(const LineState* l, char** buf, 
-			      unsigned int* remaining);
+			      apr_size_t* remaining);
 
 /* Find out how much data is left unprocessed */
-extern void linep_GetDataRemaining(const LineState* l, unsigned int* remaining);
+extern void linep_GetDataRemaining(const LineState* l, apr_size_t* remaining);
 
 /* Skip forward to see if there's another line */
-extern void linep_Skip(LineState* l, unsigned int toSkip);
+extern void linep_Skip(LineState* l, apr_size_t toSkip);
 
 /* Report back how much we read */
-extern void linep_SetReadLength(LineState* l, unsigned int len);
+extern void linep_SetReadLength(LineState* l, apr_size_t len);
 
 extern void linep_Debug(const LineState* l, FILE* out);
 
