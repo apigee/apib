@@ -27,9 +27,11 @@
 #define STATE_RECV_START    5
 #define STATE_RECV_HDRS     6
 #define STATE_RECV_BODY     7
-#define STATE_SEND_READY    8
-#define STATE_CLOSING       9
-#define STATE_FAILED        10
+#define STATE_RECV_BODY_CHNK 8
+#define STATE_RECV_TRAILERS 9
+#define STATE_SEND_READY    10
+#define STATE_CLOSING       11
+#define STATE_FAILED        12
 #define STATE_PANIC         99
 
 #define STATUS_WANT_READ  1
@@ -50,6 +52,7 @@ typedef struct {
   char*           buf;
   int             httpStatus;
   int             chunked;
+  int             chunkLen;
   int             contentLength;
   int             closeRequested;
   int             contentRead;
@@ -269,7 +272,9 @@ static int writeRequestSsl(ConnectionInfo* conn)
 {
   int sslStatus;
   int sslErr;
+#if DEBUG
   char buf[128];
+#endif
 
   if (conn->bufLen > conn->bufPos) {
 #if DEBUG
@@ -420,6 +425,7 @@ static void processRequestLine(ConnectionInfo* conn)
   /* Initialize other parameters */
   conn->contentLength = -1;
   conn->chunked = 0;
+  conn->chunkLen = 1;
   conn->closeRequested = 0;
 }
 
@@ -457,13 +463,20 @@ static void requestComplete(ConnectionInfo* conn)
 {
   RecordResult(conn->ioArgs, conn->httpStatus, 
 	       apr_time_now() - conn->requestStart);
+  if (conn->closeRequested) {
+    SETSTATE(conn, STATE_CLOSING);
+  } else {
+    SETSTATE(conn, STATE_SEND_READY);
+  }
 }
 
 static int readRequest(ConnectionInfo* conn)
 {
   apr_size_t readLen;
   char* readBuf;
+#if DEBUG
   char buf[128];
+#endif
 
   linep_GetReadInfo(&(conn->line), &readBuf, &readLen);
 
@@ -508,7 +521,7 @@ static int readRequest(ConnectionInfo* conn)
     s = apr_socket_recv(conn->sock, readBuf, &readLen);
     conn->ioArgs->readCount++;
     if (APR_STATUS_IS_EAGAIN(s)) {
-      return STATUS_WANT_WRITE;
+      return STATUS_WANT_READ;
     }
 
     if (s != APR_SUCCESS) {
@@ -533,14 +546,21 @@ static int readRequest(ConnectionInfo* conn)
       SETSTATE(conn, STATE_RECV_HDRS);
     } else if (!strcmp(line, "")) {
       /* Blank line -- end of headers */
-      SETSTATE(conn, STATE_RECV_BODY);
+      if (conn->chunked) {
+	SETSTATE(conn, STATE_RECV_BODY_CHNK);
+      } else {
+	SETSTATE(conn, STATE_RECV_BODY);
+      }
       conn->contentRead = 0;
       break;
     } else {
       processHeader(conn);
     }
   }
-  if (conn->state != STATE_RECV_BODY) {
+
+  if ((conn->state != STATE_RECV_BODY) &&
+      (conn->state != STATE_RECV_BODY_CHNK) &&
+      (conn->state != STATE_RECV_TRAILERS)) {
     /* There are more lines to read and we haven't found a complete one yet */
     if (linep_Reset(&(conn->line))) {
       /* Line is too long for our buffer */
@@ -549,32 +569,103 @@ static int readRequest(ConnectionInfo* conn)
     return STATUS_CONTINUE;
   }
 
-  if (conn->state == STATE_RECV_BODY) {
-    /* Do different types of content length later */
-    assert(conn->contentLength >= 0);
-    linep_GetDataRemaining(&(conn->line), &readLen);
-#if DEBUG
-    printf("Read %i body bytes out of %i\n", readLen,
-	   conn->contentLength);
-#endif
-    if (conn->ioArgs->verbose) {
-      printf("  %i bytes of content\n", readLen);
-    }
-    conn->contentRead += readLen;
-    if (conn->contentRead >= conn->contentLength) {
-      /* Done reading -- can go back to sending! */
-      requestComplete(conn);
-      if (conn->closeRequested) {
-	SETSTATE(conn, STATE_CLOSING);
-      } else {
-	SETSTATE(conn, STATE_SEND_READY);
+  while (TRUE) {
+    if (conn->state == STATE_RECV_BODY_CHNK) {
+      while (conn->chunkLen > 0) {
+	if (linep_NextLine(&(conn->line))) {
+	  conn->chunkLen--;
+	} else {
+	  /* We didn't read enough full chunk lines -- try again later */
+	  if (linep_Reset(&(conn->line))) {
+	    /* Line is too long for our buffer */
+	    SETSTATE(conn, STATE_PANIC);
+	  }
+	  return STATUS_CONTINUE;
+	}
       }
-    } else {
-      /* Need to read more from the body */
-      linep_Start(&(conn->line), conn->buf, SEND_BUF_SIZE, 0);
+
+      char* lenStr = linep_NextToken(&(conn->line), ";\r\n");
+      long len = strtol(lenStr, NULL, 16);
+#if DEBUG
+      char* line = linep_GetLine(&(conn->line));
+      printf("Read chunk line \"%s\" len=%li\n", line, len);
+#endif
+      if (len == 0) {
+	SETSTATE(conn, STATE_RECV_TRAILERS);
+      } else {
+	if (conn->ioArgs->verbose) {
+	  printf("  Next chunk is %li bytes long\n", len);
+	}
+	conn->contentLength = len;
+	SETSTATE(conn, STATE_RECV_BODY);
+      }
+    }
+
+    if (conn->state == STATE_RECV_TRAILERS) {
+#if DEBUG
+      printf("Trailers remaining:");
+      linep_Debug(&(conn->line), stdout);
+      printf("\n");
+#endif
+      while (linep_NextLine(&(conn->line))) {
+	char* line = linep_GetLine(&(conn->line));
+#ifdef DEBUG
+	printf("Read trailer line \"%s\"\n", line);
+#endif
+	if (!strcmp(line, "")) {
+	  requestComplete(conn);
+	  return STATUS_CONTINUE;
+	}
+      }
+#if DEBUG
+      printf("Trailers remaining:");
+      linep_Debug(&(conn->line), stdout);
+      printf("\n");
+#endif
+      /* If we get here we didn't read all the trailers */
+      if (linep_Reset(&(conn->line))) {
+	/* Line is too long for our buffer */
+	SETSTATE(conn, STATE_PANIC);
+      }
+      return STATUS_CONTINUE;
+    }
+
+    if (conn->state == STATE_RECV_BODY) {
+      assert(conn->contentLength >= 0);
+      linep_GetDataRemaining(&(conn->line), &readLen);
+#if DEBUG
+      printf("Read %i body bytes out of %i\n", readLen,
+	     conn->contentLength);
+#endif
+      if ((conn->contentLength - conn->contentRead) < readLen) {
+	readLen = conn->contentLength - conn->contentRead;
+      }
+
+      conn->contentRead += readLen;
+      if (conn->ioArgs->verbose) {
+	printf("  %i bytes of content\n", readLen);
+      }
+     
+      if (conn->contentRead >= conn->contentLength) {
+	if (conn->chunked) {
+	  /* Skip the data we just read */
+	  linep_Skip(&(conn->line), readLen);
+	  /* Flag that we have to read two complete lines to get chunk len */
+	  conn->chunkLen = 2;
+	  SETSTATE(conn, STATE_RECV_BODY_CHNK);
+	} else {
+	  /* Done reading -- can go back to sending! */
+	  requestComplete(conn);
+	  return STATUS_CONTINUE;
+	}
+      } else {
+        /* Need to read more from the body, so reset the line buffer */
+	linep_Start(&(conn->line), conn->buf, SEND_BUF_SIZE, 0);
+	linep_SetHttpMode(&(conn->line), 1);
+	return STATUS_CONTINUE;
+      }
     }
   }
-  return STATUS_CONTINUE;
 }
 
 static int processConnection(ConnectionInfo* conn, apr_pollfd_t* poll, 
@@ -637,6 +728,8 @@ static int processConnection(ConnectionInfo* conn, apr_pollfd_t* poll,
     case STATE_RECV_START:
     case STATE_RECV_HDRS:
     case STATE_RECV_BODY:
+    case STATE_RECV_BODY_CHNK:
+    case STATE_RECV_TRAILERS:
       s = readRequest(conn);
       break;
     

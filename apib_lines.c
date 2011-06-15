@@ -163,7 +163,19 @@ void linep_GetDataRemaining(const LineState* l, unsigned int* remaining)
   *remaining = l->bufLen - l->lineEnd;
 }
 
+void linep_Skip(LineState* l, unsigned int toSkip)
+{
+  l->lineEnd += toSkip;
+}
+
 void linep_SetReadLength(LineState* l, unsigned int len)
 {
   l->bufLen += len;
+}
+
+void linep_Debug(const LineState* l, FILE* out)
+{
+  fprintf(out, "buf len = %u line start = %u end = %u tok start = %u end = %u\n",
+	  l->bufLen, l->lineStart, l->lineEnd, 
+	  l->tokStart, l->tokEnd);
 }

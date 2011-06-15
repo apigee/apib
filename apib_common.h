@@ -1,6 +1,8 @@
 #ifndef APIB_COMMON_H
 #define APIB_COMMON_H
 
+#include <stdio.h>
+
 #include <apr_file_io.h>
 #include <apr_network_io.h>
 #include <apr_pools.h>
@@ -90,7 +92,12 @@ extern void linep_GetReadInfo(const LineState* l, char** buf,
 /* Find out how much data is left unprocessed */
 extern void linep_GetDataRemaining(const LineState* l, unsigned int* remaining);
 
+/* Skip forward to see if there's another line */
+extern void linep_Skip(LineState* l, unsigned int toSkip);
+
 /* Report back how much we read */
-void linep_SetReadLength(LineState* l, unsigned int len);
+extern void linep_SetReadLength(LineState* l, unsigned int len);
+
+extern void linep_Debug(const LineState* l, FILE* out);
 
 #endif
