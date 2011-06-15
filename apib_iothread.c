@@ -540,6 +540,10 @@ static int readRequest(ConnectionInfo* conn)
     if (APR_STATUS_IS_EAGAIN(s)) {
       return STATUS_WANT_READ;
     }
+    if (APR_STATUS_IS_EOF(s) && conn->closeRequested) {
+      requestComplete(conn);
+      return STATUS_CONTINUE;
+    }
 
     if (s != APR_SUCCESS) {
 #if DEBUG
@@ -654,6 +658,9 @@ static int readRequest(ConnectionInfo* conn)
       printf("Read %i body bytes out of %i\n", readLen,
 	     conn->contentLength);
 #endif
+      if (conn->contentLength < 0) {
+	conn->closeRequested = 1;
+      }
       if ((conn->contentLength > 0) && 
           ((conn->contentLength - conn->contentRead) < readLen)) {
 	readLen = conn->contentLength - conn->contentRead;
@@ -665,18 +672,10 @@ static int readRequest(ConnectionInfo* conn)
       }
      
       if (conn->contentLength < 0) {
-	/* No content-length header */
-	int eof;
-	apr_socket_atreadeof(conn->sock, &eof);
-	if (eof) {
-	  requestComplete(conn);
-	  return STATUS_CONTINUE;
-	} else {
-	  /* Need to read more from the body, so reset the line buffer */
-	  linep_Start(&(conn->line), conn->buf, SEND_BUF_SIZE, 0);
-	  linep_SetHttpMode(&(conn->line), 1);
-	  return STATUS_CONTINUE;
-	}
+	/* No content-length header -- read until EOF */
+	linep_Start(&(conn->line), conn->buf, SEND_BUF_SIZE, 0);
+	linep_SetHttpMode(&(conn->line), 1);
+	return STATUS_CONTINUE;
 
       } else if (conn->contentRead >= conn->contentLength) {
 	if (conn->chunked) {
