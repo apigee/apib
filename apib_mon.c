@@ -29,7 +29,7 @@ typedef struct {
 
 static void sendBack(apr_socket_t* sock, const char* msg)
 {
-  unsigned int len = strlen(msg);
+  apr_size_t len = strlen(msg);
   
   apr_socket_send(sock, msg, &len);
 }

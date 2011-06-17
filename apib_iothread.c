@@ -643,7 +643,7 @@ static int readRequest(ConnectionInfo* conn)
 
       conn->contentRead += readLen;
       if (conn->ioArgs->verbose) {
-	printf("  %i bytes of content\n", readLen);
+	printf("  %zu bytes of content\n", readLen);
       }
      
       if (conn->contentRead >= conn->contentLength) {

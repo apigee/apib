@@ -175,7 +175,8 @@ void linep_SetReadLength(LineState* l, apr_size_t len)
 
 void linep_Debug(const LineState* l, FILE* out)
 {
-  fprintf(out, "buf len = %u line start = %u end = %u tok start = %u end = %u\n",
+  fprintf(out, 
+          "buf len = %zu line start = %zu end = %zu tok start = %zu end = %zu\n",
 	  l->bufLen, l->lineStart, l->lineEnd, 
 	  l->tokStart, l->tokEnd);
 }
