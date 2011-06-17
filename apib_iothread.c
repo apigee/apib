@@ -609,7 +609,7 @@ static int readRequest(ConnectionInfo* conn)
 #endif
       while (linep_NextLine(&(conn->line))) {
 	char* line = linep_GetLine(&(conn->line));
-#ifdef DEBUG
+#if DEBUG
 	printf("Read trailer line \"%s\"\n", line);
 #endif
 	if (!strcmp(line, "")) {
