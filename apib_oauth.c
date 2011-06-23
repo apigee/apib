@@ -244,8 +244,8 @@ static char* makeRandom(apr_pool_t* pool)
   long long p1;
   long long p2;
 
-  apr_generate_random_bytes(&p1, sizeof(long long));
-  apr_generate_random_bytes(&p2, sizeof(long long));
+  apr_generate_random_bytes((unsigned char*)&p1, sizeof(long long));
+  apr_generate_random_bytes((unsigned char*)&p2, sizeof(long long));
   return apr_psprintf(pool, "%llx%llx", p1, p2);
 }
 

@@ -280,7 +280,7 @@ static void buildRequest(ConnectionInfo* conn)
 				 "Connection: close\r\n");
   }
   /* We are doing OAuth on the query line for now -- restore this later
-   * and possibly make it an option. */
+   * and possibly make it an option. 
   if ((OAuthCK != NULL) && (OAuthCS != NULL)) {
     conn->bufPos += 
       apr_snprintf(conn->buf + conn->bufPos, conn->bufLen - conn->bufPos,
