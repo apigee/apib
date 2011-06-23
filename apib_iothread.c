@@ -111,8 +111,8 @@ static void makeConnection(ConnectionInfo* conn, apr_pollfd_t* fd,
   apr_status_t s;
   apr_socket_t* sock;
 
-  apr_pool_create(&(conn->connPool), p);
-  
+  apr_pool_clear(conn->connPool);
+  apr_pool_create(&(conn->transPool), conn->connPool);
   s = apr_socket_create(&sock, APR_INET, SOCK_STREAM, APR_PROTO_TCP, conn->connPool);
   if (s != APR_SUCCESS) {
     goto panic;
@@ -214,19 +214,14 @@ static void cleanupConnection(ConnectionInfo* conn)
     SSL_free(conn->ssl);
   }
   apr_socket_close(conn->sock);
-  if (conn->transPool != NULL) {
-    apr_pool_destroy(conn->transPool);
-    conn->transPool = NULL;
-  }
-  if (conn->connPool != NULL) {
-    apr_pool_destroy(conn->connPool);
-    conn->connPool = NULL;
-  }
 }
 
 static void buildRequest(ConnectionInfo* conn)
 {
   char* path;
+  char* query = NULL;
+
+  apr_pool_clear(conn->transPool);
 
   conn->bufPos = 0;
   conn->bufLen = SEND_BUF_SIZE;
@@ -238,10 +233,21 @@ static void buildRequest(ConnectionInfo* conn)
     path = conn->ioArgs->url->path;
   }
 
-  if (conn->ioArgs->url->query != NULL) {
+  if ((OAuthCK != NULL) && (OAuthCS != NULL)) {
+    query = oauth_MakeQueryString(conn->ioArgs->url, 
+				  conn->ioArgs->httpVerb,
+				  NULL, 0, 
+				  OAuthCK, OAuthCS,
+				  OAuthAT, OAuthAS,
+				  conn->transPool);
+  } else {
+    query = conn->ioArgs->url->query;
+  }
+
+  if (query != NULL) {
     conn->bufPos += apr_snprintf(conn->buf, conn->bufLen - conn->bufPos, 
 				 "%s %s?%s HTTP/1.1\r\n", conn->ioArgs->httpVerb,
-				 path, conn->ioArgs->url->query);
+				 path, query);
   } else {
     conn->bufPos += apr_snprintf(conn->buf, conn->bufLen - conn->bufPos, 
 				 "%s %s HTTP/1.1\r\n", conn->ioArgs->httpVerb, path);
@@ -249,8 +255,14 @@ static void buildRequest(ConnectionInfo* conn)
 
   conn->bufPos += apr_snprintf(conn->buf + conn->bufPos, conn->bufLen - conn->bufPos,
 			       "User-Agent: %s\r\n", USER_AGENT);
-  conn->bufPos += apr_snprintf(conn->buf + conn->bufPos, conn->bufLen - conn->bufPos,
-			       "Host: %s\r\n", conn->ioArgs->url->hostname);
+  if (conn->ioArgs->url->port_str != NULL) {
+    conn->bufPos += apr_snprintf(conn->buf + conn->bufPos, conn->bufLen - conn->bufPos,
+				 "Host: %s:%s\r\n", conn->ioArgs->url->hostname,
+				 conn->ioArgs->url->port_str);
+  } else {
+    conn->bufPos += apr_snprintf(conn->buf + conn->bufPos, conn->bufLen - conn->bufPos,
+				  "Host: %s\r\n", conn->ioArgs->url->hostname);
+  }
 
   if (conn->ioArgs->sendDataSize > 0) {
     char* cType = conn->ioArgs->contentType;
@@ -267,6 +279,20 @@ static void buildRequest(ConnectionInfo* conn)
     conn->bufPos += apr_snprintf(conn->buf + conn->bufPos, conn->bufLen - conn->bufPos,
 				 "Connection: close\r\n");
   }
+  /* We are doing OAuth on the query line for now -- restore this later
+   * and possibly make it an option. */
+  if ((OAuthCK != NULL) && (OAuthCS != NULL)) {
+    conn->bufPos += 
+      apr_snprintf(conn->buf + conn->bufPos, conn->bufLen - conn->bufPos,
+		   "Authorization: %s\r\n",
+		   oauth_MakeAuthorization(conn->ioArgs->url, 
+					   conn->ioArgs->httpVerb,
+					   NULL, 0, 
+					   OAuthCK, OAuthCS,
+					   OAuthAT, OAuthAS,
+					   conn->transPool));
+  }
+  */
   conn->bufPos += apr_snprintf(conn->buf + conn->bufPos, conn->bufLen - conn->bufPos, 
 			       "\r\n");
 
@@ -478,6 +504,9 @@ static void requestComplete(ConnectionInfo* conn)
 {
   RecordResult(conn->ioArgs, conn->httpStatus, 
 	       apr_time_now() - conn->requestStart);
+  if (JustOnce) {
+    conn->ioArgs->keepRunning = FALSE;
+  }
   if ((conn->closeRequested) ||
       !keepAlive(conn) ||
       (conn->contentLength < 0)) {
@@ -668,7 +697,7 @@ static int readRequest(ConnectionInfo* conn)
 
       conn->contentRead += readLen;
       if (conn->ioArgs->verbose) {
-	printf("  %zu bytes of content\n", readLen);
+	linep_WriteRemaining(&(conn->line), stdout);
       }
      
       if (conn->contentLength < 0) {
@@ -847,8 +876,8 @@ void RunIO(IOArgs* args)
 
   for (i = 0; i < args->numConnections; i++) {
     conns[i].ioArgs = args;
-    conns[i].transPool = NULL;
-    conns[i].connPool = NULL;
+    apr_pool_create(&(conns[i].connPool), memPool);
+    apr_pool_create(&(conns[i].transPool), conns[i].connPool);
     conns[i].buf = (char*)apr_palloc(memPool, SEND_BUF_SIZE);
     conns[i].state = STATE_NONE;
     conns[i].wakeups = 0;
@@ -868,7 +897,7 @@ void RunIO(IOArgs* args)
     }
   }
 
-  while (Running) {
+  while (Running || (args->keepRunning)) {
     apr_pollset_poll(pollSet, -1, &pollSize, &pollResult);
 #if DEBUG
     printf("Polled %i result\n", pollSize);

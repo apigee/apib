@@ -15,6 +15,7 @@
 typedef struct {
   const apr_uri_t* url;
   int             numConnections;
+  int             keepRunning;
   int             verbose;
   char*           httpVerb;
   char*           contentType;
@@ -42,9 +43,15 @@ extern apr_pool_t*     MainPool;
 extern volatile int    Running;
 extern int             NumConnections;
 extern int             NumThreads;
+extern int             JustOnce;
 extern int             ShortOutput;
 extern char*           RunName;
 extern int             KeepAlive;
+
+extern char*           OAuthCK;
+extern char*           OAuthCS;
+extern char*           OAuthAT;
+extern char*           OAuthAS;
 
 /* Internal methods */
 

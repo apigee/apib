@@ -23,13 +23,19 @@ int              ShortOutput;
 char*            RunName;
 int              NumConnections;
 int              NumThreads;
+int              JustOnce = 0;
 int              KeepAlive;
 
-#define VALID_OPTS "c:d:f:hk:t:vw:x:K:M:N:ST"
+char*           OAuthCK = NULL;
+char*           OAuthCS = NULL;
+char*           OAuthAT = NULL;
+char*           OAuthAS = NULL;
+
+#define VALID_OPTS "c:d:f:hk:t:vw:x:O:K:M:N:ST1"
 
 #define VALID_OPTS_DESC \
   "[-c connections] [-k keep-alive] [-K threads] [-d seconds] [-w warmup secs]\n" \
-  "[-f file name] [-t content type] [-x verb]\n" \
+  "[-f file name] [-t content type] [-x verb] [-1 just once]\n" \
   "[-N name] [-S] [-M host:port] [-hv] <url>\n" \
   "  -c: Number of connections to open (default 1)\n" \
   "  -k: HTTP keep-alive setting. 0 for none, -1 for forever, otherwise seconds\n" \
@@ -39,6 +45,7 @@ int              KeepAlive;
   "  -f: File to upload\n" \
   "  -t: Content type (default: application/octet-stream)\n" \
   "  -x: HTTP verb (default GET, or POST if -f is set)\n" \
+  "  -O: OAuth 1.0a signature generation: see below\n" \
   "  -N: Name of test run (placed in output)\n" \
   "  -S: Short output (one line, CSV format)\n" \
   "  -T: Print header line of short output format (for CSV parsing)\n" \
@@ -47,7 +54,10 @@ int              KeepAlive;
   "  -h: Print this help message\n" \
   "\n" \
   "  if -S is used then output is CSV-separated on one line:\n" \
-  "  name,throughput,avg. latency,threads,connections,duration,completed,successful,errors,sockets,min. latency,max. latency,50%,90%,98%,99%\n"
+  "  name,throughput,avg. latency,threads,connections,duration,completed,successful,errors,sockets,min. latency,max. latency,50%,90%,98%,99%\n" \
+  "\n" \
+  "  if -O is used then the value is four parameters, separated by a colon:\n" \
+  "  consumer key:secret:token:secret. You may omit the last two.\n"
 
 
 #define DEFAULT_NUM_CONNECTIONS 1
@@ -192,6 +202,16 @@ static void cleanup(IOArgs* args)
   }
 }
 
+static void processOAuth(char* arg) 
+{
+  char* last;
+  
+  OAuthCK = apr_strtok(arg, ":", &last);
+  OAuthCS = apr_strtok(NULL, ":", &last);
+  OAuthAT = apr_strtok(NULL, ":", &last);
+  OAuthAS = apr_strtok(NULL, ":", &last);
+}
+
 int main(int ac, char const* const* av)
 {
   int argc = ac;
@@ -267,6 +287,9 @@ int main(int ac, char const* const* av)
       case 'N':
 	RunName = apr_pstrdup(MainPool, curArg);
 	break;
+      case 'O':
+	processOAuth(apr_pstrdup(MainPool, curArg));
+	break;
       case 'S':
 	ShortOutput = TRUE;
 	break;
@@ -274,6 +297,9 @@ int main(int ac, char const* const* av)
 	PrintReportingHeader(stdout);
 	apr_terminate();
 	return 0;
+	break;
+      case '1':
+	JustOnce = TRUE;
 	break;
       default:
 	assert(1);
@@ -337,6 +363,7 @@ int main(int ac, char const* const* av)
 	  ioArgs[i].httpVerb = verb;
 	}
 
+	ioArgs[i].keepRunning = JustOnce;
 	ioArgs[i].url = &parsedUrl;
 	ioArgs[i].numConnections = numConn;
 	ioArgs[i].contentType = contentType;
@@ -359,13 +386,15 @@ int main(int ac, char const* const* av)
       }
 
       RecordInit(monitorHost);
-      if (warmupTime > 0) {
+      if (!JustOnce && (warmupTime > 0)) {
 	RecordStart(FALSE);
 	waitAndReport(warmupTime, TRUE);
       }
 
       RecordStart(TRUE);
-      waitAndReport(duration, FALSE);
+      if (!JustOnce) {
+	waitAndReport(duration, FALSE);
+      }
       RecordStop();
 
       Running = 0;

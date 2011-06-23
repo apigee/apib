@@ -163,6 +163,11 @@ void linep_GetDataRemaining(const LineState* l, apr_size_t* remaining)
   *remaining = l->bufLen - l->lineEnd;
 }
 
+void linep_WriteRemaining(const LineState* l, FILE* out)
+{
+  fwrite(l->buf + l->lineEnd, l->bufLen - l->lineEnd, 1, out);
+}
+
 void linep_Skip(LineState* l, apr_size_t toSkip)
 {
   l->lineEnd += toSkip;

@@ -5,7 +5,9 @@
 
 #include <apr_file_io.h>
 #include <apr_network_io.h>
+#include <apr_uri.h>
 #include <apr_pools.h>
+#include <apr_random.h>
 
 /*
  * Code for managing CPU information.
@@ -92,6 +94,9 @@ extern void linep_GetReadInfo(const LineState* l, char** buf,
 /* Find out how much data is left unprocessed */
 extern void linep_GetDataRemaining(const LineState* l, apr_size_t* remaining);
 
+/* Write data from the end of the last line to the end of the buffer */
+extern void linep_WriteRemaining(const LineState* l, FILE* out);
+
 /* Skip forward to see if there's another line */
 extern void linep_Skip(LineState* l, apr_size_t toSkip);
 
@@ -99,5 +104,39 @@ extern void linep_Skip(LineState* l, apr_size_t toSkip);
 extern void linep_SetReadLength(LineState* l, apr_size_t len);
 
 extern void linep_Debug(const LineState* l, FILE* out);
+
+/*
+ * Code for handling OAuth
+ */
+
+
+/* Make an "Authorization" header for OAuth 1.0a based on the parameters
+ * in "url". The resulting string will be allocated from "pool".
+ * If "sendData" is not NULL, it will be used in the signature as well --
+ * this should ONLY be set if the content-type is "form-urlencoded."
+ * consumer secret must not be null, but tokenSecret may be null in
+ * order to implement "one-legged OAuth".
+ */
+extern char* oauth_MakeAuthorization(const apr_uri_t* url,
+				     const char* method,
+				     const char* sendData,
+				     unsigned int sendDataSize,
+				     const char* consumerToken,
+				     const char* consumerSecret,
+				     const char* accessToken,
+				     const char* tokenSecret,
+				     apr_pool_t* pool);
+
+/* Same as above, but make an HTTP query string instead. The result
+ * will include the entire original query string. */
+extern char* oauth_MakeQueryString(const apr_uri_t* url,
+				   const char* method,
+				   const char* sendData,
+				   unsigned int sendDataSize,
+				   const char* consumerToken,
+				   const char* consumerSecret,
+				   const char* accessToken,
+				   const char* tokenSecret,
+				   apr_pool_t* pool);
 
 #endif
