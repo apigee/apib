@@ -196,24 +196,8 @@ void RecordStop(void)
 
 void ReportInterval(FILE* out, int totalDuration, int warmup)
 {
-  if (ShortOutput) {
-    return;
-  }
-
-  apr_uint32_t count = intervalSuccessful;
-  apr_time_t now = apr_time_now();
-  apr_time_t e = now - intervalStartTime;
-  int soFar = apr_time_sec(now - startTime);
-  double elapsed = microToSecond(e);
-  char* warm;
   double cpu = 0.0;
   double remoteCpu = 0.0;
-
-  if (warmup) {
-    warm = "Warming up: ";
-  } else {
-    warm = "";
-  }
 
   if (!warmup) {
     if (remoteCpuSocket != NULL) {
@@ -225,6 +209,24 @@ void ReportInterval(FILE* out, int totalDuration, int warmup)
     clientCpuSamples = addSample(cpu, clientCpuSamples,
 				 &clientCpuSampleCount, &clientCpuSampleSize);
   }
+
+  if (ShortOutput) {
+    return;
+  }
+
+  apr_uint32_t count = intervalSuccessful;
+  apr_time_t now = apr_time_now();
+  apr_time_t e = now - intervalStartTime;
+  int soFar = apr_time_sec(now - startTime);
+  double elapsed = microToSecond(e);
+  char* warm;
+
+  if (warmup) {
+    warm = "Warming up: ";
+  } else {
+    warm = "";
+  }
+
 
   intervalSuccessful = 0;
   intervalStartTime = now;
@@ -258,6 +260,9 @@ static unsigned long getAverageLatency(void)
 
 static double getAverageCpu(double* samples, unsigned int count)
 {
+  if (count == 0) {
+	return 0.0;
+  }
   double total = 0.0;
 
   for (unsigned int i = 0; i < count; i++) {
@@ -322,7 +327,7 @@ static void PrintShortResults(FILE* out, double elapsed)
   name,throughput,avg. latency,threads,connections,duration,completed,successful,errors,sockets,min. latency,max. latency,50%,90%,98%,99%
    */
   fprintf(out,
-	  "%s,%.3lf,%.3lf,%u,%u,%.3lf,%u,%u,%u,%u,%.3lf,%.3lf,%.3lf,%.3lf,%.3lf,%.3lf\n",
+	  "%s,%.3lf,%.3lf,%u,%u,%.3lf,%u,%u,%u,%u,%.3lf,%.3lf,%.3lf,%.3lf,%.3lf,%.3lf,%.0lf,%.0lf\n",
 	  RunName, successfulRequests / elapsed, 
 	  microToMilli(getAverageLatency()),
 	  NumThreads, NumConnections, elapsed,
@@ -332,7 +337,9 @@ static void PrintShortResults(FILE* out, double elapsed)
 	  microToMilli(getLatencyPercent(50)),
 	  microToMilli(getLatencyPercent(90)),
 	  microToMilli(getLatencyPercent(98)),
-	  microToMilli(getLatencyPercent(99)));
+	  microToMilli(getLatencyPercent(99)),
+	  getAverageCpu(clientCpuSamples, clientCpuSampleCount) * 100.0,
+	  getAverageCpu(remoteCpuSamples, remoteCpuSampleCount) * 100.0);
 }
 
 void PrintReportingHeader(FILE* out)
@@ -340,7 +347,7 @@ void PrintReportingHeader(FILE* out)
   fprintf(out, "Name,Throughput,Avg. Latency,Threads,Connections,Duration," \
           "Completed,Successful,Errors,Sockets," \
           "Min. latency,Max. latency,50%% Latency,90%% Latency,"\
-          "98%% Latency,99%% Latency\n");
+          "98%% Latency,99%% Latency,Avg Client CPU,Avg Server CPU\n");
 }
 
 void PrintResults(FILE* out)
