@@ -12,6 +12,7 @@
 #include <apr_portable.h>
 #include <apr_signal.h>
 #include <apr_strings.h>
+#include <apr_time.h>
 
 #include <openssl/err.h>
 #include <openssl/ssl.h>
@@ -19,6 +20,8 @@
 #define DEBUG 0
 
 #define SEND_BUF_SIZE     65536
+
+#define POLL_YIELD_TIME     50000 
 
 #define STATE_NONE          0
 #define STATE_CONNECTING    1
@@ -37,6 +40,7 @@
 
 #define STATUS_WANT_READ  1
 #define STATUS_WANT_WRITE 2
+#define STATUS_WANT_YIELD 3
 #define STATUS_CONTINUE   0
 
 typedef struct {
@@ -47,6 +51,7 @@ typedef struct {
   int             isSsl;
   SSL*            ssl;
   int             state;
+  int             yielded;
   int             bufPos;
   int             bufLen;
   int             sendBufPos;
@@ -106,7 +111,8 @@ static int keepAlive(const ConnectionInfo* conn)
 }
 
 static void makeConnection(ConnectionInfo* conn, apr_pollfd_t* fd,
-			   apr_sockaddr_t* addr, apr_pool_t* p)
+			   apr_sockaddr_t* addr, apr_sockaddr_t* myAddr,      
+                           apr_pool_t* p)
 {
   apr_status_t s;
   apr_socket_t* sock;
@@ -114,10 +120,6 @@ static void makeConnection(ConnectionInfo* conn, apr_pollfd_t* fd,
   apr_pool_clear(conn->connPool);
   apr_pool_create(&(conn->transPool), conn->connPool);
   s = apr_socket_create(&sock, APR_INET, SOCK_STREAM, APR_PROTO_TCP, conn->connPool);
-  if (s != APR_SUCCESS) {
-    goto panic;
-  }
-  s = apr_socket_opt_set(sock, APR_SO_NONBLOCK, 1);
   if (s != APR_SUCCESS) {
     goto panic;
   }
@@ -129,6 +131,12 @@ static void makeConnection(ConnectionInfo* conn, apr_pollfd_t* fd,
   if (s != APR_SUCCESS) {
     goto panic;
   }
+
+  s = apr_socket_opt_set(sock, APR_SO_NONBLOCK, 1);
+  if (s != APR_SUCCESS) {
+    goto panic;
+  }
+
 /*
   s = apr_socket_opt_set(sock, APR_TCP_NODELAY, 1);
   if (s != APR_SUCCESS) {
@@ -164,13 +172,16 @@ static int setupConnection(ConnectionInfo* conn, apr_sockaddr_t* addr)
 {
   apr_status_t s;
 
+
   s = apr_socket_connect(conn->sock, addr);
 
   if (s == APR_EINPROGRESS) {
     return STATUS_WANT_WRITE;
   } else if (s != APR_SUCCESS) {
-    conn->panicStatus = s;
-    SETSTATE(conn, STATE_PANIC);
+    /* Probably all the fds are busy */
+    SETSTATE(conn, STATE_FAILED);
+    /*return STATUS_WANT_YIELD; */
+    return STATUS_CONTINUE;
   }
   
   if (conn->isSsl) {
@@ -196,8 +207,8 @@ static int handshakeSsl(ConnectionInfo* conn)
     case SSL_ERROR_WANT_WRITE:
       return STATUS_WANT_WRITE;
     default:
-      conn->panicStatus = ERR_get_error();
-      SETSTATE(conn, STATE_PANIC);
+      RecordSocketError();
+      SETSTATE(conn, STATE_FAILED);
       return STATUS_CONTINUE;
     }
     assert(FALSE);
@@ -543,6 +554,14 @@ static int readRequest(ConnectionInfo* conn)
 	return STATUS_WANT_READ;
       case SSL_ERROR_WANT_WRITE:
 	return STATUS_WANT_WRITE;
+      case SSL_ERROR_ZERO_RETURN:
+        if (conn->closeRequested) {
+          requestComplete(conn);
+        } else {
+          SETSTATE(conn, STATE_FAILED);
+          RecordSocketError();
+        }
+        return STATUS_CONTINUE;
       default:
 #if DEBUG
 	fprintf(stderr, "SSL receive error: %i\n", sslErr);
@@ -729,7 +748,8 @@ static int readRequest(ConnectionInfo* conn)
 }
 
 static int processConnection(ConnectionInfo* conn, apr_pollfd_t* poll, 
-                             apr_sockaddr_t* addr, apr_pool_t* p)
+                             apr_sockaddr_t* addr, apr_sockaddr_t* myAddr,
+                             apr_pool_t* p)
 {
   char errBuf[128];
 
@@ -738,7 +758,7 @@ static int processConnection(ConnectionInfo* conn, apr_pollfd_t* poll,
     printf("Connection error from poll\n");
 #endif
     cleanupConnection(conn);
-    makeConnection(conn, poll, addr, p);
+    makeConnection(conn, poll, addr, myAddr, p);
   }
 
   while (TRUE) {
@@ -756,13 +776,13 @@ static int processConnection(ConnectionInfo* conn, apr_pollfd_t* poll,
       return -1;
       
     case STATE_NONE:
-      makeConnection(conn, poll, addr, p);
+      makeConnection(conn, poll, addr, myAddr, p);
       break; 
 
     case STATE_FAILED: 
     case STATE_CLOSING:
       cleanupConnection(conn);
-      makeConnection(conn, poll, addr, p);
+      makeConnection(conn, poll, addr, myAddr, p);
       break;
       
     case STATE_CONNECTING:
@@ -805,6 +825,9 @@ static int processConnection(ConnectionInfo* conn, apr_pollfd_t* poll,
       return APR_POLLIN;
     case STATUS_WANT_WRITE:
       return APR_POLLOUT;
+    case STATUS_WANT_YIELD:
+      conn->yielded = 1;
+      return 0;
     default:
       /* Continue looping */
       break;
@@ -817,6 +840,7 @@ void RunIO(IOArgs* args)
 {
   apr_pool_t*       memPool;
   apr_sockaddr_t*   addr;
+  apr_sockaddr_t*   myAddr;
   apr_pollset_t*    pollSet;
   apr_status_t      s;
   char              errBuf[128];
@@ -828,6 +852,7 @@ void RunIO(IOArgs* args)
   int               ps;
   int               isSsl;
   int               pollSize;
+  int               pollFlags;
   const apr_pollfd_t*     pollResult;
   
   apr_signal_block(SIGPIPE);
@@ -861,7 +886,18 @@ void RunIO(IOArgs* args)
     goto done;
   }
 
-  s = apr_pollset_create(&pollSet, args->numConnections, memPool, APR_POLLSET_NOCOPY);
+  s = apr_sockaddr_info_get(&myAddr, NULL, APR_INET, 0, 0, memPool);
+  if (s != APR_SUCCESS) {
+    fprintf(stderr, "Error constructing local address!\n");
+    goto done;
+  }
+
+#ifdef APR_POLLSET_NOCOPY
+  pollFlags = APR_POLLSET_NOCOPY;
+#else
+  pollFlags = 0;
+#endif
+  s = apr_pollset_create(&pollSet, args->numConnections, memPool, pollFlags); 
   if (s != APR_SUCCESS) {
     apr_strerror(s, errBuf, 80);
     fprintf(stderr, "Error creating pollset: %s\n", errBuf);
@@ -882,13 +918,14 @@ void RunIO(IOArgs* args)
     conns[i].state = STATE_NONE;
     conns[i].wakeups = 0;
     conns[i].isSsl = isSsl;
+    conns[i].yielded = 0;
 
     polls[i].p = memPool;
     polls[i].desc_type = APR_POLL_SOCKET;
     polls[i].reqevents = polls[i].rtnevents = 0;
     polls[i].client_data = (void*)i;
 
-    ps = processConnection(&(conns[i]), &(polls[i]), addr, memPool);
+    ps = processConnection(&(conns[i]), &(polls[i]), addr, myAddr, memPool);
     if (ps >= 0) {
 	polls[i].reqevents = ps | (APR_POLLHUP | APR_POLLERR);
 	apr_pollset_add(pollSet, &(polls[i]));
@@ -898,15 +935,30 @@ void RunIO(IOArgs* args)
   }
 
   while (Running || (args->keepRunning)) {
-    apr_pollset_poll(pollSet, -1, &pollSize, &pollResult);
+    apr_pollset_poll(pollSet, POLL_YIELD_TIME, &pollSize, &pollResult);
 #if DEBUG
     printf("Polled %i result\n", pollSize);
 #endif
+     /* Yielding support -- didn't help
+    for (i = 0; i < args->numConnections; i++) {
+      if (conns[i].yielded) {
+        conns[i].yielded = 0;
+        ps = processConnection(&(conns[i]), &(polls[i]),
+                               addr, myAddr, memPool);
+        ps |= (APR_POLLHUP | APR_POLLERR);
+        polls[i].reqevents = ps;
+	apr_pollset_add(pollSet, &(polls[i]));
+      }
+    }
+    */
+
+
     for (i = 0; i < pollSize; i++) {
       p = (int)pollResult[i].client_data;
       ps = processConnection(&(conns[p]), &(polls[p]),
-			     addr, memPool);
-      if (ps >= 0) {
+			     addr, myAddr, memPool);
+      if (ps > 0) {
+        /* Want to wait for more I/O */
         ps |= (APR_POLLHUP | APR_POLLERR);
         if (ps != pollResult[i].reqevents) {
           polls[p].rtnevents = 0;
@@ -914,9 +966,10 @@ void RunIO(IOArgs* args)
 	  apr_pollset_remove(pollSet, &(pollResult[i]));
 	  apr_pollset_add(pollSet, &(polls[p]));
         }
-      } else {
+      } else if (ps < 0) {
+        /* Panic */
 	goto done;
-      }
+      } /* Status 0 indicates that we just want to yield */
     }
   }
 

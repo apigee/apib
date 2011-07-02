@@ -399,6 +399,10 @@ int main(int ac, char const* const* av)
 
       Running = 0;
 
+      /* Sometimes threads don't terminate. Sleep for two seconds,
+         then if a thread is stuck it won't affect the results much. */
+      apr_sleep(apr_time_from_sec(2));
+      /* 
       for (int i = 0; i < NumThreads; i++) {
 	apr_status_t err;
 	apr_thread_join(&err, ioThreads[i]);
@@ -406,6 +410,7 @@ int main(int ac, char const* const* av)
 	  SSL_CTX_free(ioArgs[i].sslCtx);
 	}
       }
+      */
     }
 
   } else {
