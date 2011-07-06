@@ -8,6 +8,7 @@
 #include <apr_general.h>
 #include <apr_getopt.h>
 #include <apr_pools.h>
+#include <apr_portable.h>
 #include <apr_strings.h>
 #include <apr_thread_proc.h>
 #include <apr_thread_rwlock.h>
@@ -15,6 +16,10 @@
 
 #include <openssl/ssl.h>
 #include <openssl/crypto.h>
+
+#ifndef OPENSSL_THREADS
+#error This program requires OpenSSL with thread support
+#endif
 
 #include <apib.h>
 
@@ -108,6 +113,7 @@ static int setProcessLimits(int numConnections)
   }
 }
 
+
 static void sslLock(int mode, int n, const char* f, int l)
 {
   if (mode & CRYPTO_LOCK) {
@@ -121,6 +127,11 @@ static void sslLock(int mode, int n, const char* f, int l)
   }
 }
 
+static unsigned long sslThreadId(void)
+{ 
+  return apr_os_thread_current();
+}
+
 static void initSSLLocks(void)
 { 
   sslLocks = (apr_thread_rwlock_t**)apr_palloc(MainPool,
@@ -128,6 +139,7 @@ static void initSSLLocks(void)
   for (int i = 0; i < CRYPTO_num_locks(); i++) {
     apr_thread_rwlock_create(&(sslLocks[i]), MainPool);
   }
+  CRYPTO_set_id_callback(sslThreadId);
   CRYPTO_set_locking_callback(sslLock);
 }
 
@@ -439,8 +451,7 @@ int main(int ac, char const* const* av)
 
       /* Sometimes threads don't terminate. Sleep for two seconds,
          then if a thread is stuck it won't affect the results much. */
-      apr_sleep(apr_time_from_sec(2)); 
-      /*
+      /*apr_sleep(apr_time_from_sec(2));  */
       for (int i = 0; i < NumThreads; i++) {
 	apr_status_t err;
 	apr_thread_join(&err, ioThreads[i]);
@@ -448,7 +459,6 @@ int main(int ac, char const* const* av)
 	  SSL_CTX_free(ioArgs[i].sslCtx);
 	}
       }
-      */
     }
 
   } else {

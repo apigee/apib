@@ -7,7 +7,7 @@ CFLAGS = $(OPT) -std=gnu99 -pedantic -Wall -I. ${INCL} -D_GNU_SOURCE
 LDFLAGS = $(OPT) 
 APR_ONLY_LIBS = -lapr-1
 APR_LIBS = -laprutil-1 $(APR_ONLY_LIBS)
-SSL_LIBS = -lssl
+SSL_LIBS = -lssl 
 
 APIB_OBJS = apib_cpu.o \
 	    apib_iothread.o \

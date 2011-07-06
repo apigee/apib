@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <assert.h>
 
 #include <apr_strings.h>
 #include <apr_random.h>
@@ -229,7 +230,9 @@ static char* generateHmac(const char* base,
   baser = BIO_new(BIO_f_base64());
   BIO_push(baser, mem);
   BIO_write(baser, hmac, hmacLen);
-  BIO_flush(baser);
+  if (BIO_flush(baser) != 1) {
+    assert(FALSE);
+  }
   hmacLen = BIO_ctrl_pending(mem);
   ret = apr_palloc(pool, hmacLen + 1);
   BIO_read(mem, ret, hmacLen);
@@ -299,7 +302,7 @@ static void buildBaseString(Buf* buf,
   }
   addParam(params, "oauth_version", "1.0");
   addParam(params, "oauth_signature_method", "HMAC-SHA1");
-  num = apr_psprintf(pool, "%lli", apr_time_sec(apr_time_now()));
+  num = apr_psprintf(pool, "%li", apr_time_sec(apr_time_now()));
   addParam(params, "oauth_timestamp", num);
   nonce = makeRandom(pool);
   addParam(params, "oauth_nonce", nonce);
