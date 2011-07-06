@@ -57,7 +57,7 @@ extern char*           OAuthAS;
 
 extern void RunIO(IOArgs* args);
 
-extern void RecordInit(const char* monitorHost);
+extern void RecordInit(const char* monitorHost, const char* monitor2Host);
 extern void RecordStart(int startReporting);
 extern void RecordStop(void);
 

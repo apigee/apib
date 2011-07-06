@@ -35,10 +35,13 @@ static unsigned int   latenciesCount = 0;
 
 static CPUSamples clientSamples;
 static CPUSamples remoteSamples;
+static CPUSamples remote2Samples;
 
 static CPUUsage cpuUsage;
 static apr_socket_t* remoteCpuSocket = NULL;
+static apr_socket_t* remote2CpuSocket = NULL;
 static const char* remoteMonitorHost = NULL;
+static const char* remote2MonitorHost = NULL;
 
 static unsigned long long totalBytesSent = 0LL;
 static unsigned long long totalBytesReceived = 0LL;
@@ -75,7 +78,7 @@ static double microToSecond(unsigned long m)
   return (double)(m / 1000000l) + ((m % 1000000l) / 1000000.0);
 }
 
-static void connectMonitor(void)
+static void connectMonitor(const char* hostName, apr_socket_t** sock)
 {
   apr_status_t s;
   apr_sockaddr_t* addr;
@@ -83,7 +86,7 @@ static void connectMonitor(void)
   char* scope;
   apr_port_t port;
 
-  s = apr_parse_addr_port(&host, &scope, &port, remoteMonitorHost, MainPool);
+  s = apr_parse_addr_port(&host, &scope, &port, hostName, MainPool);
   if (s != APR_SUCCESS) {
     return;
   }
@@ -93,32 +96,32 @@ static void connectMonitor(void)
     return;
   }
 
-  s = apr_socket_create(&remoteCpuSocket, APR_INET, 
+  s = apr_socket_create(sock, APR_INET, 
 			SOCK_STREAM, APR_PROTO_TCP, MainPool);
   if (s != APR_SUCCESS) {
     return;
   }
 
-  s = apr_socket_connect(remoteCpuSocket, addr);
+  s = apr_socket_connect(*sock, addr);
   if (s != APR_SUCCESS) {
-    remoteCpuSocket = NULL;
+    *sock = NULL;
   }
 }
 
-static double getRemoteCpu(void)
+static double getRemoteCpu(apr_socket_t** sock)
 {
   char buf[64];
   apr_status_t s;
   apr_size_t len;
 
   len = 4;
-  s = apr_socket_send(remoteCpuSocket, "CPU\n", &len);
+  s = apr_socket_send(*sock, "CPU\n", &len);
   if (s != APR_SUCCESS) {
     goto failure;
   }
 
   len = 64;
-  s = apr_socket_recv(remoteCpuSocket, buf, &len);
+  s = apr_socket_recv(*sock, buf, &len);
   if (s != APR_SUCCESS) {
     goto failure;
   }
@@ -126,8 +129,8 @@ static double getRemoteCpu(void)
   return strtod(buf, NULL);
 
  failure:
-  apr_socket_close(remoteCpuSocket);
-  remoteCpuSocket = NULL;
+  apr_socket_close(*sock);
+  *sock = NULL;
   return 0.0;
 }
 
@@ -163,11 +166,14 @@ void RecordConnectionOpen(void)
   apr_atomic_inc32(&connectionsOpened);
 }
 
-void RecordInit(const char* monitorHost)
+void RecordInit(const char* monitorHost, const char* host2)
 {
   cpu_Init(MainPool);
   if (monitorHost != NULL) {
     remoteMonitorHost = monitorHost;
+  }
+  if (host2 != NULL) {
+    remote2MonitorHost = host2;
   }
 }
 
@@ -185,10 +191,18 @@ void RecordStart(int startReporting)
   cpu_GetUsage(&cpuUsage, MainPool);
   if (remoteMonitorHost != NULL) {
     if (remoteCpuSocket == NULL) {
-      connectMonitor();
+      connectMonitor(remoteMonitorHost, &remoteCpuSocket);
     } else {
       /* Just re-set the CPU time */
-      getRemoteCpu();
+      getRemoteCpu(&remoteCpuSocket);
+    }
+  }
+  if (remote2MonitorHost != NULL) {
+    if (remote2CpuSocket == NULL) {
+      connectMonitor(remote2MonitorHost, &remote2CpuSocket);
+    } else {
+      /* Just re-set the CPU time */
+      getRemoteCpu(&remote2CpuSocket);
     }
   }
   startTime = apr_time_now();
@@ -196,6 +210,7 @@ void RecordStart(int startReporting)
 
   initSamples(&clientSamples);
   initSamples(&remoteSamples);
+  initSamples(&remote2Samples);
 }
 
 void RecordStop(void)
@@ -208,11 +223,16 @@ void ReportInterval(FILE* out, int totalDuration, int warmup)
 {
   double cpu = 0.0;
   double remoteCpu = 0.0;
+  double remote2Cpu = 0.0;
 
   if (!warmup) {
     if (remoteCpuSocket != NULL) {
-      remoteCpu = getRemoteCpu();
+      remoteCpu = getRemoteCpu(&remoteCpuSocket);
       addSample(remoteCpu, &remoteSamples);
+    }
+    if (remote2CpuSocket != NULL) {
+      remote2Cpu = getRemoteCpu(&remote2CpuSocket);
+      addSample(remote2Cpu, &remote2Samples);
     }
     cpu = cpu_GetInterval(&cpuUsage, MainPool);
     addSample(cpu, &clientSamples);
@@ -368,6 +388,12 @@ static void PrintNormalResults(FILE* out, double elapsed)
     fprintf(out, "Remote CPU max:        %.0lf%%\n",
 	    getMaxCpu(&remoteSamples) * 100.0);
   }
+  if (remote2Samples.count > 0) {
+    fprintf(out, "Remote 2 CPU average:    %.0lf%%\n",
+	    getAverageCpu(&remote2Samples) * 100.0);
+    fprintf(out, "Remote 2 CPU max:        %.0lf%%\n",
+	    getMaxCpu(&remote2Samples) * 100.0);
+  }
   fprintf(out, "\n");
   fprintf(out, "Total bytes sent:      %.2lf megabytes\n",
 	  totalBytesSent / 1048576.0);
@@ -385,7 +411,7 @@ static void PrintShortResults(FILE* out, double elapsed)
   name,throughput,avg. latency,threads,connections,duration,completed,successful,errors,sockets,min. latency,max. latency,50%,90%,98%,99%
    */
   fprintf(out,
-	  "%s,%.3lf,%.3lf,%u,%u,%.3lf,%u,%u,%u,%u,%.3lf,%.3lf,%.3lf,%.3lf,%.3lf,%.3lf,%.3lf,%.0lf,%.0lf\n",
+	  "%s,%.3lf,%.3lf,%u,%u,%.3lf,%u,%u,%u,%u,%.3lf,%.3lf,%.3lf,%.3lf,%.3lf,%.3lf,%.3lf,%.0lf,%.0lf,%.0lf\n",
 	  RunName, successfulRequests / elapsed, 
 	  microToMilli(getAverageLatency()),
 	  NumThreads, NumConnections, elapsed,
@@ -398,7 +424,8 @@ static void PrintShortResults(FILE* out, double elapsed)
 	  microToMilli(getLatencyPercent(99)),
           getLatencyStdDev(),
 	  getAverageCpu(&clientSamples) * 100.0,
-	  getAverageCpu(&remoteSamples) * 100.0);
+	  getAverageCpu(&remoteSamples) * 100.0,
+	  getAverageCpu(&remote2Samples) * 100.0);
 }
 
 void PrintReportingHeader(FILE* out)
@@ -406,7 +433,8 @@ void PrintReportingHeader(FILE* out)
   fprintf(out, "Name,Throughput,Avg. Latency,Threads,Connections,Duration," \
           "Completed,Successful,Errors,Sockets," \
           "Min. latency,Max. latency,50%% Latency,90%% Latency,"\
-          "98%% Latency,99%% Latency,Latency Std Dev,Avg Client CPU,Avg Server CPU\n");
+          "98%% Latency,99%% Latency,Latency Std Dev,Avg Client CPU,"\
+          "Avg Server CPU,Avg Server 2 CPU\n");
 }
 
 void PrintResults(FILE* out)
@@ -459,9 +487,13 @@ void EndReporting(void)
   if (remoteCpuSocket != NULL) {
     apr_socket_close(remoteCpuSocket);
   }
+  if (remote2CpuSocket != NULL) {
+    apr_socket_close(remote2CpuSocket);
+  }
   if (latencies != NULL) {
     free(latencies);
     freeSamples(&clientSamples);
     freeSamples(&remoteSamples);
+    freeSamples(&remote2Samples);
   }
 }

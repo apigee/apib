@@ -37,12 +37,12 @@ char*           OAuthAS = NULL;
 apr_thread_rwlock_t** sslLocks = NULL;
 
 
-#define VALID_OPTS "c:d:f:hk:t:vw:x:O:K:M:N:ST1"
+#define VALID_OPTS "c:d:f:hk:t:vw:x:O:K:M:N:X:ST1"
 
 #define VALID_OPTS_DESC \
   "[-c connections] [-k keep-alive] [-K threads] [-d seconds] [-w warmup secs]\n" \
   "[-f file name] [-t content type] [-x verb] [-1 just once]\n" \
-  "[-N name] [-S] [-M host:port] [-hv] <url>\n" \
+  "[-N name] [-S] [-M host:port] [-X host:port] [-hv] <url>\n" \
   "  -c: Number of connections to open (default 1)\n" \
   "  -k: HTTP keep-alive setting. 0 for none, -1 for forever, otherwise seconds\n" \
   "  -K: Number of I/O threads to spawn (default 1)\n" \
@@ -56,6 +56,7 @@ apr_thread_rwlock_t** sslLocks = NULL;
   "  -S: Short output (one line, CSV format)\n" \
   "  -T: Print header line of short output format (for CSV parsing)\n" \
   "  -M: Host and port of host running apibmon for CPU monitoring\n" \
+  "  -X: Host and port of 2nd host for CPU monitoring\n" \
   "  -v: Verbose (print requests and responses)\n" \
   "  -h: Print this help message\n" \
   "\n" \
@@ -262,6 +263,7 @@ int main(int ac, char const* const* av)
   char* contentType = NULL;
   const char* url = NULL;
   char* monitorHost = NULL;
+  char* monitor2Host = NULL;
 
   NumConnections = DEFAULT_NUM_CONNECTIONS;
   NumThreads = DEFAULT_NUM_THREADS;
@@ -313,6 +315,12 @@ int main(int ac, char const* const* av)
 	break;
       case 'M':
 	monitorHost = apr_pstrdup(MainPool, curArg);
+	break;
+      case 'X':
+	monitor2Host = apr_pstrdup(MainPool, curArg);
+	break;
+      case '2':
+	monitor2Host = apr_pstrdup(MainPool, curArg);
 	break;
       case 'N':
 	RunName = apr_pstrdup(MainPool, curArg);
@@ -415,7 +423,7 @@ int main(int ac, char const* const* av)
 			  &(ioArgs[i]), MainPool);
       }
 
-      RecordInit(monitorHost);
+      RecordInit(monitorHost, monitor2Host);
       if (!JustOnce && (warmupTime > 0)) {
 	RecordStart(FALSE);
 	waitAndReport(warmupTime, TRUE);
@@ -431,7 +439,8 @@ int main(int ac, char const* const* av)
 
       /* Sometimes threads don't terminate. Sleep for two seconds,
          then if a thread is stuck it won't affect the results much. */
-      /* apr_sleep(apr_time_from_sec(2)); */
+      apr_sleep(apr_time_from_sec(2)); 
+      /*
       for (int i = 0; i < NumThreads; i++) {
 	apr_status_t err;
 	apr_thread_join(&err, ioThreads[i]);
@@ -439,6 +448,7 @@ int main(int ac, char const* const* av)
 	  SSL_CTX_free(ioArgs[i].sslCtx);
 	}
       }
+      */
     }
 
   } else {
