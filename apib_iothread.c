@@ -21,8 +21,6 @@
 
 #define SEND_BUF_SIZE     65536
 
-#define POLL_YIELD_TIME     50000 
-
 #define STATE_NONE          0
 #define STATE_CONNECTING    1
 #define STATE_SSL_HANDSHAKE 2
@@ -929,13 +927,13 @@ void RunIO(IOArgs* args)
   }
 
   while (Running || (args->keepRunning)) {
-    apr_pollset_poll(pollSet, POLL_YIELD_TIME, &pollSize, &pollResult);
+    apr_pollset_poll(pollSet, -1, &pollSize, &pollResult);
 #if DEBUG
     printf("Polled %i result\n", pollSize);
 #endif
 
     for (i = 0; i < pollSize; i++) {
-      ConnectionInfo* conn = (ConnectionInfo*)polls[i].client_data;
+      ConnectionInfo* conn = (ConnectionInfo*)pollResult[i].client_data;
       ps = processConnection(conn, &(polls[conn->pollIndex]),
 			     addr, myAddr, memPool);
       if (ps > 0) {
