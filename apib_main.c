@@ -4,14 +4,17 @@
 #include <sys/resource.h>
 #include <assert.h>
 
+#include <apr_atomic.h>
 #include <apr_general.h>
 #include <apr_getopt.h>
 #include <apr_pools.h>
 #include <apr_strings.h>
 #include <apr_thread_proc.h>
+#include <apr_thread_rwlock.h>
 #include <apr_time.h>
 
 #include <openssl/ssl.h>
+#include <openssl/crypto.h>
 
 #include <apib.h>
 
@@ -30,6 +33,9 @@ char*           OAuthCK = NULL;
 char*           OAuthCS = NULL;
 char*           OAuthAT = NULL;
 char*           OAuthAS = NULL;
+
+apr_thread_rwlock_t** sslLocks = NULL;
+
 
 #define VALID_OPTS "c:d:f:hk:t:vw:x:O:K:M:N:ST1"
 
@@ -101,6 +107,29 @@ static int setProcessLimits(int numConnections)
   }
 }
 
+static void sslLock(int mode, int n, const char* f, int l)
+{
+  if (mode & CRYPTO_LOCK) {
+    if (mode & CRYPTO_READ) {
+      apr_thread_rwlock_rdlock(sslLocks[n]);
+    } else if (mode & CRYPTO_WRITE) {
+      apr_thread_rwlock_wrlock(sslLocks[n]);
+    }
+  } else {
+    apr_thread_rwlock_unlock(sslLocks[n]);
+  }
+}
+
+static void initSSLLocks(void)
+{ 
+  sslLocks = (apr_thread_rwlock_t**)apr_palloc(MainPool,
+                sizeof(apr_thread_rwlock_t*) * CRYPTO_num_locks());
+  for (int i = 0; i < CRYPTO_num_locks(); i++) {
+    apr_thread_rwlock_create(&(sslLocks[i]), MainPool);
+  }
+  CRYPTO_set_locking_callback(sslLock);
+}
+
 static void sslInfoCallback(const SSL* ssl, int where, int ret)
 {
   const char* op;
@@ -124,6 +153,7 @@ static void createSslContext(IOArgs* args, int isFirst)
   if (isFirst) {
     SSL_load_error_strings();
     SSL_library_init();
+    initSSLLocks();
   }
   args->sslCtx = SSL_CTX_new(SSLv23_client_method());
   SSL_CTX_set_options(args->sslCtx, SSL_OP_ALL);
@@ -401,8 +431,7 @@ int main(int ac, char const* const* av)
 
       /* Sometimes threads don't terminate. Sleep for two seconds,
          then if a thread is stuck it won't affect the results much. */
-      apr_sleep(apr_time_from_sec(2));
-      /* 
+      /* apr_sleep(apr_time_from_sec(2)); */
       for (int i = 0; i < NumThreads; i++) {
 	apr_status_t err;
 	apr_thread_join(&err, ioThreads[i]);
@@ -410,7 +439,6 @@ int main(int ac, char const* const* av)
 	  SSL_CTX_free(ioArgs[i].sslCtx);
 	}
       }
-      */
     }
 
   } else {

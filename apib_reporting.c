@@ -9,7 +9,7 @@
 
 #include <apib.h>
 
-#define NUM_CPU_SAMPLES 32
+#define NUM_CPU_SAMPLES 4
 
 typedef struct
 {
@@ -385,7 +385,7 @@ static void PrintShortResults(FILE* out, double elapsed)
   name,throughput,avg. latency,threads,connections,duration,completed,successful,errors,sockets,min. latency,max. latency,50%,90%,98%,99%
    */
   fprintf(out,
-	  "%s,%.3lf,%.3lf,%u,%u,%.3lf,%u,%u,%u,%u,%.3lf,%.3lf,%.3lf,%.3lf,%.3lf,%.3lf,%.0lf,%.0lf\n",
+	  "%s,%.3lf,%.3lf,%u,%u,%.3lf,%u,%u,%u,%u,%.3lf,%.3lf,%.3lf,%.3lf,%.3lf,%.3lf,%.3lf,%.0lf,%.0lf\n",
 	  RunName, successfulRequests / elapsed, 
 	  microToMilli(getAverageLatency()),
 	  NumThreads, NumConnections, elapsed,
@@ -396,6 +396,7 @@ static void PrintShortResults(FILE* out, double elapsed)
 	  microToMilli(getLatencyPercent(90)),
 	  microToMilli(getLatencyPercent(98)),
 	  microToMilli(getLatencyPercent(99)),
+          getLatencyStdDev(),
 	  getAverageCpu(&clientSamples) * 100.0,
 	  getAverageCpu(&remoteSamples) * 100.0);
 }
@@ -405,7 +406,7 @@ void PrintReportingHeader(FILE* out)
   fprintf(out, "Name,Throughput,Avg. Latency,Threads,Connections,Duration," \
           "Completed,Successful,Errors,Sockets," \
           "Min. latency,Max. latency,50%% Latency,90%% Latency,"\
-          "98%% Latency,99%% Latency,Avg Client CPU,Avg Server CPU\n");
+          "98%% Latency,99%% Latency,Latency Std Dev,Avg Client CPU,Avg Server CPU\n");
 }
 
 void PrintResults(FILE* out)
