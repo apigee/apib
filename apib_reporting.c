@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <math.h>
 
 #include <apr_atomic.h>
 #include <apr_network_io.h>
@@ -9,6 +10,13 @@
 #include <apib.h>
 
 #define NUM_CPU_SAMPLES 32
+
+typedef struct
+{
+  size_t count;
+  size_t size;
+  double* samples;
+} CPUSamples;
 
 static volatile int reporting = 0;
 static volatile apr_uint32_t completedRequests = 0;
@@ -25,32 +33,36 @@ static apr_time_t intervalStartTime;
 static unsigned long* latencies = NULL;
 static unsigned int   latenciesCount = 0;
 
-static double* clientCpuSamples = NULL;
-static unsigned int clientCpuSampleCount = 0;
-static unsigned int clientCpuSampleSize = 0;
-static CPUUsage cpuUsage;
+static CPUSamples clientSamples;
+static CPUSamples remoteSamples;
 
-static double* remoteCpuSamples = NULL;
-static unsigned int remoteCpuSampleCount = 0;
-static unsigned int remoteCpuSampleSize = 0;
+static CPUUsage cpuUsage;
 static apr_socket_t* remoteCpuSocket = NULL;
 static const char* remoteMonitorHost = NULL;
 
 static unsigned long long totalBytesSent = 0LL;
 static unsigned long long totalBytesReceived = 0LL;
 
-static double* addSample(double sample, double* samples,
-			 unsigned int* count, unsigned int* size)
+static void initSamples(CPUSamples* s) 
 {
-  double* ret = samples;
+  s->count = 0;
+  s->size = NUM_CPU_SAMPLES;
+  s->samples = (double*)malloc(sizeof(double) * NUM_CPU_SAMPLES);
+}
 
-  if (*count >= *size) {
-    *size *= 2;
-    ret = (double*)realloc(samples, sizeof(double) * *size);
+static void freeSamples(CPUSamples* s) 
+{
+  free(s->samples);
+}
+
+static void addSample(double sample, CPUSamples* s)
+{
+  if (s->count >= s->size) {
+    s->size *= 2;
+    s->samples = (double*)realloc(s->samples, sizeof(double) * s->size);
   }
-  ret[*count] = sample;
-  (*count)++;
-  return ret;
+  s->samples[s->count] = sample;
+  s->count++;
 }
 
 static double microToMilli(unsigned long m)
@@ -182,10 +194,8 @@ void RecordStart(int startReporting)
   startTime = apr_time_now();
   intervalStartTime = startTime;
 
-  clientCpuSampleSize = NUM_CPU_SAMPLES;
-  clientCpuSamples = (double*)malloc(sizeof(double) * NUM_CPU_SAMPLES);
-  remoteCpuSampleSize = NUM_CPU_SAMPLES;
-  remoteCpuSamples = (double*)malloc(sizeof(double) * NUM_CPU_SAMPLES);
+  initSamples(&clientSamples);
+  initSamples(&remoteSamples);
 }
 
 void RecordStop(void)
@@ -202,12 +212,10 @@ void ReportInterval(FILE* out, int totalDuration, int warmup)
   if (!warmup) {
     if (remoteCpuSocket != NULL) {
       remoteCpu = getRemoteCpu();
-      remoteCpuSamples = addSample(remoteCpu, remoteCpuSamples,
-				   &remoteCpuSampleCount, &remoteCpuSampleSize);
+      addSample(remoteCpu, &remoteSamples);
     }
     cpu = cpu_GetInterval(&cpuUsage, MainPool);
-    clientCpuSamples = addSample(cpu, clientCpuSamples,
-				 &clientCpuSampleCount, &clientCpuSampleSize);
+    addSample(cpu, &clientSamples);
   }
 
   if (ShortOutput) {
@@ -240,6 +248,32 @@ void ReportInterval(FILE* out, int totalDuration, int warmup)
   }
 }
 
+static int compareULongs(const void* a1, const void* a2)
+{
+  const unsigned long* l1 = (const unsigned long*)a1;
+  const unsigned long* l2 = (const unsigned long*)a2;
+
+  if (*l1 < *l2) {
+    return -1;
+  } else if (*l1 > *l2) {
+    return 1;
+  }
+  return 0;
+}
+
+static int compareDoubles(const void* a1, const void* a2)
+{
+  const double* d1 = (const double*)a1;
+  const double* d2 = (const double*)a2;
+
+  if (*d1 < *d2) {
+    return -1;
+  } else if (*d1 > *d2) {
+    return 1;
+  }
+  return 0;
+}
+
 static unsigned long getLatencyPercent(int percent)
 {
   unsigned int index = 
@@ -258,18 +292,40 @@ static unsigned long getAverageLatency(void)
   return totalLatency / (unsigned long long)latenciesCount;
 }
 
-static double getAverageCpu(double* samples, unsigned int count)
+static double getLatencyStdDev(void)
 {
-  if (count == 0) {
-	return 0.0;
+  unsigned long avg = microToMilli(getAverageLatency());
+  double differences = 0.0;
+
+  for (unsigned int i = 0; i < latenciesCount; i++) {
+    differences += pow(microToMilli(latencies[i]) - avg, 2.0);
+  }
+  
+  return sqrt(differences / (double)latenciesCount);
+}
+
+static double getAverageCpu(const CPUSamples* s)
+{
+  if (s->count == 0) {
+    return 0.0;
   }
   double total = 0.0;
 
-  for (unsigned int i = 0; i < count; i++) {
-    total += samples[i];
+  for (size_t i = 0; i < s->count; i++) {
+    total += s->samples[i];
   }
 
-  return total / count;
+  return total / s->count;
+}
+
+static double getMaxCpu(CPUSamples* s)
+{
+  if (s->count == 0) {
+    return 0.0;
+  }
+   
+  qsort(s->samples, s->count, sizeof(double), compareDoubles);
+  return s->samples[s->count - 1];
 }
 
 static void PrintNormalResults(FILE* out, double elapsed)
@@ -289,6 +345,8 @@ static void PrintNormalResults(FILE* out, double elapsed)
 	  microToMilli(latencies[0]));
   fprintf(out, "Maximum latency:      %.3lf milliseconds\n",
 	  microToMilli(latencies[latenciesCount - 1]));
+  fprintf(out, "Latency std. dev:     %.3lf milliseconds\n",
+          getLatencyStdDev());
   fprintf(out, "50%% latency:          %.3lf milliseconds\n",
 	  microToMilli(getLatencyPercent(50)));
   fprintf(out, "90%% latency:          %.3lf milliseconds\n",
@@ -298,17 +356,17 @@ static void PrintNormalResults(FILE* out, double elapsed)
   fprintf(out, "99%% latency:          %.3lf milliseconds\n",
 	  microToMilli(getLatencyPercent(99)));
   fprintf(out, "\n");
-  if (clientCpuSampleCount > 0) {
+  if (clientSamples.count > 0) {
     fprintf(out, "Client CPU average:    %.0lf%%\n",
-	    getAverageCpu(clientCpuSamples, clientCpuSampleCount) * 100.0);
+	    getAverageCpu(&clientSamples) * 100.0);
     fprintf(out, "Client CPU max:        %.0lf%%\n",
-	    clientCpuSamples[clientCpuSampleCount - 1] * 100.0);
+	    getMaxCpu(&clientSamples) * 100.0);
   }
-  if (remoteCpuSampleCount > 0) {
+  if (remoteSamples.count > 0) {
     fprintf(out, "Remote CPU average:    %.0lf%%\n",
-	    getAverageCpu(remoteCpuSamples, remoteCpuSampleCount) * 100.0);
+	    getAverageCpu(&remoteSamples) * 100.0);
     fprintf(out, "Remote CPU max:        %.0lf%%\n",
-	    remoteCpuSamples[remoteCpuSampleCount - 1] * 100.0);
+	    getMaxCpu(&remoteSamples) * 100.0);
   }
   fprintf(out, "\n");
   fprintf(out, "Total bytes sent:      %.2lf megabytes\n",
@@ -338,8 +396,8 @@ static void PrintShortResults(FILE* out, double elapsed)
 	  microToMilli(getLatencyPercent(90)),
 	  microToMilli(getLatencyPercent(98)),
 	  microToMilli(getLatencyPercent(99)),
-	  getAverageCpu(clientCpuSamples, clientCpuSampleCount) * 100.0,
-	  getAverageCpu(remoteCpuSamples, remoteCpuSampleCount) * 100.0);
+	  getAverageCpu(&clientSamples) * 100.0,
+	  getAverageCpu(&remoteSamples) * 100.0);
 }
 
 void PrintReportingHeader(FILE* out)
@@ -362,31 +420,6 @@ void PrintResults(FILE* out)
   }
 }
 
-static int compareULongs(const void* a1, const void* a2)
-{
-  const unsigned long* l1 = (const unsigned long*)a1;
-  const unsigned long* l2 = (const unsigned long*)a2;
-
-  if (*l1 < *l2) {
-    return -1;
-  } else if (*l1 > *l2) {
-    return 1;
-  }
-  return 0;
-}
-
-static int compareDoubles(const void* a1, const void* a2)
-{
-  const double* d1 = (const double*)a1;
-  const double* d2 = (const double*)a2;
-
-  if (*d1 < *d2) {
-    return -1;
-  } else if (*d1 > *d2) {
-    return 1;
-  }
-  return 0;
-}
 
 void ConsolidateLatencies(IOArgs* args, int numThreads)
 {
@@ -418,11 +451,6 @@ void ConsolidateLatencies(IOArgs* args, int numThreads)
 
   qsort(latencies, latenciesCount, sizeof(unsigned long),
 	compareULongs);
-
-  qsort(clientCpuSamples, clientCpuSampleCount, sizeof(double),
-	compareDoubles);
-  qsort(remoteCpuSamples, remoteCpuSampleCount, sizeof(double),
-	compareDoubles);
 }
 
 void EndReporting(void)
@@ -432,9 +460,7 @@ void EndReporting(void)
   }
   if (latencies != NULL) {
     free(latencies);
-    free(clientCpuSamples);
-    if (remoteCpuSamples != NULL) {
-      free(remoteCpuSamples);
-    }
+    freeSamples(&clientSamples);
+    freeSamples(&remoteSamples);
   }
 }

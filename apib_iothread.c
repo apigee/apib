@@ -40,18 +40,17 @@
 
 #define STATUS_WANT_READ  1
 #define STATUS_WANT_WRITE 2
-#define STATUS_WANT_YIELD 3
 #define STATUS_CONTINUE   0
 
 typedef struct {
-  IOArgs*   ioArgs;
+  IOArgs*         ioArgs;
+  int             pollIndex;
   apr_pool_t*     transPool;
   apr_pool_t*     connPool;
   apr_socket_t*   sock;
   int             isSsl;
   SSL*            ssl;
   int             state;
-  int             yielded;
   int             bufPos;
   int             bufLen;
   int             sendBufPos;
@@ -180,7 +179,6 @@ static int setupConnection(ConnectionInfo* conn, apr_sockaddr_t* addr)
   } else if (s != APR_SUCCESS) {
     /* Probably all the fds are busy */
     SETSTATE(conn, STATE_FAILED);
-    /*return STATUS_WANT_YIELD; */
     return STATUS_CONTINUE;
   }
   
@@ -825,9 +823,6 @@ static int processConnection(ConnectionInfo* conn, apr_pollfd_t* poll,
       return APR_POLLIN;
     case STATUS_WANT_WRITE:
       return APR_POLLOUT;
-    case STATUS_WANT_YIELD:
-      conn->yielded = 1;
-      return 0;
     default:
       /* Continue looping */
       break;
@@ -848,7 +843,6 @@ void RunIO(IOArgs* args)
   ConnectionInfo*   conns;
   apr_pollfd_t*     polls;
   int               i;
-  int               p;
   int               ps;
   int               isSsl;
   int               pollSize;
@@ -912,18 +906,18 @@ void RunIO(IOArgs* args)
 
   for (i = 0; i < args->numConnections; i++) {
     conns[i].ioArgs = args;
+    conns[i].pollIndex = i;
     apr_pool_create(&(conns[i].connPool), memPool);
     apr_pool_create(&(conns[i].transPool), conns[i].connPool);
     conns[i].buf = (char*)apr_palloc(memPool, SEND_BUF_SIZE);
     conns[i].state = STATE_NONE;
     conns[i].wakeups = 0;
     conns[i].isSsl = isSsl;
-    conns[i].yielded = 0;
 
     polls[i].p = memPool;
     polls[i].desc_type = APR_POLL_SOCKET;
     polls[i].reqevents = polls[i].rtnevents = 0;
-    polls[i].client_data = (void*)i;
+    polls[i].client_data = &(conns[i]);
 
     ps = processConnection(&(conns[i]), &(polls[i]), addr, myAddr, memPool);
     if (ps >= 0) {
@@ -939,37 +933,24 @@ void RunIO(IOArgs* args)
 #if DEBUG
     printf("Polled %i result\n", pollSize);
 #endif
-     /* Yielding support -- didn't help
-    for (i = 0; i < args->numConnections; i++) {
-      if (conns[i].yielded) {
-        conns[i].yielded = 0;
-        ps = processConnection(&(conns[i]), &(polls[i]),
-                               addr, myAddr, memPool);
-        ps |= (APR_POLLHUP | APR_POLLERR);
-        polls[i].reqevents = ps;
-	apr_pollset_add(pollSet, &(polls[i]));
-      }
-    }
-    */
-
 
     for (i = 0; i < pollSize; i++) {
-      p = (int)pollResult[i].client_data;
-      ps = processConnection(&(conns[p]), &(polls[p]),
+      ConnectionInfo* conn = (ConnectionInfo*)polls[i].client_data;
+      ps = processConnection(conn, &(polls[conn->pollIndex]),
 			     addr, myAddr, memPool);
       if (ps > 0) {
         /* Want to wait for more I/O */
         ps |= (APR_POLLHUP | APR_POLLERR);
         if (ps != pollResult[i].reqevents) {
-          polls[p].rtnevents = 0;
-          polls[p].reqevents = ps;
+          polls[conn->pollIndex].rtnevents = 0;
+          polls[conn->pollIndex].reqevents = ps;
 	  apr_pollset_remove(pollSet, &(pollResult[i]));
-	  apr_pollset_add(pollSet, &(polls[p]));
+	  apr_pollset_add(pollSet, &(polls[conn->pollIndex]));
         }
       } else if (ps < 0) {
         /* Panic */
 	goto done;
-      } /* Status 0 indicates that we just want to yield */
+      } /* Status 0 indicates that we just want to yield -- not used yet */
     }
   }
 

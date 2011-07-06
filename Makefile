@@ -24,7 +24,7 @@ all: apib apibmon
 test: oauthtest
 
 apib: $(APIB_OBJS)
-	$(CC) -o $@ $(LDFLAGS) $(APIB_OBJS) $(APR_LIBS) $(SSL_LIBS)
+	$(CC) -o $@ $(LDFLAGS) $(APIB_OBJS) $(APR_LIBS) $(SSL_LIBS) -lm
 
 apibmon: $(APIB_MON_OBJS)
 	$(CC) -o $@ $(LDFLAGS) $(APIB_MON_OBJS) $(APR_ONLY_LIBS)
