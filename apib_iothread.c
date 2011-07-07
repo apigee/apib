@@ -21,6 +21,8 @@
 
 #define SEND_BUF_SIZE     65536
 
+#define MAX_POLL_TIME     apr_time_from_sec(2)
+
 #define STATE_NONE          0
 #define STATE_CONNECTING    1
 #define STATE_SSL_HANDSHAKE 2
@@ -134,12 +136,10 @@ static void makeConnection(ConnectionInfo* conn, apr_pollfd_t* fd,
     goto panic;
   }
 
-/*
   s = apr_socket_opt_set(sock, APR_TCP_NODELAY, 1);
   if (s != APR_SUCCESS) {
     goto panic;
   }
-*/
 
   if (conn->isSsl) {
     int fd;
@@ -372,7 +372,7 @@ static int writeRequestSsl(ConnectionInfo* conn)
       (conn->sendBufPos >= conn->ioArgs->sendDataSize)) {
     /* Did all the writing -- ready to receive */
     SETSTATE(conn, STATE_RECV_READY);
-    return STATUS_WANT_READ;
+    return STATUS_WANT_READ; 
   }
   return STATUS_WANT_WRITE;
 }
@@ -542,6 +542,9 @@ static int readRequest(ConnectionInfo* conn)
 	   SSL_get_shutdown(conn->ssl));
 #endif
     sslStatus = SSL_read(conn->ssl, readBuf, readLen);
+#if DEBUG
+    printf("SSL_read = %i\n", sslStatus);
+#endif
     conn->ioArgs->readCount++;
     if (sslStatus <= 0) {
       sslErr = SSL_get_error(conn->ssl, sslStatus);
@@ -568,12 +571,9 @@ static int readRequest(ConnectionInfo* conn)
 	RecordSocketError();
 	return STATUS_CONTINUE;
       }
-      assert(TRUE);
+      assert(FALSE);
     }
 
-#if DEBUG
-    printf("Read %i pending %i\n", sslStatus, SSL_pending(conn->ssl));
-#endif
     readLen = sslStatus;
 
   } else {
@@ -927,7 +927,9 @@ void RunIO(IOArgs* args)
   }
 
   while (Running || (args->keepRunning)) {
-    apr_pollset_poll(pollSet, -1, &pollSize, &pollResult);
+    /* Set a maximum poll time -- some times a connection times out and
+       the benchmark suite never completes. */
+    apr_pollset_poll(pollSet, MAX_POLL_TIME, &pollSize, &pollResult);
 #if DEBUG
     printf("Polled %i result\n", pollSize);
 #endif
