@@ -310,6 +310,12 @@ static int compareDoubles(const void* a1, const void* a2)
 
 static unsigned long getLatencyPercent(int percent)
 {
+  if (latenciesCount == 0) {
+    return 0;
+  }
+  if (percent == 100) {
+    return latencies[latenciesCount - 1];
+  }
   unsigned int index = 
     (latenciesCount / 100) * percent;
   return latencies[index];
@@ -317,6 +323,9 @@ static unsigned long getLatencyPercent(int percent)
 
 static unsigned long getAverageLatency(void)
 {
+  if (latenciesCount == 0) {
+    return 0;
+  }
   unsigned long long totalLatency = 0LL;
 
   for (unsigned int i = 0; i < latenciesCount; i++) {
@@ -328,6 +337,9 @@ static unsigned long getAverageLatency(void)
 
 static double getLatencyStdDev(void)
 {
+  if (latenciesCount == 0) {
+    return 0.0;
+  }
   unsigned long avg = microToMilli(getAverageLatency());
   double differences = 0.0;
 
@@ -376,9 +388,9 @@ static void PrintNormalResults(FILE* out, double elapsed)
   fprintf(out, "Average latency:      %.3lf milliseconds\n",
 	  microToMilli(getAverageLatency()));
   fprintf(out, "Minimum latency:      %.3lf milliseconds\n",
-	  microToMilli(latencies[0]));
+	  microToMilli(getLatencyPercent(0)));
   fprintf(out, "Maximum latency:      %.3lf milliseconds\n",
-	  microToMilli(latencies[latenciesCount - 1]));
+	  microToMilli(getLatencyPercent(100)));
   fprintf(out, "Latency std. dev:     %.3lf milliseconds\n",
           getLatencyStdDev());
   fprintf(out, "50%% latency:          %.3lf milliseconds\n",
@@ -437,7 +449,8 @@ static void PrintShortResults(FILE* out, double elapsed)
 	  NumThreads, NumConnections, elapsed,
 	  completedRequests, successfulRequests,
 	  unsuccessfulRequests, connectionsOpened,
-	  microToMilli(latencies[0]), microToMilli(latencies[latenciesCount - 1]),
+	  microToMilli(getLatencyPercent(0)), 
+          microToMilli(getLatencyPercent(100)),
 	  microToMilli(getLatencyPercent(50)),
 	  microToMilli(getLatencyPercent(90)),
 	  microToMilli(getLatencyPercent(98)),
