@@ -1,0 +1,66 @@
+#!/usr/bin/python
+
+import csv
+import sys
+
+if len(sys.argv) < 3:
+  print 'Usage: pivot <in file> <out file>'
+  sys.exit(2)
+
+Name='Name'
+Connections='Connections'
+AvgLatency='Avg. Latency'
+LatencyStdDev='Latency Std Dev'
+Throughput='Throughput'
+ServerCPU='Avg Server CPU'
+
+if sys.argv[1] == '-':
+  inf=sys.stdin
+else:
+  inf=open(sys.argv[1], 'r')
+reader = csv.DictReader(inf)
+
+if sys.argv[2] == '-':
+  out=sys.stdout
+else:
+  out = open(sys.argv[2], 'w')
+
+scenarios = dict()
+sizes = dict()
+
+for row in reader:
+  if not row[Name] in scenarios:
+    scenarios[row[Name]] = dict()
+  newRow = ( row[Throughput], row[AvgLatency], row[LatencyStdDev], row[ServerCPU] )
+  sizes[int(row[Connections])] = None
+  scenarios[row[Name]][int(row[Connections])] = newRow
+
+ssizes = sizes.keys()
+ssizes.sort()
+sscenes = scenarios.keys()
+sscenes.sort()
+
+def writeStat(p):
+  for s in sscenes:
+    out.write(',%s' % s)
+  out.write('\n')
+  for size in ssizes:
+    out.write('%i' % size)
+    for s in sscenes:
+      if size in scenarios[s]:
+        out.write(',%s' % scenarios[s][size][p])
+      else:
+        out.write(',')
+    out.write('\n')
+
+out.write('Throughput\n')
+writeStat(0)
+out.write('Average Latency\n')
+writeStat(1)
+out.write('Latency Std Dev\n')
+writeStat(2)
+out.write('Server CPU Usage\n')
+writeStat(3)
+
+out.close()
+inf.close()

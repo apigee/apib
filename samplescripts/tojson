@@ -1,0 +1,57 @@
+#!/usr/bin/python
+
+import csv
+import sys
+
+if len(sys.argv) < 2:
+  print "Usage: tojson <input file>"
+  sys.exit(2)
+
+# This little tool reads the first line of the CSV and uses it to index
+# the values. If the names change, we have to change the constants below...
+
+Name='Name'
+AvgTpt='Throughput'
+AvgLat='Avg. Latency'
+Conns='Connections'
+CPU='Avg Server CPU'
+
+def printSeries(typ, s, col):
+  print  '"%s": [' % typ
+  first=True
+  for v in s:
+    if first:
+      first = False
+    else:
+      print ','
+    print '[%s,%s]' % (v[Conns], v[col])
+  print ']'
+
+series=dict()
+
+reader = csv.DictReader(open(sys.argv[1], 'r'))
+for row in reader:
+  if not row[Name] in series:
+    series[row[Name]] = []
+  series[row[Name]].append(row)
+
+print '['
+
+firstSeries=True
+
+for s in series.values():
+  if firstSeries:
+    firstSeries = False
+  else:
+    print ','
+
+  print '{ "name": "%s",' % s[0][Name]
+  printSeries('throughput', s, AvgTpt)
+  print ','
+  printSeries('latency', s, AvgLat)
+  if CPU in row:
+    print ','
+    printSeries('cpu', s, CPU)
+  print '}'
+
+print ']'
