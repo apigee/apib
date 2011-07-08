@@ -11,6 +11,9 @@
 
 #define NUM_CPU_SAMPLES 4
 
+#define CPU_CMD "cpu\n"
+#define MEM_CMD "mem\n"
+
 typedef struct
 {
   size_t count;
@@ -36,6 +39,10 @@ static unsigned int   latenciesCount = 0;
 static CPUSamples clientSamples;
 static CPUSamples remoteSamples;
 static CPUSamples remote2Samples;
+
+static double clientMem = 0.0;
+static double remoteMem = 0.0;
+static double remote2Mem = 0.0;
 
 static CPUUsage cpuUsage;
 static apr_socket_t* remoteCpuSocket = NULL;
@@ -108,14 +115,14 @@ static void connectMonitor(const char* hostName, apr_socket_t** sock)
   }
 }
 
-static double getRemoteCpu(apr_socket_t** sock)
+static double getRemoteStat(const char* cmd, apr_socket_t** sock)
 {
   char buf[64];
   apr_status_t s;
   apr_size_t len;
 
-  len = 4;
-  s = apr_socket_send(*sock, "CPU\n", &len);
+  len = strlen(cmd);
+  s = apr_socket_send(*sock, cmd, &len);
   if (s != APR_SUCCESS) {
     goto failure;
   }
@@ -194,7 +201,7 @@ void RecordStart(int startReporting)
       connectMonitor(remoteMonitorHost, &remoteCpuSocket);
     } else {
       /* Just re-set the CPU time */
-      getRemoteCpu(&remoteCpuSocket);
+      getRemoteStat(CPU_CMD, &remoteCpuSocket);
     }
   }
   if (remote2MonitorHost != NULL) {
@@ -202,7 +209,7 @@ void RecordStart(int startReporting)
       connectMonitor(remote2MonitorHost, &remote2CpuSocket);
     } else {
       /* Just re-set the CPU time */
-      getRemoteCpu(&remote2CpuSocket);
+      getRemoteStat(CPU_CMD, &remote2CpuSocket);
     }
   }
   startTime = apr_time_now();
@@ -215,6 +222,13 @@ void RecordStart(int startReporting)
 
 void RecordStop(void)
 {
+  clientMem = cpu_GetMemoryUsage(MainPool);
+  if (remoteCpuSocket != NULL) {
+    remoteMem = getRemoteStat(MEM_CMD, &remoteCpuSocket);
+  }
+  if (remote2CpuSocket != NULL) {
+    remote2Mem = getRemoteStat(MEM_CMD, &remote2CpuSocket);
+  }
   reporting = 0;
   stopTime = apr_time_now();
 }
@@ -227,11 +241,11 @@ void ReportInterval(FILE* out, int totalDuration, int warmup)
 
   if (!warmup) {
     if (remoteCpuSocket != NULL) {
-      remoteCpu = getRemoteCpu(&remoteCpuSocket);
+      remoteCpu = getRemoteStat(CPU_CMD, &remoteCpuSocket);
       addSample(remoteCpu, &remoteSamples);
     }
     if (remote2CpuSocket != NULL) {
-      remote2Cpu = getRemoteCpu(&remote2CpuSocket);
+      remote2Cpu = getRemoteStat(CPU_CMD, &remote2CpuSocket);
       addSample(remote2Cpu, &remote2Samples);
     }
     cpu = cpu_GetInterval(&cpuUsage, MainPool);
@@ -382,17 +396,23 @@ static void PrintNormalResults(FILE* out, double elapsed)
     fprintf(out, "Client CPU max:        %.0lf%%\n",
 	    getMaxCpu(&clientSamples) * 100.0);
   }
+  fprintf(out, "Client memory usage:    %.0lf%%\n",
+          clientMem * 100.0);
   if (remoteSamples.count > 0) {
     fprintf(out, "Remote CPU average:    %.0lf%%\n",
 	    getAverageCpu(&remoteSamples) * 100.0);
     fprintf(out, "Remote CPU max:        %.0lf%%\n",
 	    getMaxCpu(&remoteSamples) * 100.0);
+    fprintf(out, "Remote memory usage:   %.0lf%%\n",
+            remoteMem * 100.0);
   }
   if (remote2Samples.count > 0) {
     fprintf(out, "Remote 2 CPU average:    %.0lf%%\n",
 	    getAverageCpu(&remote2Samples) * 100.0);
     fprintf(out, "Remote 2 CPU max:        %.0lf%%\n",
 	    getMaxCpu(&remote2Samples) * 100.0);
+    fprintf(out, "Remote 2 memory usage:   %.0lf%%\n",
+            remote2Mem * 100.0);
   }
   fprintf(out, "\n");
   fprintf(out, "Total bytes sent:      %.2lf megabytes\n",
@@ -411,7 +431,7 @@ static void PrintShortResults(FILE* out, double elapsed)
   name,throughput,avg. latency,threads,connections,duration,completed,successful,errors,sockets,min. latency,max. latency,50%,90%,98%,99%
    */
   fprintf(out,
-	  "%s,%.3lf,%.3lf,%u,%u,%.3lf,%u,%u,%u,%u,%.3lf,%.3lf,%.3lf,%.3lf,%.3lf,%.3lf,%.3lf,%.0lf,%.0lf,%.0lf\n",
+	  "%s,%.3lf,%.3lf,%u,%u,%.3lf,%u,%u,%u,%u,%.3lf,%.3lf,%.3lf,%.3lf,%.3lf,%.3lf,%.3lf,%.0lf,%.0lf,%.0lf,%.0lf,%.0lf,%.0lf\n",
 	  RunName, successfulRequests / elapsed, 
 	  microToMilli(getAverageLatency()),
 	  NumThreads, NumConnections, elapsed,
@@ -425,7 +445,10 @@ static void PrintShortResults(FILE* out, double elapsed)
           getLatencyStdDev(),
 	  getAverageCpu(&clientSamples) * 100.0,
 	  getAverageCpu(&remoteSamples) * 100.0,
-	  getAverageCpu(&remote2Samples) * 100.0);
+	  getAverageCpu(&remote2Samples) * 100.0,
+          clientMem * 100.0,
+          remoteMem * 100.0,
+          remote2Mem * 100.0);
 }
 
 void PrintReportingHeader(FILE* out)
@@ -434,7 +457,8 @@ void PrintReportingHeader(FILE* out)
           "Completed,Successful,Errors,Sockets," \
           "Min. latency,Max. latency,50%% Latency,90%% Latency,"\
           "98%% Latency,99%% Latency,Latency Std Dev,Avg Client CPU,"\
-          "Avg Server CPU,Avg Server 2 CPU\n");
+          "Avg Server CPU,Avg Server 2 CPU,"\
+          "Client Mem Usage,Server Mem,Server 2 Mem\n");
 }
 
 void PrintResults(FILE* out)

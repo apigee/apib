@@ -39,6 +39,9 @@ extern void cpu_GetUsage(CPUUsage* usage, apr_pool_t* pool);
    "usage". */
 extern double cpu_GetInterval(CPUUsage* usage, apr_pool_t* pool);
 
+/* Return the percent of free RAM */
+extern double cpu_GetMemoryUsage(apr_pool_t* pool);
+
 /*
  * Code for managing line-oriented input, that must be broken into lines,
  * then tokenized, and which might come a little bit at a time.

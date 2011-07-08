@@ -95,6 +95,52 @@ static int getTicks(CPUUsage* cpu, apr_pool_t* pool)
   return 0;
 }
 
+double cpu_GetMemoryUsage(apr_pool_t* pool)
+{
+  apr_status_t s;
+  apr_file_t* proc;
+  char buf[PROC_BUF_LEN];
+  LineState line;
+  
+  s = apr_file_open(&proc, "/proc/meminfo", APR_READ, APR_OS_DEFAULT, pool);
+  if (s != APR_SUCCESS) {
+    return 0.0;
+  }
+
+  linep_Start(&line, buf, PROC_BUF_LEN, 0);
+  s = linep_ReadFile(&line, proc);
+  apr_file_close(proc);
+  if (s != APR_SUCCESS) {
+    return 0.0;
+  }
+
+  long totalMem = 0;
+  long freeMem = 0;
+  long buffers = 0;
+  long cache = 0;
+
+  while (linep_NextLine(&line)) {
+    char* n = linep_NextToken(&line, " ");
+    char* v = linep_NextToken(&line, " ");
+    
+    if (!strcmp(n, "MemTotal:")) {
+      totalMem = atol(v);
+    } else if (!strcmp(n, "MemFree:")) {
+      freeMem = atol(v);
+    } else if (!strcmp(n, "Buffers:")) {
+      buffers = atol(v);
+    } else if (!strcmp(n, "Cached:")) {
+      cache = atol(v);
+    }
+  }
+
+  if ((totalMem <= 0) || (freeMem <= 0)) {
+    return 0.0;
+  }
+
+  return (double)(totalMem - (freeMem + buffers + cache)) / (double)totalMem;
+}
+
 void cpu_Init(apr_pool_t* pool)
 {
   char* countStr;

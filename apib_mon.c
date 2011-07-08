@@ -47,6 +47,12 @@ static int processCommand(ThreadArgs* args, const char* cmd,
     apr_snprintf(buf, 128, "%.2lf\n", usage);
     sendBack(args->sock, buf);
 
+  } else if (!strcasecmp(cmd, "MEM")) {
+   
+    double usage = cpu_GetMemoryUsage(args->pool);
+    apr_snprintf(buf, 128, "%.2lf\n", usage);
+    sendBack(args->sock, buf);
+
   } else if (!strcasecmp(cmd, "BYE") || !strcasecmp(cmd, "QUIT")) {
     sendBack(args->sock, "BYE\n");
     return 1;
