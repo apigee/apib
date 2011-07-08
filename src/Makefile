@@ -20,20 +20,20 @@ APIB_MON_OBJS = apib_mon.o apib_lines.o apib_cpu.o
 
 OAUTH_TEST_OBJS = apib_oauth.o apib_oauthtest.o
 
-all: apib apibmon 
+all: ../apib ../apibmon 
 test: oauthtest
 
-apib: $(APIB_OBJS)
+../apib: $(APIB_OBJS)
 	$(CC) -o $@ $(LDFLAGS) $(APIB_OBJS) $(APR_LIBS) $(SSL_LIBS) -lm
 
-apibmon: $(APIB_MON_OBJS)
+../apibmon: $(APIB_MON_OBJS)
 	$(CC) -o $@ $(LDFLAGS) $(APIB_MON_OBJS) $(APR_ONLY_LIBS)
 
 oauthtest: $(OAUTH_TEST_OBJS)
 	$(CC) -o $@ $(LDFLAGS) $(OAUTH_TEST_OBJS) $(APR_LIBS) $(SSL_LIBS)
 
 clean:
-	rm -f *.o apib
+	rm -f *.o apib apibmon
 
 $(APIB_OBJS) $(APIB_MON_OBJS): apib.h apib_common.h
 
