@@ -244,12 +244,12 @@ static char* generateHmac(const char* base,
 
 static char* makeRandom(apr_pool_t* pool)
 {
-  long long p1;
-  long long p2;
+  unsigned long p1;
+  unsigned long p2;
 
-  apr_generate_random_bytes((unsigned char*)&p1, sizeof(long long));
-  apr_generate_random_bytes((unsigned char*)&p2, sizeof(long long));
-  return apr_psprintf(pool, "%llx%llx", p1, p2);
+  apr_generate_random_bytes((unsigned char*)&p1, sizeof(long));
+  apr_generate_random_bytes((unsigned char*)&p2, sizeof(long));
+  return apr_psprintf(pool, "%lx%lx", p1, p2);
 }
 
 static void buildBaseString(Buf* buf,
