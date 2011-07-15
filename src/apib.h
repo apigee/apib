@@ -22,6 +22,8 @@ typedef struct {
   char*           sendData;
   unsigned int    sendDataSize;
   SSL_CTX*        sslCtx;
+  char**          headers;
+  unsigned int    numHeaders;
   unsigned long*  latencies;
   unsigned int    latenciesSize;
   unsigned int    latenciesCount;

@@ -3,6 +3,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <ctype.h>
+#include <stdarg.h>
 
 #include <apib.h>
 
@@ -223,6 +224,18 @@ static void cleanupConnection(ConnectionInfo* conn)
   apr_socket_close(conn->sock);
 }
 
+static void appendRequestLine(ConnectionInfo* conn, 
+                              const char* fmt, ...)
+{
+  va_list args;
+
+  va_start(args, fmt);
+  conn->bufPos +=
+    apr_vsnprintf(conn->buf + conn->bufPos, conn->bufLen - conn->bufPos,
+                  fmt, args);
+  va_end(args);
+}
+
 static void buildRequest(ConnectionInfo* conn)
 {
   char* path;
@@ -252,45 +265,37 @@ static void buildRequest(ConnectionInfo* conn)
   }
 
   if (query != NULL) {
-    conn->bufPos += apr_snprintf(conn->buf, conn->bufLen - conn->bufPos, 
-				 "%s %s?%s HTTP/1.1\r\n", conn->ioArgs->httpVerb,
-				 path, query);
+    appendRequestLine(conn, "%s %s?%s HTTP/1.1\r\n", 
+                      conn->ioArgs->httpVerb, path, query);
   } else {
-    conn->bufPos += apr_snprintf(conn->buf, conn->bufLen - conn->bufPos, 
-				 "%s %s HTTP/1.1\r\n", conn->ioArgs->httpVerb, path);
+    appendRequestLine(conn, "%s %s HTTP/1.1\r\n", 
+                      conn->ioArgs->httpVerb, path);
   }
 
-  conn->bufPos += apr_snprintf(conn->buf + conn->bufPos, conn->bufLen - conn->bufPos,
-			       "User-Agent: %s\r\n", USER_AGENT);
+  appendRequestLine(conn, "User-Agent: %s\r\n", USER_AGENT);
   if (conn->ioArgs->url->port_str != NULL) {
-    conn->bufPos += apr_snprintf(conn->buf + conn->bufPos, conn->bufLen - conn->bufPos,
-				 "Host: %s:%s\r\n", conn->ioArgs->url->hostname,
-				 conn->ioArgs->url->port_str);
+    appendRequestLine(conn, "Host: %s:%s\r\n", conn->ioArgs->url->hostname,
+  	            conn->ioArgs->url->port_str);
   } else {
-    conn->bufPos += apr_snprintf(conn->buf + conn->bufPos, conn->bufLen - conn->bufPos,
-				  "Host: %s\r\n", conn->ioArgs->url->hostname);
+    appendRequestLine(conn, "Host: %s\r\n", conn->ioArgs->url->hostname);
   }
 
   if (conn->ioArgs->sendDataSize > 0) {
     char* cType = conn->ioArgs->contentType;
-
-    conn->bufPos += apr_snprintf(conn->buf + conn->bufPos, conn->bufLen - conn->bufPos, 
-				 "Content-Length: %i\r\n", conn->ioArgs->sendDataSize);
+    appendRequestLine(conn, "Content-Length: %i\r\n", 
+                      conn->ioArgs->sendDataSize);
     if (cType == NULL) {
       cType = DEFAULT_CONTENT_TYPE;
     }
-    conn->bufPos += apr_snprintf(conn->buf + conn->bufPos, conn->bufLen - conn->bufPos, 
-				 "Content-Type: %s\r\n", cType);
+    appendRequestLine(conn, "Content-Type: %s\r\n", cType);
   }
   if (!keepAlive(conn)) {
-    conn->bufPos += apr_snprintf(conn->buf + conn->bufPos, conn->bufLen - conn->bufPos,
-				 "Connection: close\r\n");
+     appendRequestLine(conn, "Connection: close\r\n");
   }
   /* We are doing OAuth on the query line for now -- restore this later
    * and possibly make it an option. 
   if ((OAuthCK != NULL) && (OAuthCS != NULL)) {
-    conn->bufPos += 
-      apr_snprintf(conn->buf + conn->bufPos, conn->bufLen - conn->bufPos,
+    appendRequestLine(conn, 
 		   "Authorization: %s\r\n",
 		   oauth_MakeAuthorization(conn->ioArgs->url, 
 					   conn->ioArgs->httpVerb,
@@ -300,8 +305,12 @@ static void buildRequest(ConnectionInfo* conn)
 					   conn->transPool));
   }
   */
-  conn->bufPos += apr_snprintf(conn->buf + conn->bufPos, conn->bufLen - conn->bufPos, 
-			       "\r\n");
+
+  for (unsigned int i; i < conn->ioArgs->numHeaders; i++) {
+    appendRequestLine(conn, "%s\r\n", conn->ioArgs->headers[i]);
+  }
+
+  appendRequestLine(conn, "\r\n");
 
   assert(conn->bufPos <= conn->bufLen);
 

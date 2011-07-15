@@ -5,6 +5,7 @@
 #include <assert.h>
 
 #include <apr_atomic.h>
+#include <apr_base64.h>
 #include <apr_general.h>
 #include <apr_getopt.h>
 #include <apr_pools.h>
@@ -34,6 +35,10 @@ int              NumThreads;
 int              JustOnce = 0;
 int              KeepAlive;
 
+char**          Headers = NULL;
+unsigned int    HeadersSize = 0;
+unsigned int    NumHeaders = 0;
+
 char*           OAuthCK = NULL;
 char*           OAuthCS = NULL;
 char*           OAuthAT = NULL;
@@ -42,11 +47,12 @@ char*           OAuthAS = NULL;
 apr_thread_rwlock_t** sslLocks = NULL;
 
 
-#define VALID_OPTS "c:d:f:hk:t:vw:x:O:K:M:N:X:ST1"
+#define VALID_OPTS "c:d:f:hk:t:u:vw:x:H:O:K:M:N:X:ST1"
 
 #define VALID_OPTS_DESC \
   "[-c connections] [-k keep-alive] [-K threads] [-d seconds] [-w warmup secs]\n" \
   "[-f file name] [-t content type] [-x verb] [-1 just once]\n" \
+  "[-H HTTP Header line] [-u username:password] \n" \
   "[-N name] [-S] [-M host:port] [-X host:port] [-hv] <url>\n" \
   "  -c: Number of connections to open (default 1)\n" \
   "  -k: HTTP keep-alive setting. 0 for none, -1 for forever, otherwise seconds\n" \
@@ -255,6 +261,33 @@ static void processOAuth(char* arg)
   OAuthAS = apr_strtok(NULL, ":", &last);
 }
 
+static void addHeader(char* val)
+{
+  if (Headers == NULL) {
+    Headers = (char**)apr_palloc(MainPool, sizeof(char*));
+    HeadersSize = 1;
+  } else if (NumHeaders == HeadersSize) {
+    HeadersSize *= 2;
+    char** nh = (char**)apr_palloc(MainPool, sizeof(char*) * HeadersSize);
+    memcpy(nh, Headers, sizeof(char*) * NumHeaders);
+    Headers = nh;
+  }
+  Headers[NumHeaders] = val;
+  NumHeaders++;
+}
+
+static void processBasic(const char* arg)
+{
+  int inLen = strlen(arg);
+  int outLen = apr_base64_encode_len(inLen);
+  char* out = apr_palloc(MainPool, outLen);
+  char* hdr;
+
+  apr_base64_encode(out, arg, inLen);
+  hdr = apr_psprintf(MainPool, "Authorization: Basic %s", out);
+  addHeader(hdr);
+}
+
 int main(int ac, char const* const* av)
 {
   int argc = ac;
@@ -313,6 +346,9 @@ int main(int ac, char const* const* av)
       case 't':
 	contentType = apr_pstrdup(MainPool, curArg);
 	break;
+      case 'u':
+        processBasic(curArg);
+        break;
       case 'v':
 	verbose = 1;
 	break;
@@ -322,6 +358,9 @@ int main(int ac, char const* const* av)
       case 'x':
 	verb = apr_pstrdup(MainPool, curArg);
 	break;
+      case 'H':
+        addHeader(apr_pstrdup(MainPool, curArg));
+        break;
       case 'K':
 	NumThreads = atoi(curArg);
 	break;
@@ -417,6 +456,8 @@ int main(int ac, char const* const* av)
 	ioArgs[i].url = &parsedUrl;
 	ioArgs[i].numConnections = numConn;
 	ioArgs[i].contentType = contentType;
+        ioArgs[i].headers = Headers;
+        ioArgs[i].numHeaders = NumHeaders;
 	ioArgs[i].verbose = verbose;
 	ioArgs[i].latenciesCount = 0;
 	ioArgs[i].latenciesSize = DEFAULT_LATENCIES_SIZE;
