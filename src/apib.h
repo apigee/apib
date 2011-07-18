@@ -13,6 +13,7 @@
 /* Structures */
 
 typedef struct {
+  apr_pool_t*     pool;
   const apr_uri_t* url;
   int             numConnections;
   int             keepRunning;
@@ -23,6 +24,8 @@ typedef struct {
   unsigned int    sendDataSize;
   SSL_CTX*        sslCtx;
   char**          headers;
+  pq_Queue*       delayQueue;
+  unsigned int    thinkTime;
   unsigned int    numHeaders;
   unsigned long*  latencies;
   unsigned int    latenciesSize;

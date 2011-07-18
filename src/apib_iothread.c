@@ -41,6 +41,7 @@
 
 #define STATUS_WANT_READ  1
 #define STATUS_WANT_WRITE 2
+#define STATUS_WANT_YIELD 3
 #define STATUS_CONTINUE   0
 
 typedef struct {
@@ -52,6 +53,7 @@ typedef struct {
   int             isSsl;
   SSL*            ssl;
   int             state;
+  int             delayMillis;
   int             bufPos;
   int             bufLen;
   int             sendBufPos;
@@ -108,6 +110,15 @@ static char* trimString(char* s)
 static int keepAlive(const ConnectionInfo* conn)
 {
   return (KeepAlive != KEEP_ALIVE_NEVER);
+}
+
+static int recycle(ConnectionInfo* conn)
+{
+  if (conn->ioArgs->thinkTime > 0) {
+    conn->delayMillis = conn->ioArgs->thinkTime;
+    return STATUS_WANT_YIELD;
+  } 
+  return STATUS_CONTINUE;
 }
 
 static void makeConnection(ConnectionInfo* conn, apr_pollfd_t* fd,
@@ -317,7 +328,6 @@ static void buildRequest(ConnectionInfo* conn)
   conn->bufLen = conn->bufPos;
   conn->bufPos = 0;
   SETSTATE(conn, STATE_SENDING);
-  conn->requestStart = apr_time_now();
 
   if (conn->ioArgs->verbose) {
     printf("%s", conn->buf);
@@ -516,10 +526,11 @@ static void processHeader(ConnectionInfo* conn)
   }
 }
 
-static void requestComplete(ConnectionInfo* conn)
+static int requestComplete(ConnectionInfo* conn)
 {
   RecordResult(conn->ioArgs, conn->httpStatus, 
 	       apr_time_now() - conn->requestStart);
+  conn->requestStart = 0LL;
   if (JustOnce) {
     conn->ioArgs->keepRunning = FALSE;
   }
@@ -527,9 +538,11 @@ static void requestComplete(ConnectionInfo* conn)
       !keepAlive(conn) ||
       (conn->contentLength < 0)) {
     SETSTATE(conn, STATE_CLOSING);
-  } else {
-    SETSTATE(conn, STATE_SEND_READY);
-  }
+    return STATUS_CONTINUE;
+  } 
+
+  SETSTATE(conn, STATE_SEND_READY);
+  return recycle(conn);
 }
 
 static int readRequest(ConnectionInfo* conn)
@@ -564,7 +577,7 @@ static int readRequest(ConnectionInfo* conn)
 	return STATUS_WANT_WRITE;
       case SSL_ERROR_ZERO_RETURN:
         if (conn->closeRequested) {
-          requestComplete(conn);
+          return requestComplete(conn);
         } else {
           SETSTATE(conn, STATE_FAILED);
           RecordSocketError();
@@ -594,8 +607,7 @@ static int readRequest(ConnectionInfo* conn)
       return STATUS_WANT_READ;
     }
     if (APR_STATUS_IS_EOF(s) && conn->closeRequested) {
-      requestComplete(conn);
-      return STATUS_CONTINUE;
+      return requestComplete(conn);
     }
 
     if (s != APR_SUCCESS) {
@@ -688,8 +700,7 @@ static int readRequest(ConnectionInfo* conn)
 #endif
 	if (!strcmp(line, "")) {
 	  /* Done reading -- back to sending */
-	  requestComplete(conn);
-	  return STATUS_CONTINUE;
+	  return requestComplete(conn);
 	}
       }
 #if DEBUG
@@ -739,8 +750,7 @@ static int readRequest(ConnectionInfo* conn)
 	  SETSTATE(conn, STATE_RECV_BODY_CHNK);
 	} else {
 	  /* Done reading -- can go back to sending! */
-	  requestComplete(conn);
-	  return STATUS_CONTINUE;
+	  return requestComplete(conn);
 	}
       } else {
         /* Need to read more from the body, so reset the line buffer */
@@ -750,6 +760,11 @@ static int readRequest(ConnectionInfo* conn)
       }
     }
   }
+}
+
+static void startTiming(ConnectionInfo* conn)
+{
+  conn->requestStart = apr_time_now();
 }
 
 static int processConnection(ConnectionInfo* conn, apr_pollfd_t* poll, 
@@ -781,13 +796,15 @@ static int processConnection(ConnectionInfo* conn, apr_pollfd_t* poll,
       return -1;
       
     case STATE_NONE:
+      startTiming(conn);
       makeConnection(conn, poll, addr, myAddr, p);
       break; 
 
     case STATE_FAILED: 
     case STATE_CLOSING:
       cleanupConnection(conn);
-      makeConnection(conn, poll, addr, myAddr, p);
+      SETSTATE(conn, STATE_NONE);
+      s = recycle(conn);
       break;
       
     case STATE_CONNECTING:
@@ -799,6 +816,9 @@ static int processConnection(ConnectionInfo* conn, apr_pollfd_t* poll,
       break;
 
     case STATE_SEND_READY:
+      if (conn->requestStart == 0LL) {
+        startTiming(conn);
+      }
       buildRequest(conn);
       break;
 
@@ -830,6 +850,8 @@ static int processConnection(ConnectionInfo* conn, apr_pollfd_t* poll,
       return APR_POLLIN;
     case STATUS_WANT_WRITE:
       return APR_POLLOUT;
+    case STATUS_WANT_YIELD:
+      return 0;
     default:
       /* Continue looping */
       break;
@@ -858,7 +880,7 @@ void RunIO(IOArgs* args)
   
   apr_signal_block(SIGPIPE);
 
-  apr_pool_create(&memPool, MainPool);
+  memPool = args->pool;
 
   args->readCount = args->writeCount = 0;
 
@@ -920,6 +942,7 @@ void RunIO(IOArgs* args)
     conns[i].state = STATE_NONE;
     conns[i].wakeups = 0;
     conns[i].isSsl = isSsl;
+    conns[i].delayMillis = 0;
 
     polls[i].p = memPool;
     polls[i].desc_type = APR_POLL_SOCKET;
@@ -935,14 +958,31 @@ void RunIO(IOArgs* args)
     }
   }
 
+  /* This is the main loop... */
   while (Running || (args->keepRunning)) {
     /* Set a maximum poll time -- some times a connection times out and
        the benchmark suite never completes. */
-    apr_pollset_poll(pollSet, MAX_POLL_TIME, &pollSize, &pollResult);
+    apr_interval_time_t waitTime = MAX_POLL_TIME;
+    apr_time_t now;
+    long long firstItem;
+
+    /* Determine how long to wait, based on any requested delays */
+    firstItem = pq_PeekPriority(args->delayQueue);
+    if (firstItem > 0LL) {
+      apr_interval_time_t newWait = firstItem - apr_time_now();
+      if (newWait <= 0) {
+        waitTime = 0;
+      } else if (newWait < waitTime) {
+        waitTime = newWait;
+      }
+    }
+
+    apr_pollset_poll(pollSet, waitTime, &pollSize, &pollResult);
 #if DEBUG
     printf("Polled %i result\n", pollSize);
 #endif
 
+    /* Process any pending I/O */
     for (i = 0; i < pollSize; i++) {
       ConnectionInfo* conn = (ConnectionInfo*)pollResult[i].client_data;
       ps = processConnection(conn, &(polls[conn->pollIndex]),
@@ -959,7 +999,37 @@ void RunIO(IOArgs* args)
       } else if (ps < 0) {
         /* Panic */
 	goto done;
-      } /* Status 0 indicates that we just want to yield -- not used yet */
+      } else {
+        /* Wants to yield */
+        apr_pollset_remove(pollSet, &(pollResult[i]));
+        pq_Push(args->delayQueue, conn, 
+                apr_time_now() + (conn->delayMillis * 1000LL));
+      }
+    }
+  
+    /* Process any delays in the queue */
+    now = apr_time_now();
+    firstItem = pq_PeekPriority(args->delayQueue);
+ 
+    while ((firstItem > 0LL) && (firstItem <= now)) {
+      ConnectionInfo* conn = (ConnectionInfo*)pq_Pop(args->delayQueue);
+      ps = processConnection(conn, &(polls[conn->pollIndex]),
+                              addr, myAddr, memPool);
+      if (ps > 0) {
+        /* Want to wait for more I/O */
+        ps |= (APR_POLLHUP | APR_POLLERR);
+        polls[conn->pollIndex].rtnevents = 0;
+        polls[conn->pollIndex].reqevents = ps;
+        apr_pollset_add(pollSet, &(polls[conn->pollIndex]));
+      } else if (ps < 0) {
+        /* Panic */
+	goto done;
+      } else {
+        pq_Push(args->delayQueue, conn, 
+                now + (conn->delayMillis * 1000LL));
+      }
+        
+      firstItem = pq_PeekPriority(args->delayQueue);
     }
   }
 

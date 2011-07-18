@@ -14,7 +14,8 @@ APIB_OBJS = apib_cpu.o \
 	    apib_lines.o \
 	    apib_main.o \
             apib_oauth.o \
-	    apib_reporting.o
+	    apib_reporting.o \
+            apib_priorityq.o
 
 APIB_MON_OBJS = apib_mon.o apib_lines.o apib_cpu.o
 

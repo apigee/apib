@@ -47,11 +47,11 @@ char*           OAuthAS = NULL;
 apr_thread_rwlock_t** sslLocks = NULL;
 
 
-#define VALID_OPTS "c:d:f:hk:t:u:vw:x:H:O:K:M:N:X:ST1"
+#define VALID_OPTS "c:d:f:hk:t:u:vw:x:H:O:K:M:N:X:ST1W:"
 
 #define VALID_OPTS_DESC \
   "[-c connections] [-k keep-alive] [-K threads] [-d seconds] [-w warmup secs]\n" \
-  "[-f file name] [-t content type] [-x verb] [-1 just once]\n" \
+  "[-W think time (ms)] [-f file name] [-t content type] [-x verb] [-1 just once]\n" \
   "[-H HTTP Header line] [-u username:password] \n" \
   "[-N name] [-S] [-M host:port] [-X host:port] [-hv] <url>\n" \
   "  -c: Number of connections to open (default 1)\n" \
@@ -309,6 +309,7 @@ int main(int ac, char const* const* av)
   const char* url = NULL;
   char* monitorHost = NULL;
   char* monitor2Host = NULL;
+  unsigned int thinkTime = 0;
 
   NumConnections = DEFAULT_NUM_CONNECTIONS;
   NumThreads = DEFAULT_NUM_THREADS;
@@ -387,6 +388,9 @@ int main(int ac, char const* const* av)
 	apr_terminate();
 	return 0;
 	break;
+      case 'W':
+        thinkTime = atoi(curArg);
+        break;
       case '1':
 	JustOnce = TRUE;
 	break;
@@ -452,13 +456,16 @@ int main(int ac, char const* const* av)
 	  ioArgs[i].httpVerb = verb;
 	}
 
+        apr_pool_create(&(ioArgs[i].pool), MainPool);
 	ioArgs[i].keepRunning = JustOnce;
 	ioArgs[i].url = &parsedUrl;
 	ioArgs[i].numConnections = numConn;
 	ioArgs[i].contentType = contentType;
         ioArgs[i].headers = Headers;
         ioArgs[i].numHeaders = NumHeaders;
+        ioArgs[i].delayQueue = pq_Create(ioArgs[i].pool);
 	ioArgs[i].verbose = verbose;
+        ioArgs[i].thinkTime = thinkTime;
 	ioArgs[i].latenciesCount = 0;
 	ioArgs[i].latenciesSize = DEFAULT_LATENCIES_SIZE;
 	ioArgs[i].latencies = 

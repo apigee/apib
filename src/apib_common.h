@@ -142,4 +142,29 @@ extern char* oauth_MakeQueryString(const apr_uri_t* url,
 				   const char* tokenSecret,
 				   apr_pool_t* pool);
 
+
+/* 
+ * Code for priority queues
+ */
+
+typedef struct 
+{
+  long long weight;
+  void* item;
+} pq_Item;
+
+typedef struct 
+{
+  apr_pool_t* pool;
+  int size;
+  int allocated;
+  pq_Item* items;
+} pq_Queue;
+
+extern pq_Queue* pq_Create(apr_pool_t* pool);
+extern void pq_Push(pq_Queue* q, void* item, long long priority);
+extern void* pq_Pop(pq_Queue* q);
+extern const void* pq_Peek(const pq_Queue* q);
+extern long long pq_PeekPriority(const pq_Queue* q);
+
 #endif
