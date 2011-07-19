@@ -1,7 +1,7 @@
 #                                               -*- Autoconf -*-
 # Process this file with autoconf to produce a configure script.
 
-AC_PREREQ([2.65])
+AC_PREREQ([2.60])
 AC_INIT(apib, [0.1], [greg@brail.org])
 AC_CONFIG_SRCDIR([src/apib_oauth.c])
 AC_CONFIG_HEADERS([src/config.h])
@@ -10,7 +10,7 @@ AC_CONFIG_HEADERS([src/config.h])
 AC_PROG_CC
 AC_PROG_CC_C_O
 AC_PROG_CC_C99
-#AC_USE_SYSTEM_EXTENSIONS
+AC_USE_SYSTEM_EXTENSIONS
 
 [if [ $GCC ]; then]
 AC_SUBST(CC, ["$CC -pedantic -Wall"])
@@ -25,8 +25,8 @@ AC_SEARCH_LIBS([sqrt], m)
 # Checks for header files.
 AC_CHECK_HEADERS([stdlib.h string.h sys/time.h unistd.h])
 
-AC_CHECK_HEADER([/usr/include/apr-1/apr.h], [APR_LOC="/usr/include/apr-1"])
-AC_CHECK_HEADER([/usr/include/apr-1.0/apr.h],[APR_LOC="/usr/include/apr-1.0"])
+AC_CHECK_HEADER([/usr/include/apr-1/apr_general.h], [APR_LOC="/usr/include/apr-1"])
+AC_CHECK_HEADER([/usr/include/apr-1.0/apr_general.h],[APR_LOC="/usr/include/apr-1.0"])
 AC_SUBST(APR_LOC, [$APR_LOC])
 
 # Checks for typedefs, structures, and compiler characteristics.
