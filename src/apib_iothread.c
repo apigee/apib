@@ -317,7 +317,7 @@ static void buildRequest(ConnectionInfo* conn)
   }
   */
 
-  for (unsigned int i; i < conn->ioArgs->numHeaders; i++) {
+  for (unsigned int i = 0; i < conn->ioArgs->numHeaders; i++) {
     appendRequestLine(conn, "%s\r\n", conn->ioArgs->headers[i]);
   }
 
