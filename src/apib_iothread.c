@@ -228,9 +228,10 @@ static int handshakeSsl(ConnectionInfo* conn)
 
 static void cleanupConnection(ConnectionInfo* conn)
 {
-  if (conn->isSsl) {
+  if ((conn->isSsl) && (conn->ssl != NULL)) {
     SSL_shutdown(conn->ssl);
     SSL_free(conn->ssl);
+    conn->ssl = NULL;
   }
   apr_socket_close(conn->sock);
 }
