@@ -50,7 +50,7 @@ char*           OAuthAT = NULL;
 char*           OAuthAS = NULL;
 
 #if HAVE_PTHREAD_RWLOCK_INIT
-pthread_rwlock_t** sslLocks = NULL;
+pthread_rwlock_t* sslLocks = NULL;
 #else
 apr_thread_rwlock_t** sslLocks = NULL;
 #endif
@@ -136,12 +136,12 @@ static void sslLock(int mode, int n, const char* f, int l)
 {
   if (mode & CRYPTO_LOCK) {
     if (mode & CRYPTO_READ) {
-      pthread_rwlock_rdlock(sslLocks[n]);
+      pthread_rwlock_rdlock(&(sslLocks[n]));
     } else if (mode & CRYPTO_WRITE) {
-      pthread_rwlock_wrlock(sslLocks[n]);
+      pthread_rwlock_wrlock(&(sslLocks[n]));
     }
   } else {
-    pthread_rwlock_unlock(sslLocks[n]);
+    pthread_rwlock_unlock(&(sslLocks[n]));
   }
 }
 
@@ -156,10 +156,10 @@ static unsigned long sslThreadId(void)
 
 static void initSSLLocks(void)
 { 
-  sslLocks = (pthread_rwlock_t**)apr_palloc(MainPool,
-                sizeof(pthread_rwlock_t*) * CRYPTO_num_locks());
+  sslLocks = (pthread_rwlock_t*)apr_palloc(MainPool,
+                sizeof(pthread_rwlock_t) * CRYPTO_num_locks());
   for (int i = 0; i < CRYPTO_num_locks(); i++) {
-    pthread_rwlock_init(sslLocks[i], NULL);
+    pthread_rwlock_init(&(sslLocks[i]), NULL);
   }
   CRYPTO_set_id_callback(sslThreadId);
   CRYPTO_set_locking_callback(sslLock);
