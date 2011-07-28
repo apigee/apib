@@ -4,6 +4,7 @@
 #include <string.h>
 #include <assert.h>
 
+#include <apr_base64.h>
 #include <apr_lib.h>
 #include <apr_strings.h>
 #include <apr_random.h>
@@ -213,8 +214,6 @@ static char* generateHmac(const char* base,
   Buf keyBuf;
   unsigned char* hmac = apr_palloc(pool, EVP_MAX_MD_SIZE);
   unsigned int hmacLen;
-  BIO* mem;
-  BIO* baser;
   char* ret;
   
   allocBuf(&keyBuf, 64, pool);
@@ -227,18 +226,8 @@ static char* generateHmac(const char* base,
   HMAC(EVP_sha1(), keyBuf.buf, keyBuf.len, (const unsigned char*)base, 
        strlen(base), hmac, &hmacLen);
 
-  mem = BIO_new(BIO_s_mem());
-  baser = BIO_new(BIO_f_base64());
-  BIO_push(baser, mem);
-  BIO_write(baser, hmac, hmacLen);
-  if (BIO_flush(baser) != 1) {
-    assert(FALSE);
-  }
-  hmacLen = BIO_ctrl_pending(mem);
-  ret = apr_palloc(pool, hmacLen + 1);
-  BIO_read(mem, ret, hmacLen);
-  BIO_free_all(baser);
-  ret[hmacLen] = 0;
+  ret = apr_palloc(pool, apr_base64_encode_len(hmacLen));
+  apr_base64_encode_binary(ret, hmac, hmacLen);
 
   return ret;
 }
