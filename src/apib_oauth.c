@@ -4,6 +4,7 @@
 #include <string.h>
 #include <assert.h>
 
+#include <apr_lib.h>
 #include <apr_strings.h>
 #include <apr_random.h>
 #include <apr_time.h>
@@ -89,7 +90,7 @@ static void appendEncoded(Buf* b, const char* str)
   char buf[8];
 
   while (str[p] != 0) {
-    if (isalnum(str[p]) ||
+    if (apr_isalnum(str[p]) ||
 	(str[p] == '-') || (str[p] == '.') ||
 	(str[p] == '_') || (str[p] == '~')) {
       appendChar(b, str[p]);

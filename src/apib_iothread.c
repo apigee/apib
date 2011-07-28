@@ -7,6 +7,7 @@
 
 #include <apib.h>
 
+#include <apr_lib.h>
 #include <apr_network_io.h>
 #include <apr_poll.h>
 #include <apr_pools.h>
@@ -94,12 +95,12 @@ static char* trimString(char* s)
   char* ret = s;
   unsigned int len;
 
-  while (isspace(*ret)) {
+  while (apr_isspace(*ret)) {
     ret++;
   }
 
   len = strlen(s);
-  while (isspace(ret[len - 1])) {
+  while (apr_isspace(ret[len - 1])) {
     ret[len - 1] = 0;
     len--;
   }

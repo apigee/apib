@@ -560,12 +560,12 @@ int main(int ac, char const* const* av)
          then if a thread is stuck it won't affect the results much. */
       /*apr_sleep(apr_time_from_sec(2));  */
       for (int i = 0; i < NumThreads; i++) {
-	apr_status_t err;
 #if HAVE_PTHREAD_CREATE
         void* result;
         pthread_join(ioThreads[i], &result);
         pthread_detach(ioThreads[i]);
 #else
+        apr_status_t err;
 	apr_thread_join(&err, ioThreads[i]);
 #endif
 	if (ioArgs[i].sslCtx != NULL) {
