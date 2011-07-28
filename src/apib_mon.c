@@ -1,6 +1,8 @@
 /*
  * This is a program that returns CPU information over the network.
  */
+ 
+#include <config.h>
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -15,6 +17,10 @@
 #include <apr_thread_proc.h>
 
 #include <apib_common.h>
+
+#if HAVE_PTHREAD_H
+#include <pthread.h>
+#endif
 
 #define LISTEN_BACKLOG 8
 #define READ_BUF_LEN 128
@@ -62,7 +68,11 @@ static int processCommand(ThreadArgs* args, const char* cmd,
   return 0;
 }
 
+#if HAVE_PTHREAD_CREATE
+static void* SocketThread(void* a)
+#else
 static void* SocketThread(apr_thread_t* t, void* a)
+#endif
 {
   ThreadArgs* args = (ThreadArgs*)a;
   char* readBuf = apr_palloc(args->pool, READ_BUF_LEN);
@@ -145,7 +155,11 @@ int main(int ac, char const* const* av)
 
   while (TRUE) {
     apr_pool_t* socketPool;
+#if HAVE_PTHREAD_CREATE
+    pthread_t socketThread;
+#else
     apr_thread_t* socketThread;
+#endif
     apr_socket_t* clientSock;
     ThreadArgs* args;
 
@@ -162,7 +176,15 @@ int main(int ac, char const* const* av)
     args->sock = clientSock;
     args->pool = socketPool;
 
+#if HAVE_PTHREAD_CREATE
+    if (pthread_create(&socketThread, NULL, SocketThread, args) == 0) {
+      s = APR_SUCCESS;
+    } else {
+      s = -1;
+    }
+#else
     s = apr_thread_create(&socketThread, NULL, SocketThread, args, socketPool);
+#endif
     if (s != APR_SUCCESS) { 
       apr_socket_close(clientSock);
       apr_pool_destroy(socketPool);
@@ -171,7 +193,11 @@ int main(int ac, char const* const* av)
       continue;
     }
 
+#if HAVE_PTHREAD_CREATE
+    pthread_detach(socketThread);
+#else
     apr_thread_detach(socketThread);
+#endif
   }
 
   apr_socket_close(serverSock);

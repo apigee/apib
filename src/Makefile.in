@@ -24,7 +24,7 @@ test: oauthtest
 	$(CC) -o $@ $(LDFLAGS) $(APIB_OBJS) $(APR_LIBS)
 
 ../apibmon: $(APIB_MON_OBJS)
-	$(CC) -o $@ $(LDFLAGS) $(APIB_MON_OBJS) $(APR_ONLY_LIBS)
+	$(CC) -o $@ $(LDFLAGS) $(APIB_MON_OBJS) $(APR_LIBS)
 
 oauthtest: $(OAUTH_TEST_OBJS)
 	$(CC) -o $@ $(LDFLAGS) $(OAUTH_TEST_OBJS) $(APR_LIBS)
@@ -32,5 +32,5 @@ oauthtest: $(OAUTH_TEST_OBJS)
 clean:
 	rm -f *.o apib apibmon
 
-$(APIB_OBJS) $(APIB_MON_OBJS): apib.h apib_common.h
+$(APIB_OBJS) $(APIB_MON_OBJS): apib.h apib_common.h config.h
 

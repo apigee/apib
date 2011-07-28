@@ -20,10 +20,12 @@ AC_SUBST(CC, ["$CC -pedantic -Wall"])
 AC_CHECK_LIB([aprutil-1], [apr_uri_parse])
 AC_CHECK_LIB([apr-1], [apr_initialize])
 AC_CHECK_LIB([ssl], [SSL_read])
+AC_SEARCH_LIBS([pthread_create], pthread)
+AC_SEARCH_LIBS([CRYPTO_num_locks], crypto)
 AC_SEARCH_LIBS([sqrt], m)
 
 # Checks for header files.
-AC_CHECK_HEADERS([stdlib.h string.h sys/time.h unistd.h])
+AC_CHECK_HEADERS([stdlib.h string.h sys/time.h unistd.h pthread.h])
 
 AC_CHECK_HEADER([/usr/include/apr-1/apr_general.h], [APR_LOC="/usr/include/apr-1"])
 AC_CHECK_HEADER([/usr/include/apr-1.0/apr_general.h],[APR_LOC="/usr/include/apr-1.0"])
@@ -36,7 +38,8 @@ AC_TYPE_SIZE_T
 AC_FUNC_MALLOC
 AC_FUNC_REALLOC
 AC_FUNC_STRTOD
-AC_CHECK_FUNCS([memmove pow sqrt strcasecmp strtol])
+AC_CHECK_FUNCS([memmove pow sqrt strcasecmp strtol \
+               pthread_create pthread_rwlock_init])
 
 AC_CONFIG_FILES([Makefile
                  src/Makefile])

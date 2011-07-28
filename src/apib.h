@@ -1,6 +1,8 @@
 #ifndef APIB_H
 #define APIB_H
 
+#include <config.h>
+
 #include <stdio.h>
 
 #include <apr_pools.h>

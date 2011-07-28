@@ -20,6 +20,8 @@ static void setLL(LineState* line, long long* val)
   char* tok = linep_NextToken(line, " \t");
   if (tok != NULL) {
     *val = atoll(tok);
+  } else {
+    *val = 0LL;
   }
 }
 

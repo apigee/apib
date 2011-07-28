@@ -1,3 +1,4 @@
+#include <config.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/time.h>
@@ -17,6 +18,10 @@
 
 #include <openssl/ssl.h>
 #include <openssl/crypto.h>
+
+#if HAVE_PTHREAD_H
+#include <pthread.h>
+#endif
 
 #ifndef OPENSSL_THREADS
 #error This program requires OpenSSL with thread support
@@ -44,8 +49,11 @@ char*           OAuthCS = NULL;
 char*           OAuthAT = NULL;
 char*           OAuthAS = NULL;
 
+#if HAVE_PTHREAD_RWLOCK_INIT
+pthread_rwlock_t** sslLocks = NULL;
+#else
 apr_thread_rwlock_t** sslLocks = NULL;
-
+#endif
 
 #define VALID_OPTS "c:d:f:hk:t:u:vw:x:H:O:K:M:N:X:ST1W:"
 
@@ -85,7 +93,11 @@ apr_thread_rwlock_t** sslLocks = NULL;
 #define DEFAULT_WARMUP 0
 #define REPORT_SLEEP_TIME 5
 
+#if HAVE_PTHREAD_CREATE
+static void* IOThreadFunc(void* arg)
+#else
 static void* IOThreadFunc(apr_thread_t* t, void* arg)
+#endif
 {
   IOArgs* args = (IOArgs*)arg;
 
@@ -119,7 +131,41 @@ static int setProcessLimits(int numConnections)
   }
 }
 
+#if HAVE_PTHREAD_RWLOCK_INIT
+static void sslLock(int mode, int n, const char* f, int l)
+{
+  if (mode & CRYPTO_LOCK) {
+    if (mode & CRYPTO_READ) {
+      pthread_rwlock_rdlock(sslLocks[n]);
+    } else if (mode & CRYPTO_WRITE) {
+      pthread_rwlock_wrlock(sslLocks[n]);
+    }
+  } else {
+    pthread_rwlock_unlock(sslLocks[n]);
+  }
+}
 
+static unsigned long sslThreadId(void)
+{ 
+#if HAVE_PTHREAD_CREATE
+  return (unsigned long)pthread_self();
+#else
+  return apr_os_thread_current();
+#endif
+}
+
+static void initSSLLocks(void)
+{ 
+  sslLocks = (pthread_rwlock_t**)apr_palloc(MainPool,
+                sizeof(pthread_rwlock_t*) * CRYPTO_num_locks());
+  for (int i = 0; i < CRYPTO_num_locks(); i++) {
+    pthread_rwlock_init(sslLocks[i], NULL);
+  }
+  CRYPTO_set_id_callback(sslThreadId);
+  CRYPTO_set_locking_callback(sslLock);
+}
+
+#else
 static void sslLock(int mode, int n, const char* f, int l)
 {
   if (mode & CRYPTO_LOCK) {
@@ -148,6 +194,7 @@ static void initSSLLocks(void)
   CRYPTO_set_id_callback(sslThreadId);
   CRYPTO_set_locking_callback(sslLock);
 }
+#endif
 
 static void sslInfoCallback(const SSL* ssl, int where, int ret)
 {
@@ -318,7 +365,11 @@ int main(int ac, char const* const* av)
   KeepAlive = KEEP_ALIVE_ALWAYS;
 
   IOArgs* ioArgs = NULL;
+#if HAVE_PTHREAD_CREATE
+  pthread_t* ioThreads;
+#else
   apr_thread_t** ioThreads;
+#endif
   apr_uri_t parsedUrl;
 
   apr_app_initialize(&argc, &argv, &env);
@@ -430,7 +481,11 @@ int main(int ac, char const* const* av)
       }
 
       ioArgs = (IOArgs*)apr_palloc(MainPool, sizeof(IOArgs) * NumThreads);
+#if HAVE_PTHREAD_CREATE
+      ioThreads = (pthread_t*)apr_palloc(MainPool, sizeof(pthread_t) * NumThreads);
+#else
       ioThreads = (apr_thread_t**)apr_palloc(MainPool, sizeof(apr_thread_t*) * NumThreads);
+#endif
       for (int i = 0; i < NumThreads; i++) {
 	int numConn = NumConnections / NumThreads;
 	if (i < (NumConnections % NumThreads)) {
@@ -479,8 +534,12 @@ int main(int ac, char const* const* av)
 	  ioArgs[i].sslCtx = NULL;
 	}
 
+#if HAVE_PTHREAD_CREATE
+        pthread_create(&(ioThreads[i]), NULL, IOThreadFunc, &(ioArgs[i]));
+#else
 	apr_thread_create(&(ioThreads[i]), NULL, IOThreadFunc,
 			  &(ioArgs[i]), MainPool);
+#endif
       }
 
       RecordInit(monitorHost, monitor2Host);
@@ -502,7 +561,13 @@ int main(int ac, char const* const* av)
       /*apr_sleep(apr_time_from_sec(2));  */
       for (int i = 0; i < NumThreads; i++) {
 	apr_status_t err;
+#if HAVE_PTHREAD_CREATE
+        void* result;
+        pthread_join(ioThreads[i], &result);
+        pthread_detach(ioThreads[i]);
+#else
 	apr_thread_join(&err, ioThreads[i]);
+#endif
 	if (ioArgs[i].sslCtx != NULL) {
 	  SSL_CTX_free(ioArgs[i].sslCtx);
 	}
