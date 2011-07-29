@@ -118,14 +118,13 @@ static int setProcessLimits(int numConnections)
     limits.rlim_cur = limits.rlim_max;
     err = setrlimit(RLIMIT_NOFILE, &limits);
     if (err == 0) {
-      printf("Set file descriptor limit to %lu\n", limits.rlim_cur);
       return 0;
     } else {
-      printf("Error setting file descriptor limit: %i\n", err);
+      fprintf(stderr, "Error setting file descriptor limit: %i\n", err);
       return -1;
     }
   } else {
-    printf("Current hard file descriptor limit is %lu: it is too low. Try sudo.\n", 
+    fprintf(stderr, "Current hard file descriptor limit is %lu: it is too low. Try sudo.\n", 
 	   limits.rlim_max);
     return -1;
   }
