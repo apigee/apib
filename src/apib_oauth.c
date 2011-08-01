@@ -16,6 +16,8 @@
 
 #include <apib_common.h>
 
+#define MAX_NUM_SIZE 128
+
 typedef struct {
   char* buf;
   size_t len;
@@ -255,6 +257,9 @@ static void buildBaseString(Buf* buf,
   Buf paramBuf;
   char* num;
   char* nonce;
+  long long timestamp;
+
+  timestamp = apr_time_sec(apr_time_now());
 
   appendStr(buf, method);
   appendChar(buf, '&');
@@ -292,7 +297,9 @@ static void buildBaseString(Buf* buf,
   }
   addParam(params, "oauth_version", "1.0");
   addParam(params, "oauth_signature_method", "HMAC-SHA1");
-  num = apr_psprintf(pool, "%lli", apr_time_sec(apr_time_now()));
+  num = apr_palloc(pool, MAX_NUM_SIZE);
+  snprintf(num, MAX_NUM_SIZE, "%lli", timestamp);
+  num[MAX_NUM_SIZE - 1] = '\0';
   addParam(params, "oauth_timestamp", num);
   nonce = makeRandom(pool);
   addParam(params, "oauth_nonce", nonce);
