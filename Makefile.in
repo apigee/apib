@@ -3,3 +3,13 @@ all:
 
 clean:
 	cd src && $(MAKE) clean
+
+package:
+	mkdir tmp
+	mkdir tmp/apib
+	cp apib apibmon tmp/apib
+	cd tmp; tar -cvf ../../apib.tar .
+	rm -rf tmp
+
+package-src:
+	tar --exclude=.hg -cvf ../apib-src.tar .
