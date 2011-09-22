@@ -15,16 +15,6 @@
 static int          CPUCount;
 static double       TicksPerSecond;
 
-static void setLL(LineState* line, long long* val) 
-{
-  char* tok = linep_NextToken(line, " \t");
-  if (tok != NULL) {
-    *val = atoll(tok);
-  } else {
-    *val = 0LL;
-  }
-}
-
 /* This is a bad way to count the CPUs because "cpuinfo" doesn't account
  * for hyperthreading, etc. */
 int cpu_Count(apr_pool_t* pool)
@@ -84,12 +74,29 @@ static int getTicks(CPUUsage* cpu, apr_pool_t* pool)
   while (linep_NextLine(&line)) {
     char* l = linep_GetLine(&line);
     if (!strncmp(l, "cpu ", 4)) {
+      long long idleCount = 0LL;
+      long long nonIdleCount = 0LL;
+      int i = 0;
+      char* tok;
+
       linep_NextToken(&line, " \t");
-      setLL(&line, &(cpu->user));
-      setLL(&line, &(cpu->nice));
-      setLL(&line, &(cpu->system));
-      setLL(&line, &(cpu->idle));
-      setLL(&line, &(cpu->ioWait));
+      do {
+	tok = linep_NextToken(&line, " \t");
+	if (tok != NULL) {
+	  if ((i == 3) || (i == 4) || (i == 7)) {
+            /* The fourth and fifth columns are "idle" and "iowait".
+		 We consider both to be idle CPU.
+	       The eigth is "steal", which is time lost to virtualization
+	       as a client -- that's idle two in our estimation */
+	    idleCount += atoll(tok);
+	  } else {
+	    nonIdleCount += atoll(tok);				       
+	  }
+	  i++;
+	}
+      } while (tok != NULL);
+      cpu->nonIdle = nonIdleCount;
+      cpu->idle = idleCount;
       return 1;
     }
   }
@@ -165,27 +172,18 @@ void cpu_GetUsage(CPUUsage* cpu, apr_pool_t* pool)
 double cpu_GetInterval(CPUUsage* oldCpu, apr_pool_t* pool)
 {
   CPUUsage cpu;
-  double elapsedTicks;
   long long usageTicks;
+  long long idleTicks;
 
   if (!getTicks(&cpu, pool)) {
     return 0;
   }
   cpu.timestamp = apr_time_now();
 
-  /* apr_time_t is in microseconds */
-  elapsedTicks = (cpu.timestamp - oldCpu->timestamp) / 1000000.0 * 
-                 TicksPerSecond * CPUCount;
+  idleTicks = cpu.idle - oldCpu->idle;
+  usageTicks = cpu.nonIdle - oldCpu->nonIdle;
 
-  /*
-  usageTicks = 
-    (cpu.user - oldCpu->user) +
-    (cpu.nice - oldCpu->nice) +
-    (cpu.system - oldCpu->system);
-  */
-  usageTicks = cpu.idle - oldCpu->idle;
-  
   memcpy(oldCpu, &cpu, sizeof(CPUUsage));
 
-  return 1.0 - (usageTicks / elapsedTicks);
+  return ((double)usageTicks / (double)(idleTicks + usageTicks));
 }

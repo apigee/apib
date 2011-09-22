@@ -14,11 +14,8 @@
  */
 
 typedef struct {
-  long long user;
-  long long nice;
-  long long system;
   long long idle;
-  long long ioWait;
+  long long nonIdle;
   apr_time_t timestamp;
 } CPUUsage;
 

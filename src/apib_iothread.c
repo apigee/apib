@@ -393,9 +393,10 @@ static int writeRequestSsl(ConnectionInfo* conn)
       (conn->sendBufPos >= conn->ioArgs->sendDataSize)) {
     /* Did all the writing -- ready to receive */
     SETSTATE(conn, STATE_RECV_READY);
-    return STATUS_WANT_READ; 
   }
-  return STATUS_WANT_WRITE;
+  /* Since OpenSSL virtualizes all I/O, we don't really know whether to
+   * wait for read or write yet, so always continue here and try SSL_read */
+  return STATUS_CONTINUE;
 }
 
 static int writeRequestNonSsl(ConnectionInfo* conn)
@@ -420,7 +421,7 @@ static int writeRequestNonSsl(ConnectionInfo* conn)
   }
 
 #if DEBUG
-  printf("Headers: %i out of %i Body: %i out of %i sent %u\n",
+  printf("Headers: %i out of %i Body: %i out of %i sent %zu\n",
 	 conn->bufPos, conn->bufLen, 
 	 conn->sendBufPos, conn->ioArgs->sendDataSize, written);
 #endif
@@ -452,9 +453,11 @@ static int writeRequestNonSsl(ConnectionInfo* conn)
 	     (conn->sendBufPos >= conn->ioArgs->sendDataSize)) {
     /* Did all the writing -- ready to receive */
     SETSTATE(conn, STATE_RECV_READY);
+    /* Explicitly give up the thread here in order to let another request
+     * run in the event that we have a response right away. */
     return STATUS_WANT_READ;
   }
-  return STATUS_WANT_WRITE;
+  return STATUS_CONTINUE;
 }
 
 static int writeRequest(ConnectionInfo* conn)
@@ -561,13 +564,10 @@ static int readRequest(ConnectionInfo* conn)
     int sslStatus;
     int sslErr;
 
-#if DEBUG
-    printf("Reading from SSL. State = %s Shutdown = %i\n", SSL_state_string_long(conn->ssl),
-	   SSL_get_shutdown(conn->ssl));
-#endif
     sslStatus = SSL_read(conn->ssl, readBuf, readLen);
 #if DEBUG
-    printf("SSL_read = %i\n", sslStatus);
+    printf("SSL_read = %i err = %i\n", sslStatus,
+	   SSL_get_error(conn->ssl, sslStatus));
 #endif
     conn->ioArgs->readCount++;
     if (sslStatus <= 0) {
@@ -721,7 +721,7 @@ static int readRequest(ConnectionInfo* conn)
     if (conn->state == STATE_RECV_BODY) {
       linep_GetDataRemaining(&(conn->line), &readLen);
 #if DEBUG
-      printf("Read %i body bytes out of %i\n", readLen,
+      printf("Read %zu body bytes out of %i\n", readLen,
 	     conn->contentLength);
 #endif
       if (conn->contentLength < 0) {
@@ -952,6 +952,9 @@ void RunIO(IOArgs* args)
     polls[i].client_data = &(conns[i]);
 
     ps = processConnection(&(conns[i]), &(polls[i]), addr, myAddr, memPool);
+#if DEBUG
+    printf("processConnection returned %i\n", ps);
+#endif
     if (ps >= 0) {
 	polls[i].reqevents = ps | (APR_POLLHUP | APR_POLLERR);
 	apr_pollset_add(pollSet, &(polls[i]));
@@ -989,6 +992,9 @@ void RunIO(IOArgs* args)
       ConnectionInfo* conn = (ConnectionInfo*)pollResult[i].client_data;
       ps = processConnection(conn, &(polls[conn->pollIndex]),
 			     addr, myAddr, memPool);
+#if DEBUG
+      printf("processConnection = %i\n", ps);
+#endif
       if (ps > 0) {
         /* Want to wait for more I/O */
         ps |= (APR_POLLHUP | APR_POLLERR);
@@ -997,6 +1003,9 @@ void RunIO(IOArgs* args)
           polls[conn->pollIndex].reqevents = ps;
 	  apr_pollset_remove(pollSet, &(pollResult[i]));
 	  apr_pollset_add(pollSet, &(polls[conn->pollIndex]));
+#if DEBUG
+	  printf("Re-added poll with flags %i\n", ps);
+#endif
         }
       } else if (ps < 0) {
         /* Panic */
@@ -1006,6 +1015,9 @@ void RunIO(IOArgs* args)
         apr_pollset_remove(pollSet, &(pollResult[i]));
         pq_Push(args->delayQueue, conn, 
                 apr_time_now() + (conn->delayMillis * 1000LL));
+#if DEBUG
+	printf("Delaying by %i millis\n", conn->delayMillis);
+#endif
       }
     }
   
@@ -1014,21 +1026,33 @@ void RunIO(IOArgs* args)
     firstItem = pq_PeekPriority(args->delayQueue);
  
     while ((firstItem > 0LL) && (firstItem <= now)) {
+#if DEBUG
+      printf("Processing a delayed item\n");
+#endif
       ConnectionInfo* conn = (ConnectionInfo*)pq_Pop(args->delayQueue);
       ps = processConnection(conn, &(polls[conn->pollIndex]),
                               addr, myAddr, memPool);
+#if DEBUG
+      printf("processConnection = %i\n", ps);
+#endif
       if (ps > 0) {
         /* Want to wait for more I/O */
         ps |= (APR_POLLHUP | APR_POLLERR);
         polls[conn->pollIndex].rtnevents = 0;
         polls[conn->pollIndex].reqevents = ps;
         apr_pollset_add(pollSet, &(polls[conn->pollIndex]));
+#if DEBUG
+        printf("Re-added poll with flags %i\n", ps);
+#endif
       } else if (ps < 0) {
         /* Panic */
 	goto done;
       } else {
         pq_Push(args->delayQueue, conn, 
                 now + (conn->delayMillis * 1000LL));
+#if DEBUG
+	printf("Delaying by %i millis\n", conn->delayMillis);
+#endif
       }
         
       firstItem = pq_PeekPriority(args->delayQueue);
