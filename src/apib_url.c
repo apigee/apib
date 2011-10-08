@@ -109,25 +109,28 @@ int url_InitFile(const char* fileName, apr_pool_t* pool)
     return -1;
   }
 
-  
-  while (linep_NextLine(&line)) {
-    char* urlStr = linep_GetLine(&line);
-    if (urlCount == urlSize) {
-      urlSize *= 2;
-      urls = (URLInfo*)realloc(urls, sizeof(URLInfo) * urlSize);
+  do {
+    while (linep_NextLine(&line)) {
+      char* urlStr = linep_GetLine(&line);
+      if (urlCount == urlSize) {
+	urlSize *= 2;
+	urls = (URLInfo*)realloc(urls, sizeof(URLInfo) * urlSize);
+      }
+      s = apr_uri_parse(pool, urlStr, &(urls[urlCount].url));
+      if (s != APR_SUCCESS) {
+	fprintf(stderr, "Invalid URL \"%s\"\n", urlStr);
+	apr_file_close(file);
+	return -1;
+      }
+      if (initUrl(&(urls[urlCount]), pool) != 0) {
+	apr_file_close(file);
+	return -1;
+      }
+      urlCount++;
     }
-    s = apr_uri_parse(pool, urlStr, &(urls[urlCount].url));
-    if (s != APR_SUCCESS) {
-      fprintf(stderr, "Invalid URL \"%s\"\n", urlStr);
-      apr_file_close(file);
-      return -1;
-    }
-    if (initUrl(&(urls[urlCount]), pool) != 0) {
-      apr_file_close(file);
-      return -1;
-    }
-    urlCount++;
-  }
+    linep_Reset(&line);
+    s = linep_ReadFile(&line, file);
+  } while (s == APR_SUCCESS);
 
   printf("Read %i URLs from \"%s\"\n", urlCount, fileName);
 
