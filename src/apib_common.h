@@ -10,6 +10,39 @@
 #include <apr_random.h>
 
 /*
+ * Code for URL handling
+ */
+
+typedef struct {
+  apr_uri_t        url;
+  apr_sockaddr_t*  address;
+  int              port;
+  int              isSsl;
+} URLInfo;
+
+/*
+ * Get a randomly-selected URL, plus address and port, for the next
+ * request. This allows us to balance requests over many separate URLs.
+ */
+
+extern const URLInfo* url_GetNext(void);
+
+/*
+ * Set the following as the one and only one URL for this session.
+ */
+extern int url_InitOne(const char* urlStr, apr_pool_t* pool);
+
+/*
+ * Read a list of URLs from a file, one line per URL.
+ */
+extern int url_InitFile(const char* fileName, apr_pool_t* pool);
+
+/* 
+ * Return whether the two URLs refer to the same host and port.
+ */
+extern int url_IsSameServer(const URLInfo* u1, const URLInfo* u2);
+
+/*
  * Code for managing CPU information.
  */
 

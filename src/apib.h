@@ -16,7 +16,6 @@
 
 typedef struct {
   apr_pool_t*     pool;
-  const apr_uri_t* url;
   int             numConnections;
   int             keepRunning;
   int             verbose;

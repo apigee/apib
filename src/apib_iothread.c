@@ -47,11 +47,11 @@
 
 typedef struct {
   IOArgs*         ioArgs;
+  const URLInfo*  url;
   int             pollIndex;
   apr_pool_t*     transPool;
   apr_pool_t*     connPool;
   apr_socket_t*   sock;
-  int             isSsl;
   SSL*            ssl;
   int             state;
   int             delayMillis;
@@ -123,7 +123,7 @@ static int recycle(ConnectionInfo* conn)
 }
 
 static void makeConnection(ConnectionInfo* conn, apr_pollfd_t* fd,
-			   apr_sockaddr_t* addr, apr_sockaddr_t* myAddr,      
+			   apr_sockaddr_t* myAddr,      
                            apr_pool_t* p)
 {
   apr_status_t s;
@@ -154,7 +154,7 @@ static void makeConnection(ConnectionInfo* conn, apr_pollfd_t* fd,
     goto panic;
   }
 
-  if (conn->isSsl) {
+  if (conn->url->isSsl) {
     int fd;
 
     conn->ssl = SSL_new(conn->ioArgs->sslCtx);
@@ -178,12 +178,12 @@ panic:
 
 
 
-static int setupConnection(ConnectionInfo* conn, apr_sockaddr_t* addr)
+static int setupConnection(ConnectionInfo* conn)
 {
   apr_status_t s;
 
 
-  s = apr_socket_connect(conn->sock, addr);
+  s = apr_socket_connect(conn->sock, conn->url->address);
 
   if (s == APR_EINPROGRESS) {
     return STATUS_WANT_WRITE;
@@ -193,7 +193,7 @@ static int setupConnection(ConnectionInfo* conn, apr_sockaddr_t* addr)
     return STATUS_CONTINUE;
   }
   
-  if (conn->isSsl) {
+  if (conn->url->isSsl) {
     SETSTATE(conn, STATE_SSL_HANDSHAKE);
   } else {
     SETSTATE(conn, STATE_SEND_READY);
@@ -229,7 +229,7 @@ static int handshakeSsl(ConnectionInfo* conn)
 
 static void cleanupConnection(ConnectionInfo* conn)
 {
-  if ((conn->isSsl) && (conn->ssl != NULL)) {
+  if ((conn->url->isSsl) && (conn->ssl != NULL)) {
     SSL_shutdown(conn->ssl);
     SSL_free(conn->ssl);
     conn->ssl = NULL;
@@ -260,21 +260,21 @@ static void buildRequest(ConnectionInfo* conn)
   conn->bufLen = SEND_BUF_SIZE;
   conn->sendBufPos = 0;
 
-  if (conn->ioArgs->url->path == NULL) {
+  if (conn->url->url.path == NULL) {
     path = "/";
   } else {
-    path = conn->ioArgs->url->path;
+    path = conn->url->url.path;
   }
 
   if ((OAuthCK != NULL) && (OAuthCS != NULL)) {
-    query = oauth_MakeQueryString(conn->ioArgs->url, 
+    query = oauth_MakeQueryString(&(conn->url->url), 
 				  conn->ioArgs->httpVerb,
 				  NULL, 0, 
 				  OAuthCK, OAuthCS,
 				  OAuthAT, OAuthAS,
 				  conn->transPool);
   } else {
-    query = conn->ioArgs->url->query;
+    query = conn->url->url.query;
   }
 
   if (query != NULL) {
@@ -286,11 +286,11 @@ static void buildRequest(ConnectionInfo* conn)
   }
 
   appendRequestLine(conn, "User-Agent: %s\r\n", USER_AGENT);
-  if (conn->ioArgs->url->port_str != NULL) {
-    appendRequestLine(conn, "Host: %s:%s\r\n", conn->ioArgs->url->hostname,
-  	            conn->ioArgs->url->port_str);
+  if (conn->url->url.port_str != NULL) {
+    appendRequestLine(conn, "Host: %s:%s\r\n", conn->url->url.hostname,
+  	            conn->url->url.port_str);
   } else {
-    appendRequestLine(conn, "Host: %s\r\n", conn->ioArgs->url->hostname);
+    appendRequestLine(conn, "Host: %s\r\n", conn->url->url.hostname);
   }
 
   if (conn->ioArgs->sendDataSize > 0) {
@@ -462,7 +462,7 @@ static int writeRequestNonSsl(ConnectionInfo* conn)
 
 static int writeRequest(ConnectionInfo* conn)
 {
-  if (conn->isSsl) {
+  if (conn->url->isSsl) {
     return writeRequestSsl(conn);
   } else {
     return writeRequestNonSsl(conn);
@@ -533,6 +533,8 @@ static void processHeader(ConnectionInfo* conn)
 
 static int requestComplete(ConnectionInfo* conn)
 {
+  const URLInfo* lastUrl;
+
   RecordResult(conn->ioArgs, conn->httpStatus, 
 	       apr_time_now() - conn->requestStart);
   conn->requestStart = 0LL;
@@ -542,10 +544,20 @@ static int requestComplete(ConnectionInfo* conn)
   if ((conn->closeRequested) ||
       !keepAlive(conn) ||
       (conn->contentLength < 0)) {
+    /* No keep-alive or server closed -- set a state so it happens */
     SETSTATE(conn, STATE_CLOSING);
     return STATUS_CONTINUE;
   } 
 
+  /* Also have to close if we are testing a lot of servers */
+  lastUrl = conn->url;
+  conn->url = url_GetNext();
+  if (!url_IsSameServer(conn->url, lastUrl)) {
+    SETSTATE(conn, STATE_CLOSING);
+    return STATUS_CONTINUE;
+  }    
+
+  /* Re-use the connection for the next request */
   SETSTATE(conn, STATE_SEND_READY);
   return recycle(conn);
 }
@@ -560,7 +572,7 @@ static int readRequest(ConnectionInfo* conn)
 
   linep_GetReadInfo(&(conn->line), &readBuf, &readLen);
 
-  if (conn->isSsl) {
+  if (conn->url->isSsl) {
     int sslStatus;
     int sslErr;
 
@@ -770,7 +782,7 @@ static void startTiming(ConnectionInfo* conn)
 }
 
 static int processConnection(ConnectionInfo* conn, apr_pollfd_t* poll, 
-                             apr_sockaddr_t* addr, apr_sockaddr_t* myAddr,
+                             apr_sockaddr_t* myAddr,
                              apr_pool_t* p)
 {
   char errBuf[128];
@@ -780,7 +792,7 @@ static int processConnection(ConnectionInfo* conn, apr_pollfd_t* poll,
     printf("Connection error from poll\n");
 #endif
     cleanupConnection(conn);
-    makeConnection(conn, poll, addr, myAddr, p);
+    makeConnection(conn, poll, myAddr, p);
   }
 
   while (TRUE) {
@@ -799,7 +811,7 @@ static int processConnection(ConnectionInfo* conn, apr_pollfd_t* poll,
       
     case STATE_NONE:
       startTiming(conn);
-      makeConnection(conn, poll, addr, myAddr, p);
+      makeConnection(conn, poll, myAddr, p);
       break; 
 
     case STATE_FAILED: 
@@ -810,7 +822,7 @@ static int processConnection(ConnectionInfo* conn, apr_pollfd_t* poll,
       break;
       
     case STATE_CONNECTING:
-      s = setupConnection(conn, addr);
+      s = setupConnection(conn);
       break;
 
     case STATE_SSL_HANDSHAKE:
@@ -861,21 +873,17 @@ static int processConnection(ConnectionInfo* conn, apr_pollfd_t* poll,
   }
 }
 
-
 void RunIO(IOArgs* args)
 {
   apr_pool_t*       memPool;
-  apr_sockaddr_t*   addr;
   apr_sockaddr_t*   myAddr;
   apr_pollset_t*    pollSet;
   apr_status_t      s;
   char              errBuf[128];
-  int               port;
   ConnectionInfo*   conns;
   apr_pollfd_t*     polls;
   int               i;
   int               ps;
-  int               isSsl;
   int               pollSize;
   int               pollFlags;
   const apr_pollfd_t*     pollResult;
@@ -885,31 +893,6 @@ void RunIO(IOArgs* args)
   memPool = args->pool;
 
   args->readCount = args->writeCount = 0;
-
-  if (!strcmp(args->url->scheme, "https")) {
-    isSsl = TRUE;
-  } else {
-    isSsl = FALSE;
-    assert(!strcmp(args->url->scheme, "http"));
-  }
-
-  if (args->url->port_str == NULL) {
-    if (isSsl) {
-      port = 443;
-    } else {
-      port = 80;
-    }
-  } else {
-    port = atoi(args->url->port_str);
-  }
-
-  s = apr_sockaddr_info_get(&addr, args->url->hostname,
-			    APR_INET, port, 0, memPool);
-  if (s != APR_SUCCESS) {
-    apr_strerror(s, errBuf, 80);
-    fprintf(stderr, "Error looking up host: %s\n", errBuf);
-    goto done;
-  }
 
   s = apr_sockaddr_info_get(&myAddr, NULL, APR_INET, 0, 0, memPool);
   if (s != APR_SUCCESS) {
@@ -943,15 +926,15 @@ void RunIO(IOArgs* args)
     conns[i].buf = (char*)apr_palloc(memPool, SEND_BUF_SIZE);
     conns[i].state = STATE_NONE;
     conns[i].wakeups = 0;
-    conns[i].isSsl = isSsl;
     conns[i].delayMillis = 0;
+    conns[i].url = url_GetNext();
 
     polls[i].p = memPool;
     polls[i].desc_type = APR_POLL_SOCKET;
     polls[i].reqevents = polls[i].rtnevents = 0;
     polls[i].client_data = &(conns[i]);
 
-    ps = processConnection(&(conns[i]), &(polls[i]), addr, myAddr, memPool);
+    ps = processConnection(&(conns[i]), &(polls[i]), myAddr, memPool);
 #if DEBUG
     printf("processConnection returned %i\n", ps);
 #endif
@@ -991,7 +974,7 @@ void RunIO(IOArgs* args)
     for (i = 0; i < pollSize; i++) {
       ConnectionInfo* conn = (ConnectionInfo*)pollResult[i].client_data;
       ps = processConnection(conn, &(polls[conn->pollIndex]),
-			     addr, myAddr, memPool);
+			     myAddr, memPool);
 #if DEBUG
       printf("processConnection = %i\n", ps);
 #endif
@@ -1031,7 +1014,7 @@ void RunIO(IOArgs* args)
 #endif
       ConnectionInfo* conn = (ConnectionInfo*)pq_Pop(args->delayQueue);
       ps = processConnection(conn, &(polls[conn->pollIndex]),
-                              addr, myAddr, memPool);
+                              myAddr, memPool);
 #if DEBUG
       printf("processConnection = %i\n", ps);
 #endif

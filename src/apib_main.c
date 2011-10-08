@@ -369,7 +369,6 @@ int main(int ac, char const* const* av)
 #else
   apr_thread_t** ioThreads;
 #endif
-  apr_uri_t parsedUrl;
 
   apr_app_initialize(&argc, &argv, &env);
   apr_pool_create(&MainPool, NULL);
@@ -456,120 +455,113 @@ int main(int ac, char const* const* av)
   }
 
   if ((s == APR_EOF) && !doHelp && (url != NULL)) {
-    s = apr_uri_parse(MainPool, url, &parsedUrl);
-    if (s != APR_SUCCESS) {
-      fprintf(stderr, "Invalid URL\n");
-      
-    } else if ((parsedUrl.scheme == NULL) ||
-               !(!strcmp(parsedUrl.scheme, "http") || !strcmp(parsedUrl.scheme, "https"))) {
-      fprintf(stderr, "Invalid HTTP scheme\n");
-
-    } else if (parsedUrl.hostname == NULL) {
-      fprintf(stderr, "Missing host name");
-
+    if (url[0] == '@') {
+      if (url_InitFile(url + 1, MainPool) != 0) {
+	fprintf(stderr, "Invalid URL file\n");
+	goto finished;
+      }
     } else {
-
-      if (setProcessLimits(NumConnections) != 0) {
-	return 2;
+      if (url_InitOne(url, MainPool) != 0) {
+	fprintf(stderr, "Invalid URL\n");
+	goto finished;
       }
+    }
 
-      Running = 1;
+    if (setProcessLimits(NumConnections) != 0) {
+      goto finished;
+    }
 
-      if (NumThreads > NumConnections) {
-	NumThreads = NumConnections;
-      }
+    Running = 1;
 
-      ioArgs = (IOArgs*)apr_palloc(MainPool, sizeof(IOArgs) * NumThreads);
+    if (NumThreads > NumConnections) {
+      NumThreads = NumConnections;
+    }
+
+    ioArgs = (IOArgs*)apr_palloc(MainPool, sizeof(IOArgs) * NumThreads);
 #if HAVE_PTHREAD_CREATE
-      ioThreads = (pthread_t*)apr_palloc(MainPool, sizeof(pthread_t) * NumThreads);
+    ioThreads = (pthread_t*)apr_palloc(MainPool, sizeof(pthread_t) * NumThreads);
 #else
-      ioThreads = (apr_thread_t**)apr_palloc(MainPool, sizeof(apr_thread_t*) * NumThreads);
+    ioThreads = (apr_thread_t**)apr_palloc(MainPool, sizeof(apr_thread_t*) * NumThreads);
 #endif
-      for (int i = 0; i < NumThreads; i++) {
-	int numConn = NumConnections / NumThreads;
-	if (i < (NumConnections % NumThreads)) {
-	  numConn++;
-	}
+    for (int i = 0; i < NumThreads; i++) {
+      int numConn = NumConnections / NumThreads;
+      if (i < (NumConnections % NumThreads)) {
+	numConn++;
+      }
       
-	if (fileName != NULL) {
-	  if (readFile(fileName, &(ioArgs[i])) != 0) {
-	    return 3;
-	  }
-	} else {
-	  ioArgs[i].sendData = NULL;
-	  ioArgs[i].sendDataSize = 0;
+      if (fileName != NULL) {
+	if (readFile(fileName, &(ioArgs[i])) != 0) {
+	  return 3;
 	}
+      } else {
+	ioArgs[i].sendData = NULL;
+	ioArgs[i].sendDataSize = 0;
+      }
 
-	if (verb == NULL) {
-	  if (fileName == NULL) {
-	    ioArgs[i].httpVerb = "GET";
-	  } else {
-	    ioArgs[i].httpVerb = "POST";
-	  } 
+      if (verb == NULL) {
+	if (fileName == NULL) {
+	  ioArgs[i].httpVerb = "GET";
 	} else {
-	  ioArgs[i].httpVerb = verb;
-	}
+	  ioArgs[i].httpVerb = "POST";
+	} 
+      } else {
+	ioArgs[i].httpVerb = verb;
+      }
 
-        apr_pool_create(&(ioArgs[i].pool), MainPool);
-	ioArgs[i].keepRunning = JustOnce;
-	ioArgs[i].url = &parsedUrl;
-	ioArgs[i].numConnections = numConn;
-	ioArgs[i].contentType = contentType;
-        ioArgs[i].headers = Headers;
-        ioArgs[i].numHeaders = NumHeaders;
-        ioArgs[i].delayQueue = pq_Create(ioArgs[i].pool);
-	ioArgs[i].verbose = verbose;
-        ioArgs[i].thinkTime = thinkTime;
-	ioArgs[i].latenciesCount = 0;
-	ioArgs[i].latenciesSize = DEFAULT_LATENCIES_SIZE;
-	ioArgs[i].latencies = 
-	  (unsigned long*)malloc(sizeof(unsigned long) * DEFAULT_LATENCIES_SIZE);
-	ioArgs[i].readCount = ioArgs[i].writeCount = 0;
-	ioArgs[i].readBytes = ioArgs[i].writeBytes = 0;
+      apr_pool_create(&(ioArgs[i].pool), MainPool);
+      ioArgs[i].keepRunning = JustOnce;
+      ioArgs[i].numConnections = numConn;
+      ioArgs[i].contentType = contentType;
+      ioArgs[i].headers = Headers;
+      ioArgs[i].numHeaders = NumHeaders;
+      ioArgs[i].delayQueue = pq_Create(ioArgs[i].pool);
+      ioArgs[i].verbose = verbose;
+      ioArgs[i].thinkTime = thinkTime;
+      ioArgs[i].latenciesCount = 0;
+      ioArgs[i].latenciesSize = DEFAULT_LATENCIES_SIZE;
+      ioArgs[i].latencies = 
+	(unsigned long*)malloc(sizeof(unsigned long) * DEFAULT_LATENCIES_SIZE);
+      ioArgs[i].readCount = ioArgs[i].writeCount = 0;
+      ioArgs[i].readBytes = ioArgs[i].writeBytes = 0;
 
-	if (!strcmp(parsedUrl.scheme, "https")) {
-	  createSslContext(&(ioArgs[i]), (i == 0));
-	} else {
-	  ioArgs[i].sslCtx = NULL;
-	}
+      createSslContext(&(ioArgs[i]), (i == 0));
 
 #if HAVE_PTHREAD_CREATE
-        pthread_create(&(ioThreads[i]), NULL, IOThreadFunc, &(ioArgs[i]));
+      pthread_create(&(ioThreads[i]), NULL, IOThreadFunc, &(ioArgs[i]));
 #else
-	apr_thread_create(&(ioThreads[i]), NULL, IOThreadFunc,
-			  &(ioArgs[i]), MainPool);
+      apr_thread_create(&(ioThreads[i]), NULL, IOThreadFunc,
+			&(ioArgs[i]), MainPool);
 #endif
-      }
+    }
 
-      RecordInit(monitorHost, monitor2Host);
-      if (!JustOnce && (warmupTime > 0)) {
-	RecordStart(FALSE);
-	waitAndReport(warmupTime, TRUE);
-      }
+    RecordInit(monitorHost, monitor2Host);
+    if (!JustOnce && (warmupTime > 0)) {
+      RecordStart(FALSE);
+      waitAndReport(warmupTime, TRUE);
+    }
 
-      RecordStart(TRUE);
-      if (!JustOnce) {
-	waitAndReport(duration, FALSE);
-      }
-      RecordStop();
+    RecordStart(TRUE);
+    if (!JustOnce) {
+      waitAndReport(duration, FALSE);
+    }
+    RecordStop();
 
-      Running = 0;
+    Running = 0;
 
-      /* Sometimes threads don't terminate. Sleep for two seconds,
-         then if a thread is stuck it won't affect the results much. */
-      /*apr_sleep(apr_time_from_sec(2));  */
-      for (int i = 0; i < NumThreads; i++) {
+    /* Sometimes threads don't terminate. Sleep for two seconds,
+       then if a thread is stuck it won't affect the results much. */
+    /*apr_sleep(apr_time_from_sec(2));  */
+    for (int i = 0; i < NumThreads; i++) {
 #if HAVE_PTHREAD_CREATE
-        void* result;
-        pthread_join(ioThreads[i], &result);
-        pthread_detach(ioThreads[i]);
+      void* result;
+      pthread_join(ioThreads[i], &result);
+      pthread_detach(ioThreads[i]);
 #else
-        apr_status_t err;
-	apr_thread_join(&err, ioThreads[i]);
+      apr_status_t err;
+      apr_thread_join(&err, ioThreads[i]);
 #endif
-	if (ioArgs[i].sslCtx != NULL) {
-	  SSL_CTX_free(ioArgs[i].sslCtx);
-	}
+      if (ioArgs[i].sslCtx != NULL) {
+	SSL_CTX_free(ioArgs[i].sslCtx);
       }
     }
 
@@ -584,6 +576,7 @@ int main(int ac, char const* const* av)
   EndReporting();
   cleanup(ioArgs);
 
+finished:
   apr_pool_destroy(MainPool);
   apr_terminate();
 
