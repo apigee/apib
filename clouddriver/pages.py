@@ -5,29 +5,7 @@ import datetime
 import urllib
 
 import cloudaws
-
-TestDefs='TestDefs'
-TestRuns='TestRuns'
-AWSKeys='aws.keys'
-
-def checkUser(req):
-  user = users.get_current_user()
-  if user == None:
-      req.error(403)
-      return None
-  if not user.email().endswith('@apigee.com'):
-      req.error(403)
-      return None
-  return user.email()
-
-def checkAWSDomains():
-    aws = cloudaws.AWS(AWSKeys)
-    aws.createDomain(TestDefs)
-    aws.createDomain(TestRuns)
-    return aws
-
-def makeItemName(userName):
-    return '%s-%s' % (userName, str(datetime.datetime.utcnow()))
+import utils
 
 class MainPage(webapp.RequestHandler):
 
@@ -40,25 +18,27 @@ class MainPage(webapp.RequestHandler):
      '</body></html>'
 
     def get(self):
-        userName = checkUser(self)
+        userName = utils.checkUser(self)
         if userName == None:
             return
-        aws = checkAWSDomains()
+        aws = utils.checkAWSDomains()
         sro = self.response.out
         sro.write(self.pageHeader % userName)
         defs = aws.select(
-            "select * from %s where userName = '%s'" % (TestDefs, userName))
-        sro.write('TODO Greg: Put a run button next to each. Open form to select details')
+            "select * from %s where userName = '%s'" % (utils.TestDefs, userName))
         for d in defs.items():
-            sro.write('<p><a href="/editDefinition/%s">%s</a> <a href="/deleteDefinition/%s">(delete)</a></p>' % \
-                (d[0], d[1]['name'], d[0]))
+            sro.write(
+              '<p><a href="/editDefinition/%s">%s</a>\
+                  <a href="/createRun/%s"> (Launch test) </a>\
+                  <a href="/deleteDefinition/%s"> (delete) </a></p>' % \
+                (d[0], d[1]['name'], d[0], d[0]))
         sro.write('<p><a href="/editDefinition">Add Definition</a></p>')
         sro.write('<h2>Test Runs</h2>')
-        sro.write('<p>TODO Greg list existing runs here, allow delete</p>')
         runs = aws.select(
-            "select itemName(), name from %s where userName = '%s'" % (TestRuns, userName))
-        for r in runs.values():
-            sro.write('<p><a href="foobar">%s</a></p>' % d['name'])
+            "select * from %s where userName = '%s'" % (utils.TestRuns, userName))
+        for r in runs.items():
+            sro.write('<p><a href="/viewTest/%s">%s</a>' % \
+                (r[0], r[1]['name']))
         sro.write(self.pageFooter)
 
 class EditDefinition(webapp.RequestHandler):
@@ -78,14 +58,18 @@ class EditDefinition(webapp.RequestHandler):
       '<input type="text" size="40" name="max_concurrency" value="%s"/><br/>' \
       '<input type="submit"/>' \
       '<input type="hidden" name="itemName" value="%s"/>' \
+      '<input type="hidden" name="userName" value="%s"/>' \
       '</form></body></html>'
 
     def get(self, iName=''):
-        aws = cloudaws.AWS(AWSKeys)
+        userName = utils.checkUser(self)
+        if userName == None:
+            return
+        aws = utils.getAws()
         testDef = None
         if iName != '':
             itemName = urllib.unquote(iName)
-            testDef = aws.get(TestDefs, itemName)
+            testDef = aws.get(utils.TestDefs, itemName)
         if testDef == None:
             testDef = {
                 'itemName' : '',
@@ -93,40 +77,47 @@ class EditDefinition(webapp.RequestHandler):
                 'url' : '',
                 'duration' : '3',
                 'max_concurrency' : '100',
-                'think_time' : '0'
+                'think_time' : '0',
+                'userName': userName
                 }
         else:
             testDef['itemName'] = itemName
+            testDef['userName'] = userName
 
         self.response.out.write(self.editForm % \
             (testDef['name'], testDef['url'], testDef['duration'],
-             testDef['max_concurrency'], testDef['think_time'],
-             testDef['itemName']))
+             testDef['think_time'], testDef['max_concurrency'],
+             testDef['itemName'], testDef['userName']))
 
 class UpdateDefinition(webapp.RequestHandler):
     def post(self):
-        userName = checkUser(self)
+        userName = utils.checkUser(self, self.request.get('userName'))
         if userName == None:
             return
+        
         record = {
-            'userName' : userName,
             'name' : self.request.get('name'),
             'url' : self.request.get('url'),
             'duration' : self.request.get('duration'),
             'max_concurrency' : self.request.get('max_concurrency'),
-            'think_time' : self.request.get('think_time')
+            'think_time' : self.request.get('think_time'),
+            'userName' : userName
             }
         itemName = self.request.get('itemName')
         if itemName == None or itemName == '':
-            itemName = makeItemName(userName)
-        aws = cloudaws.AWS(AWSKeys)
-        aws.put(TestDefs, itemName, record)
+            itemName = utils.makeItemName(userName)
+        aws = utils.getAws()
+        aws.put(utils.TestDefs, itemName, record)
         self.redirect('/')
 
 class DeleteDefinition(webapp.RequestHandler):
     def get(self, iName=''):
+        user = utils.checkUser(self)
+        if user == None:
+            return
         itemName = urllib.unquote(iName)
-        aws = cloudaws.AWS(AWSKeys)
-        aws.delete(TestDefs, itemName)
+        aws = utils.getAws()
+        aws.delete(utils.TestDefs, itemName)
         self.redirect('/')
+
 
