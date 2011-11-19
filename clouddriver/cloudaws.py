@@ -14,10 +14,12 @@ Debug  = False
 
 def getElementText(n):
     c = n.firstChild
+    str = StringIO.StringIO()
     while c != None:
         if c.nodeType == xml.dom.Node.TEXT_NODE:
-            return c.data
+            str.write(c.data)
         c = c.nextSibling
+    return str.getvalue()
 
 class AWS:
     AWSVersion = '2009-04-15'
@@ -130,7 +132,25 @@ class AWS:
         qps['ItemName'] = item
         qps['DomainName'] = domain
         qps['Action'] = 'GetAttributes'
-        self.doGet(qps)
+
+        doc = xml.dom.minidom.parse(self.doGet(qps))
+        attrs = doc.getElementsByTagName('Attribute')
+        result = dict()
+        for attr in attrs:
+            ac = attr.firstChild
+            while ac != None:
+                if ac.nodeName == 'Name':
+                    nam = getElementText(ac)
+                elif ac.nodeName == 'Value':
+                    val = getElementText(ac)
+                ac = ac.nextSibling
+            result[nam] = val
+        return result
+            
+    def delete(self, domain, item):
+        qps = { 'ItemName' : item, 'DomainName' : domain,
+                'Action' : 'DeleteAttributes' }
+        self.doPost(qps)
 
     def createDomain(self, domain):
         qps = dict()
