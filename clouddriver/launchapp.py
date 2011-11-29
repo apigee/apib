@@ -13,7 +13,9 @@ application = webapp.WSGIApplication([
         (r'/createRun/(.*)', runs.CreateRun),
         ('/confirmRun', runs.ConfirmRun),
         ('/launchTest', runs.LaunchTest),
-        (r'/viewTest/(.*)', runs.ViewTest)
+        (r'/viewTest/(.*)', runs.ViewTest),
+        (r'/viewTestDetails/(.*)', runs.ViewTestDetails),
+        (r'/deleteTest/(.*)', runs.DeleteTest)
         ], debug=True)
 
 def main():

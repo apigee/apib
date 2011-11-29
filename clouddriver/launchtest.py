@@ -4,21 +4,19 @@ import math
 import subprocess
 import StringIO
 import sys
+import urllib
 
 import cloudaws
 
-apibProgram = '/usr/local/bin/apib'
+apibProgram = './apib'
 DefaultWarmup = '60'
 
-AWSKeys='aws.keys'
+AWSKeys='../aws.keys'
 TestDefs='TestDefs'
 TestResults='TestResults'
-
-def getCount(r):
-    return r['count']
+ResultFileName='apResult.csv'
 
 def runTest(count, url, duration, concurrency, thinkTime):
-# TODO thinkTime
     args = [apibProgram, '-S', 
             '-w', DefaultWarmup,
             '-d', str(duration),
@@ -26,10 +24,16 @@ def runTest(count, url, duration, concurrency, thinkTime):
             '-c', str(concurrency),
             url]
 
-    result = subprocess.check_output(args)
-    resultFile = StringIO.StringIO(result)
+    print 'Launching: ', args
+
+    resultFile = open(ResultFileName, 'w')
+    result = subprocess.check_call(args, stdout=resultFile)
+    resultFile.close()
+
+    resultFile = open(ResultFileName, 'r')
     csvRdr = csv.reader(resultFile)
     for row in csvRdr:
+        print 'Result: ', row
         result = {
             'runName' : RunName,
             'defName' : DefName,
@@ -47,7 +51,7 @@ def runTest(count, url, duration, concurrency, thinkTime):
             'latency_99' : row[15],
             'latency_std_dev' : row[16],
             'client_cpu' : row[17],
-            'run_time' : str(datetime.datetime.now()) 
+            'run_time' : str(datetime.datetime.now()),
             'url' : url,
             'duration' : str(duration),
             'concurrency' : str(concurrency),
@@ -55,13 +59,22 @@ def runTest(count, url, duration, concurrency, thinkTime):
             }
 
         aws.put(TestResults, '%s-%i' % (RunName, count), result)
+    resultFile.close()
 
-if len(sys.argv) != 2:
-    print 'Usage: launchtest <metadata>'
-    sys.exit(1)
+if len(sys.argv) == 2:
+    metaData = StringIO.StringIO(sys.argv[1])
 
-mData = StringIO.StringIO(sys.argv[1])
-mRdr = csv.reader(mData)
+elif len(sys.argv) == 1:
+    metaData = urllib.urlopen('http://169.254.169.254/latest/user-data')
+    if metaData.getcode() != 200:
+        print 'User data not found'
+        sys.exit(3)
+
+else:
+    print 'Usage: launchtest.py [metadata]'
+    sys.exit(2)
+
+mRdr = csv.reader(metaData)
 for row in mRdr:
     RunName = row[0]
     DefName = row[1]

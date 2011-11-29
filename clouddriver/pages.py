@@ -37,8 +37,9 @@ class MainPage(webapp.RequestHandler):
         runs = aws.select(
             "select * from %s where userName = '%s'" % (utils.TestRuns, userName))
         for r in runs.items():
-            sro.write('<p><a href="/viewTest/%s">%s</a>' % \
-                (r[0], r[1]['name']))
+            sro.write('<p><a href="/viewTest/%s">%s</a>\
+                          <a href="/deleteTest/%s"> (delete)</a></p>' % \
+                (r[0], r[1]['name'], r[0]))
         sro.write(self.pageFooter)
 
 class EditDefinition(webapp.RequestHandler):

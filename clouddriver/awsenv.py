@@ -7,7 +7,7 @@ Types = [ 'm1.large' ]
 def getAmi(zone, iType):
     if zone.startswith('us-east'):
         if iType == 'm1.large':
-            return 'ami-1b814f72'
+            return 'ami-33bb705a'
     return None
 
 def makeZoneList(name):

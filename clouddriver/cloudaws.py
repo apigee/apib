@@ -202,4 +202,7 @@ class AWS:
                }
                
         result = self.doGenericPost(qps, self.EC2BaseURI, self.EC2Host, self.EC2Version)
-        print result.read()
+        return result.read()
+
+
+        
