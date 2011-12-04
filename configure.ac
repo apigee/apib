@@ -13,7 +13,7 @@ AC_PROG_CC_C99
 AC_USE_SYSTEM_EXTENSIONS
 
 [if [ $GCC ]; then]
-AC_SUBST(CC, ["$CC -pedantic -Wall"])
+AC_SUBST(CC, ["$CC -pedantic -Wall -Wno-deprecated-declarations"])
 [fi]
 
 # Checks for libraries.
