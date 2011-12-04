@@ -443,7 +443,7 @@ static void PrintShortResults(FILE* out, double elapsed)
   name,throughput,avg. latency,threads,connections,duration,completed,successful,errors,sockets,min. latency,max. latency,50%,90%,98%,99%
    */
   fprintf(out,
-	  "%s,%.3lf,%.3lf,%u,%u,%.3lf,%u,%u,%u,%u,%.3lf,%.3lf,%.3lf,%.3lf,%.3lf,%.3lf,%.3lf,%.0lf,%.0lf,%.0lf,%.0lf,%.0lf,%.0lf\n",
+	  "%s,%.3lf,%.3lf,%u,%u,%.3lf,%u,%u,%u,%u,%.3lf,%.3lf,%.3lf,%.3lf,%.3lf,%.3lf,%.3lf,%.0lf,%.0lf,%.0lf,%.0lf,%.0lf,%.0lf,%.2lf,%.2lf\n",
 	  RunName, successfulRequests / elapsed, 
 	  microToMilli(getAverageLatency()),
 	  NumThreads, NumConnections, elapsed,
@@ -461,7 +461,9 @@ static void PrintShortResults(FILE* out, double elapsed)
 	  getAverageCpu(&remote2Samples) * 100.0,
           clientMem * 100.0,
           remoteMem * 100.0,
-          remote2Mem * 100.0);
+          remote2Mem * 100.0,
+	  (totalBytesSent * 8.0 / 1048576.0) / elapsed,
+	  (totalBytesReceived * 8.0 / 1048576.0) / elapsed);
 }
 
 void PrintReportingHeader(FILE* out)
@@ -471,7 +473,8 @@ void PrintReportingHeader(FILE* out)
           "Min. latency,Max. latency,50%% Latency,90%% Latency,"\
           "98%% Latency,99%% Latency,Latency Std Dev,Avg Client CPU,"\
           "Avg Server CPU,Avg Server 2 CPU,"\
-          "Client Mem Usage,Server Mem,Server 2 Mem\n");
+          "Client Mem Usage,Server Mem,Server 2 Mem,"\
+	  "Avg. Send Bandwidth,Avg. Recv. Bandwidth\n");
 }
 
 void PrintResults(FILE* out)
