@@ -25,7 +25,7 @@ typedef struct {
  * request. This allows us to balance requests over many separate URLs.
  */
 
-extern const URLInfo* url_GetNext(void);
+extern const URLInfo* url_GetNext(apr_random_t* rand);
 
 /*
  * Set the following as the one and only one URL for this session.
@@ -41,6 +41,12 @@ extern int url_InitFile(const char* fileName, apr_pool_t* pool);
  * Return whether the two URLs refer to the same host and port.
  */
 extern int url_IsSameServer(const URLInfo* u1, const URLInfo* u2);
+
+/*
+ * Create an APR random number generator. It is not thread-safe so we are 
+ * going to create a few.
+ */
+extern apr_random_t* url_InitRandom(apr_pool_t* pool);
 
 /*
  * Code for managing CPU information.

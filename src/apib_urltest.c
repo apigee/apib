@@ -8,13 +8,19 @@
 
 #define NUM_ITERATIONS 100000
 #define NUM_THREADS 8
+#define SEED_SIZE 4096
 
 static void* URLThread(apr_thread_t* t, void* arg)
 {
   URLInfo* url;
+  apr_random_t* rand;
+  apr_pool_t* pool = (apr_pool_t*)arg;
+  char entropy[SEED_SIZE];
+
+  rand = url_InitRandom(pool);
 
   for (int inc = 0; inc < NUM_ITERATIONS; inc++) {
-    url = url_GetNext();
+    url = url_GetNext(rand);
     printf("%s?%s\n", url->url.path, url->url.query);
   }
 }
@@ -40,7 +46,7 @@ int main(int argc, char** argv)
   }
 
   for (int i = 0; i < NUM_THREADS; i++) {
-    apr_thread_create(&(threads[i]), NULL, URLThread, NULL, pool);
+    apr_thread_create(&(threads[i]), NULL, URLThread, pool, pool);
   }
   for (int i = 0; i < NUM_THREADS; i++) {
     apr_status_t ret;

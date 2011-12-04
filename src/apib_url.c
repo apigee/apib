@@ -5,12 +5,14 @@
 
 #define URL_BUF_LEN 8192
 #define INITIAL_URLS 16
+#define MAX_ENTROPY_ROUNDS 100
+#define SEED_SIZE 8192
 
 static unsigned int urlCount = 0;
 static unsigned int urlSize = 0;
 static URLInfo*     urls;
 
-const URLInfo* url_GetNext(void)
+const URLInfo* url_GetNext(apr_random_t* rand)
 {
   unsigned int randVal;
 
@@ -21,7 +23,15 @@ const URLInfo* url_GetNext(void)
     return &(urls[0]);
   }
 
-  apr_generate_random_bytes((unsigned char*)&randVal, sizeof(unsigned int));
+  apr_status_t err;
+  if (rand == NULL) {
+     err = apr_generate_random_bytes((unsigned char*)&randVal, sizeof(unsigned int));
+  } else {
+     err = apr_random_insecure_bytes(rand, (unsigned char*)&randVal, sizeof(unsigned int));
+  }
+  if (err != APR_SUCCESS) {
+    fprintf(stderr, "Error generating random number: %i\n", err);
+  }
   return &(urls[randVal % urlCount]);
 }
 
@@ -137,3 +147,23 @@ int url_InitFile(const char* fileName, apr_pool_t* pool)
   apr_file_close(file);
   return 0;
 }
+
+apr_random_t* url_InitRandom(apr_pool_t* pool)
+{
+  int i = 0;
+  apr_random_t* rand = apr_random_standard_new(pool);
+  unsigned char entropy[SEED_SIZE];
+
+  apr_random_init(rand, pool, apr_crypto_sha256_new(pool),
+		  apr_crypto_sha256_new(pool),
+		  apr_crypto_sha256_new(pool));
+  while ((i < MAX_ENTROPY_ROUNDS) &&
+	 (apr_random_insecure_ready(rand) == APR_ENOTENOUGHENTROPY)) {
+    apr_random_barrier(rand);
+    apr_generate_random_bytes(entropy, SEED_SIZE);
+    apr_random_add_entropy(rand, entropy, SEED_SIZE);
+    i++;
+  }
+  return rand;
+}
+

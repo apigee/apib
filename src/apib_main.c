@@ -87,7 +87,6 @@ apr_thread_rwlock_t** sslLocks = NULL;
 
 
 #define DEFAULT_NUM_CONNECTIONS 1
-#define DEFAULT_NUM_THREADS 1
 #define DEFAULT_LATENCIES_SIZE 1024
 #define DEFAULT_DURATION 60
 #define DEFAULT_WARMUP 0
@@ -358,7 +357,7 @@ int main(int ac, char const* const* av)
   unsigned int thinkTime = 0;
 
   NumConnections = DEFAULT_NUM_CONNECTIONS;
-  NumThreads = DEFAULT_NUM_THREADS;
+  NumThreads = -1;
   ShortOutput = FALSE;
   RunName = "";
   KeepAlive = KEEP_ALIVE_ALWAYS;
@@ -473,6 +472,9 @@ int main(int ac, char const* const* av)
 
     Running = 1;
 
+    if (NumThreads < 1) {
+      NumThreads = cpu_Count(MainPool);
+    }
     if (NumThreads > NumConnections) {
       NumThreads = NumConnections;
     }
