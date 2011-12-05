@@ -10,7 +10,7 @@
 
 #include <apib_common.h>
 
-#define PROC_BUF_LEN 256
+#define PROC_BUF_LEN 8192
 
 static int          CPUCount;
 static double       TicksPerSecond;
