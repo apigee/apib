@@ -51,7 +51,7 @@ typedef struct {
   int             pollIndex;
   apr_pool_t*     transPool;
   apr_pool_t*     connPool;
-  apr_random_t*   random;
+  RandState*      random;
   apr_socket_t*   sock;
   SSL*            ssl;
   int             state;
@@ -928,13 +928,15 @@ void RunIO(IOArgs* args)
     conns[i].state = STATE_NONE;
     conns[i].wakeups = 0;
     conns[i].delayMillis = 0;
-    conns[i].random = url_InitRandom(conns[i].connPool);
+    conns[i].random = (RandState*)apr_palloc(memPool, sizeof(RandState));
     conns[i].url = url_GetNext(conns[i].random);
 
     polls[i].p = memPool;
     polls[i].desc_type = APR_POLL_SOCKET;
     polls[i].reqevents = polls[i].rtnevents = 0;
     polls[i].client_data = &(conns[i]);
+
+    url_InitRandom(conns[i].random);
 
     ps = processConnection(&(conns[i]), &(polls[i]), myAddr, memPool);
 #if DEBUG

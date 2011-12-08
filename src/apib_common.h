@@ -2,12 +2,20 @@
 #define APIB_COMMON_H
 
 #include <stdio.h>
+#include <config.h>
 
 #include <apr_file_io.h>
 #include <apr_network_io.h>
 #include <apr_uri.h>
 #include <apr_pools.h>
 #include <apr_random.h>
+
+/* Random number stuff */
+#if HAVE_RAND_R
+typedef unsigned int RandState;
+#else
+typedef void* RandState;
+#endif
 
 /*
  * Code for URL handling
@@ -25,7 +33,7 @@ typedef struct {
  * request. This allows us to balance requests over many separate URLs.
  */
 
-extern const URLInfo* url_GetNext(apr_random_t* rand);
+extern const URLInfo* url_GetNext(RandState* rand);
 
 /*
  * Set the following as the one and only one URL for this session.
@@ -46,7 +54,7 @@ extern int url_IsSameServer(const URLInfo* u1, const URLInfo* u2);
  * Create an APR random number generator. It is not thread-safe so we are 
  * going to create a few.
  */
-extern apr_random_t* url_InitRandom(apr_pool_t* pool);
+extern void url_InitRandom(RandState* rand);
 
 /*
  * Code for managing CPU information.
@@ -202,5 +210,6 @@ extern void pq_Push(pq_Queue* q, void* item, long long priority);
 extern void* pq_Pop(pq_Queue* q);
 extern const void* pq_Peek(const pq_Queue* q);
 extern long long pq_PeekPriority(const pq_Queue* q);
+
 
 #endif

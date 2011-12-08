@@ -12,17 +12,15 @@
 
 static void* URLThread(apr_thread_t* t, void* arg)
 {
-  URLInfo* url;
-  apr_random_t* rand;
-  apr_pool_t* pool = (apr_pool_t*)arg;
-  char entropy[SEED_SIZE];
+  RandState rand;
 
-  rand = url_InitRandom(pool);
+  url_InitRandom(&rand);
 
   for (int inc = 0; inc < NUM_ITERATIONS; inc++) {
-    url = url_GetNext(rand);
+    const URLInfo* url = url_GetNext(&rand);
     printf("%s?%s\n", url->url.path, url->url.query);
   }
+  return NULL;
 }
 
 int main(int argc, char** argv)

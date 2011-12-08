@@ -34,6 +34,18 @@
 /* Define to 1 if you have the `pthread_rwlock_init' function. */
 #undef HAVE_PTHREAD_RWLOCK_INIT
 
+/* Define to 1 if you have the `rand' function. */
+#undef HAVE_RAND
+
+/* Define to 1 if you have the `random' function. */
+#undef HAVE_RANDOM
+
+/* Define to 1 if you have the `random_r' function. */
+#undef HAVE_RANDOM_R
+
+/* Define to 1 if you have the `rand_r' function. */
+#undef HAVE_RAND_R
+
 /* Define to 1 if your system has a GNU libc compatible `realloc' function,
    and to 0 otherwise. */
 #undef HAVE_REALLOC
