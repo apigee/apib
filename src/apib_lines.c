@@ -51,7 +51,7 @@ int linep_NextLine(LineState* l)
 	 !isChar(l->buf[l->lineEnd], "\r\n")) {
     l->lineEnd++;
   }
-  if (l->lineEnd == l->bufLen) {
+  if (l->lineEnd >= l->bufLen) {
     /* Incomplete line in the buffer */
     l->lineComplete = 0;
     return 0;
