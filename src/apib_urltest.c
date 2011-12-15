@@ -12,12 +12,12 @@
 
 static void* URLThread(apr_thread_t* t, void* arg)
 {
-  RandState rand;
+  RandState rand = (RandState)malloc(sizeof(RandData));
 
-  url_InitRandom(&rand);
+  url_InitRandom(rand);
 
   for (int inc = 0; inc < NUM_ITERATIONS; inc++) {
-    const URLInfo* url = url_GetNext(&rand);
+    const URLInfo* url = url_GetNext(rand);
     printf("%s?%s\n", url->url.path, url->url.query);
   }
   return NULL;

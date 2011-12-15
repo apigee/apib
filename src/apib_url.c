@@ -12,9 +12,9 @@ static unsigned int urlCount = 0;
 static unsigned int urlSize = 0;
 static URLInfo*     urls;
 
-const URLInfo* url_GetNext(RandState* rand)
+const URLInfo* url_GetNext(RandState rand)
 {
-  int randVal;
+  long randVal;
 
   if (urlCount == 0) {
     return NULL;
@@ -23,7 +23,9 @@ const URLInfo* url_GetNext(RandState* rand)
     return &(urls[0]);
   }
 
-#if HAVE_RAND_R
+#if HAVE_LRAND48_R
+  lrand48_r(rand, &randVal);
+#elif HAVE_RAND_R
   randVal = rand_r(rand);
 #else
   randVal = rand();
@@ -145,8 +147,16 @@ int url_InitFile(const char* fileName, apr_pool_t* pool)
   return 0;
 }
 
-void url_InitRandom(RandState* state)
+void url_InitRandom(RandState state)
 {
-  srand(apr_time_now());
+  unsigned int seed;
+
+  apr_generate_random_bytes((unsigned char*)&seed, sizeof(int));
+
+#if HAVE_LRAND48_R
+  srand48_r(seed, state);
+#else
+  srand(seed);
+#endif
 }
 

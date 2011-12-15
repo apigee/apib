@@ -11,10 +11,15 @@
 #include <apr_random.h>
 
 /* Random number stuff */
-#if HAVE_RAND_R
-typedef unsigned int RandState;
+#if HAVE_LRAND48_R
+typedef struct drand48_data* RandState;
+typedef struct drand48_data RandData;
+#elif HAVE_RAND_R
+typedef unsigned int* RandState;
+typedef unsigned int RandData;
 #else
 typedef void* RandState;
+typedef void* RandData;
 #endif
 
 /*
@@ -33,7 +38,7 @@ typedef struct {
  * request. This allows us to balance requests over many separate URLs.
  */
 
-extern const URLInfo* url_GetNext(RandState* rand);
+extern const URLInfo* url_GetNext(RandState rand);
 
 /*
  * Set the following as the one and only one URL for this session.
@@ -54,7 +59,7 @@ extern int url_IsSameServer(const URLInfo* u1, const URLInfo* u2);
  * Create an APR random number generator. It is not thread-safe so we are 
  * going to create a few.
  */
-extern void url_InitRandom(RandState* rand);
+extern void url_InitRandom(RandState rand);
 
 /*
  * Code for managing CPU information.
