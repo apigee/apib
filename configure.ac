@@ -1,8 +1,8 @@
 #                                               -*- Autoconf -*-
 # Process this file with autoconf to produce a configure script.
 
-AC_PREREQ([2.60])
-AC_INIT(apib, [0.1], [greg@brail.org])
+AC_PREREQ(2.61)
+AC_INIT([apib],[0.1],[greg@brail.org])
 AC_CONFIG_SRCDIR([src/apib_oauth.c])
 AC_CONFIG_HEADERS([src/config.h])
 
@@ -40,7 +40,7 @@ AC_FUNC_REALLOC
 AC_FUNC_STRTOD
 AC_CHECK_FUNCS([memmove pow sqrt strcasecmp strtol \
                pthread_create pthread_rwlock_init \
-               random_r random rand_r rand])
+               random_r random rand_r rand lrand48_r])
 
 AC_CONFIG_FILES([Makefile
                  src/Makefile])
