@@ -28,7 +28,8 @@ typedef void* RandData;
 
 typedef struct {
   apr_uri_t        url;
-  apr_sockaddr_t*  address;
+  apr_sockaddr_t**  addresses;
+  int              addressCount;
   int              port;
   int              isSsl;
 } URLInfo;
@@ -41,6 +42,14 @@ typedef struct {
 extern const URLInfo* url_GetNext(RandState rand);
 
 /*
+ * Get the network address for the next request based on which connection is making it.
+ * Using the index number for each connection means that for a host with multiple IPs, we
+ * evenly distribute requests across them without opening a new connection for each request.
+ */
+
+extern apr_sockaddr_t* url_GetAddress(const URLInfo* url, int index);
+
+/*
  * Set the following as the one and only one URL for this session.
  */
 extern int url_InitOne(const char* urlStr, apr_pool_t* pool);
@@ -51,9 +60,10 @@ extern int url_InitOne(const char* urlStr, apr_pool_t* pool);
 extern int url_InitFile(const char* fileName, apr_pool_t* pool);
 
 /* 
- * Return whether the two URLs refer to the same host and port.
+ * Return whether the two URLs refer to the same host and port for the given connection --
+ * we use this to optimize socket management.
  */
-extern int url_IsSameServer(const URLInfo* u1, const URLInfo* u2);
+extern int url_IsSameServer(const URLInfo* u1, const URLInfo* u2, int index);
 
 /*
  * Create an APR random number generator. It is not thread-safe so we are 

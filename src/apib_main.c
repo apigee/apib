@@ -154,7 +154,7 @@ static unsigned long sslThreadId(void)
 
 static void initSSLLocks(void)
 { 
-  sslLocks = (pthread_rwlock_t*)apr_palloc(MainPool,
+  sslLocks = (pthread_rwlock_t*)apr_pcalloc(MainPool,
                 sizeof(pthread_rwlock_t) * CRYPTO_num_locks());
   for (int i = 0; i < CRYPTO_num_locks(); i++) {
     pthread_rwlock_init(&(sslLocks[i]), NULL);

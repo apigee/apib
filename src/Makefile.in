@@ -19,9 +19,10 @@ APIB_MON_OBJS = apib_mon.o apib_lines.o apib_cpu.o
 OAUTH_TEST_OBJS = apib_oauth.o apib_oauthtest.o
 CPU_TEST_OBJS = apib_cputest.o apib_cpu.o apib_lines.o
 URL_TEST_OBJS = apib_urltest.o apib_url.o apib_lines.o
+DNS_TEST_OBJS = apib_dnstest.o
 
 all: ../apib ../apibmon 
-test: oauthtest cputest urltest
+test: oauthtest cputest urltest dnstest
 
 ../apib: $(APIB_OBJS)
 	$(CC) -o $@ $(LDFLAGS) $(APIB_OBJS) $(APR_LIBS)
@@ -37,6 +38,9 @@ cputest: $(CPU_TEST_OBJS)
 
 urltest: $(URL_TEST_OBJS)
 	$(CC) -o $@ $(LDFLAGS) $(URL_TEST_OBJS) $(APR_LIBS)
+
+dnstest: $(DNS_TEST_OBJS)
+	$(CC) -o $@ $(LDFLAGS) $(DNS_TEST_OBJS) $(APR_LIBS)
 
 clean:
 	rm -f *.o apib apibmon

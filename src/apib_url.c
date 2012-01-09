@@ -38,6 +38,9 @@ static int initUrl(URLInfo* u, apr_pool_t* pool)
 {
   apr_status_t s;
   char errBuf[128];
+  apr_sockaddr_t* newAddrs;
+  apr_sockaddr_t* a;
+  int addrCount;
 
   if (!strcmp(u->url.scheme, "https")) {
     u->isSsl = TRUE;
@@ -58,7 +61,7 @@ static int initUrl(URLInfo* u, apr_pool_t* pool)
     u->port = atoi(u->url.port_str);
   }
 
-  s = apr_sockaddr_info_get(&(u->address), u->url.hostname,
+  s = apr_sockaddr_info_get(&newAddrs, u->url.hostname,
 			    APR_INET, u->port, 0, pool);
   if (s != APR_SUCCESS) {
     apr_strerror(s, errBuf, 128);
@@ -67,7 +70,27 @@ static int initUrl(URLInfo* u, apr_pool_t* pool)
     return -1;
   }
 
+  addrCount = 0;
+  a = newAddrs;
+  while (a != NULL) {
+    addrCount++;
+    a = a->next;
+  }
+
+  u->addressCount = addrCount;
+  u->addresses = (apr_sockaddr_t**)apr_palloc(pool, sizeof(apr_sockaddr_t*) * addrCount);
+  a = newAddrs;
+  for (int i = 0; i < addrCount; i++) {
+    u->addresses[i] = a;
+    a = a->next;
+  }
+
   return 0;
+}
+
+static apr_sockaddr_t* getConn(const URLInfo* u, int index) 
+{
+  return u->addresses[index % u->addressCount];
 }
 
 int url_InitOne(const char* urlStr, apr_pool_t* pool)
@@ -86,12 +109,25 @@ int url_InitOne(const char* urlStr, apr_pool_t* pool)
   return initUrl(&(urls[0]), pool);
 }
 
-int url_IsSameServer(const URLInfo* u1, const URLInfo* u2)
+apr_sockaddr_t* url_GetAddress(const URLInfo* url, int index)
+{
+  apr_sockaddr_t* a = getConn(url, index);
+
+#if DEBUG
+  char* str;
+  apr_sockaddr_ip_get(&str, a);
+  printf("Connecting to %s\n", str);
+#endif
+  return a;
+}
+
+int url_IsSameServer(const URLInfo* u1, const URLInfo* u2, int index)
 {
   if (u1->port != u2->port) {
     return 0;
   }
-  return apr_sockaddr_equal(u1->address, u2->address);
+  return apr_sockaddr_equal(getConn(u1, index), 
+                            getConn(u2, index));
 }
 
 int url_InitFile(const char* fileName, apr_pool_t* pool)

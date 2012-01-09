@@ -46,12 +46,13 @@
 #define STATUS_CONTINUE   0
 
 typedef struct {
+  int             index;
   IOArgs*         ioArgs;
   const URLInfo*  url;
   int             pollIndex;
   apr_pool_t*     transPool;
   apr_pool_t*     connPool;
-  RandState      random;
+  RandState       random;
   apr_socket_t*   sock;
   SSL*            ssl;
   int             state;
@@ -184,7 +185,7 @@ static int setupConnection(ConnectionInfo* conn)
   apr_status_t s;
 
 
-  s = apr_socket_connect(conn->sock, conn->url->address);
+  s = apr_socket_connect(conn->sock, url_GetAddress(conn->url, conn->index));
 
   if (s == APR_EINPROGRESS) {
     return STATUS_WANT_WRITE;
@@ -553,7 +554,7 @@ static int requestComplete(ConnectionInfo* conn)
   /* Also have to close if we are testing a lot of servers */
   lastUrl = conn->url;
   conn->url = url_GetNext(conn->random);
-  if (!url_IsSameServer(conn->url, lastUrl)) {
+  if (!url_IsSameServer(conn->url, lastUrl, conn->index)) {
     SETSTATE(conn, STATE_CLOSING);
     return STATUS_CONTINUE;
   }    
@@ -920,6 +921,7 @@ void RunIO(IOArgs* args)
   polls = (apr_pollfd_t*)apr_palloc(memPool, sizeof(apr_pollfd_t) * args->numConnections);
 
   for (i = 0; i < args->numConnections; i++) {
+    conns[i].index = i;
     conns[i].ioArgs = args;
     conns[i].pollIndex = i;
     apr_pool_create(&(conns[i].connPool), memPool);
