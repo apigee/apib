@@ -288,11 +288,14 @@ static void buildRequest(ConnectionInfo* conn)
   }
 
   appendRequestLine(conn, "User-Agent: %s\r\n", USER_AGENT);
-  if (conn->url->url.port_str != NULL) {
-    appendRequestLine(conn, "Host: %s:%s\r\n", conn->url->url.hostname,
-  	            conn->url->url.port_str);
-  } else {
-    appendRequestLine(conn, "Host: %s\r\n", conn->url->url.hostname);
+
+  if (!conn->ioArgs->hostHeaderOverride) {
+    if (conn->url->url.port_str != NULL) {
+      appendRequestLine(conn, "Host: %s:%s\r\n", conn->url->url.hostname,
+			conn->url->url.port_str);
+    } else {
+      appendRequestLine(conn, "Host: %s\r\n", conn->url->url.hostname);
+    }
   }
 
   if (conn->ioArgs->sendDataSize > 0) {

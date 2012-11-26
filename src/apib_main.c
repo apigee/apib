@@ -43,6 +43,7 @@ int              KeepAlive;
 char**          Headers = NULL;
 unsigned int    HeadersSize = 0;
 unsigned int    NumHeaders = 0;
+int             HostHeaderOverride = 0;
 
 char*           OAuthCK = NULL;
 char*           OAuthCS = NULL;
@@ -327,6 +328,9 @@ static void processOAuth(char* arg)
 
 static void addHeader(char* val)
 {
+  char* tokLast;
+  char* tok;
+
   if (Headers == NULL) {
     Headers = (char**)apr_palloc(MainPool, sizeof(char*));
     HeadersSize = 1;
@@ -336,9 +340,15 @@ static void addHeader(char* val)
     memcpy(nh, Headers, sizeof(char*) * NumHeaders);
     Headers = nh;
   }
-  Headers[NumHeaders] = val;
+  Headers[NumHeaders] = apr_pstrdup(MainPool, val);
   NumHeaders++;
+
+  tok = apr_strtok(val, ":", &tokLast);
+  if ((tok != NULL) && !strcmp("Host", tok)) {
+    HostHeaderOverride = 1;
+  }
 }
+
 
 static void processBasic(const char* arg)
 {
@@ -535,6 +545,7 @@ int main(int ac, char const* const* av)
       ioArgs[i].contentType = contentType;
       ioArgs[i].headers = Headers;
       ioArgs[i].numHeaders = NumHeaders;
+      ioArgs[i].hostHeaderOverride = HostHeaderOverride;
       ioArgs[i].delayQueue = pq_Create(ioArgs[i].pool);
       ioArgs[i].verbose = verbose;
       ioArgs[i].thinkTime = thinkTime;

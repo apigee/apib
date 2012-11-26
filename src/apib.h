@@ -28,6 +28,7 @@ typedef struct {
   pq_Queue*       delayQueue;
   unsigned int    thinkTime;
   unsigned int    numHeaders;
+  int             hostHeaderOverride;
   unsigned long*  latencies;
   unsigned int    latenciesSize;
   unsigned int    latenciesCount;
