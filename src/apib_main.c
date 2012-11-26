@@ -55,29 +55,36 @@ pthread_rwlock_t* sslLocks = NULL;
 apr_thread_rwlock_t** sslLocks = NULL;
 #endif
 
-#define VALID_OPTS "c:d:f:hk:t:u:vw:x:H:O:K:M:N:X:ST1W:"
+static apr_getopt_option_t Options[] =
+  { 
+    { "concurrency", 'c', 1, "Number of concurrent requests (default 1)" },
+    { "duration", 'd', 1, "Test duration in seconds" },
+    { "input-file", 'f', 1, "File name to send on PUT and POST requests" },
+    { "help", 'h', 0, "Display this message" },
+    { "keep-alive", 'k', 1, "Keep-alive duration -- 0 to disable, non-zero for timeout (default 9999)" },
+    { "content-type", 't', 1, "Value of the Content-Type header" },
+    { "username-password", 'u', 1, "Credentials for HTTP Basic authentication in username:password format" },
+    { "verbose", 'v', 0, "Verbose output" },
+    { "warmup", 'w', 1, "Warm-up duration, in seconds (default 0)" },
+    { "method", 'x', 1, "HTTP request method (default GET)" },
+    { "header", 'H', 1, "HTTP header line in Name: Value format" },
+    { "oauth", 'O', 1, "OAuth 1.0 signature, in format consumerkey:secret:token:secret" },
+    { "iothreads", 'K', 1, "Number of I/O threads to spawn, default == number of CPU cores" },
+    { "monitor", 'M', 1, "Host name and port number of host running apibmon" },
+    { "monitor2", 'X', 1, "Second host name and port number of host running apibmon" },
+    { "name", 'N', 1, "Name to put in CSV output to identify test run" },
+    { "csv-output", 'S', 0, "Output all test results in a single CSV line" },
+    { "header-line", 'T', 0, "Do not run, but output a single CSV header line" },
+    { "one", '1', 0, "Send just one request and exit" },
+    { "think-time", 'W', 1, "Think time to wait in between requests, in milliseconds" },
+    { NULL, 0, 0, NULL }
+  };
 
-#define VALID_OPTS_DESC \
-  "[-c connections] [-k keep-alive] [-K threads] [-d seconds] [-w warmup secs]\n" \
-  "[-W think time (ms)] [-f file name] [-t content type] [-x verb] [-1 just once]\n" \
-  "[-H HTTP Header line] [-u username:password] \n" \
-  "[-N name] [-S] [-M host:port] [-X host:port] [-hv] <url>\n" \
-  "  -c: Number of connections to open (default 1)\n" \
-  "  -k: HTTP keep-alive setting. 0 for none, -1 for forever, otherwise seconds\n" \
-  "  -K: Number of I/O threads to spawn (default 1)\n" \
-  "  -d: Number of seconds to run (default 60)\n" \
-  "  -w: Warmup time in seconds (default 0)\n" \
-  "  -f: File to upload\n" \
-  "  -t: Content type (default: application/octet-stream)\n" \
-  "  -x: HTTP verb (default GET, or POST if -f is set)\n" \
-  "  -O: OAuth 1.0a signature generation: see below\n" \
-  "  -N: Name of test run (placed in output)\n" \
-  "  -S: Short output (one line, CSV format)\n" \
-  "  -T: Print header line of short output format (for CSV parsing)\n" \
-  "  -M: Host and port of host running apibmon for CPU monitoring\n" \
-  "  -X: Host and port of 2nd host for CPU monitoring\n" \
-  "  -v: Verbose (print requests and responses)\n" \
-  "  -h: Print this help message\n" \
+#define USAGE_DOCS \
+  "\n" \
+  "The last argument may be an http or https URL, or an \"@\" symbol followed\n" \
+  "by a file name. If a file name, then apib will read the file as a list of\n" \
+  "URLs, one per line, and randoml Test each one.\n" \
   "\n" \
   "  if -S is used then output is CSV-separated on one line:\n" \
   "  name,throughput,avg. latency,threads,connections,duration,completed,successful,errors,sockets,min. latency,max. latency,50%,90%,98%,99%\n" \
@@ -85,12 +92,24 @@ apr_thread_rwlock_t** sslLocks = NULL;
   "  if -O is used then the value is four parameters, separated by a colon:\n" \
   "  consumer key:secret:token:secret. You may omit the last two.\n"
 
-
 #define DEFAULT_NUM_CONNECTIONS 1
 #define DEFAULT_LATENCIES_SIZE 1024
 #define DEFAULT_DURATION 60
 #define DEFAULT_WARMUP 0
 #define REPORT_SLEEP_TIME 5
+
+static void printUsage(void)
+{
+  fprintf(stderr, "Usage: apib [options] [URL | @file]\n");
+  int i = 0;
+  while (Options[i].optch != 0) {
+    apr_getopt_option_t* opt = &(Options[i]);
+    fprintf(stderr, "-%c\t%s\t%s\n",
+	    opt->optch, opt->name, opt->description);
+    i++;
+  }
+  fprintf(stderr, "%s", USAGE_DOCS);
+}
 
 #if HAVE_PTHREAD_CREATE
 static void* IOThreadFunc(void* arg)
@@ -340,7 +359,7 @@ int main(int ac, char const* const* av)
   char const * const* env = NULL;
   apr_getopt_t* opts;
   apr_status_t s;
-  char curOption;
+  int curOption;
   const char* curArg;
 
   /* Arguments */
@@ -374,7 +393,7 @@ int main(int ac, char const* const* av)
 
   apr_getopt_init(&opts, MainPool, argc, argv);
   do {
-    s = apr_getopt(opts, VALID_OPTS, &curOption, &curArg);
+    s = apr_getopt_long(opts, Options, &curOption, &curArg);
     if (s == APR_SUCCESS) {
       switch (curOption) {
       case 'c':
@@ -568,7 +587,7 @@ int main(int ac, char const* const* av)
     }
 
   } else {
-    fprintf(stderr, "Usage: %s %s\n", argv[0], VALID_OPTS_DESC);
+    printUsage();
     apr_terminate();
     return 0;
   }
