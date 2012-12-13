@@ -490,7 +490,6 @@ int main(int ac, char const* const* av)
       }
     } else {
       if (url_InitOne(url, MainPool) != 0) {
-	fprintf(stderr, "Invalid URL\n");
 	goto finished;
       }
     }

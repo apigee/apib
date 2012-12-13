@@ -42,7 +42,10 @@ static int initUrl(URLInfo* u, apr_pool_t* pool)
   apr_sockaddr_t* a;
   int addrCount;
 
-  if (!strcmp(u->url.scheme, "https")) {
+  if (u->url.scheme == NULL) {
+    fprintf(stderr, "Missing URL scheme\n");
+    return -1;
+  } else if (!strcmp(u->url.scheme, "https")) {
     u->isSsl = TRUE;
   } else if (!strcmp(u->url.scheme, "http")) {
     u->isSsl = FALSE;
