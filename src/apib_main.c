@@ -105,7 +105,7 @@ static void printUsage(void)
   int i = 0;
   while (Options[i].optch != 0) {
     apr_getopt_option_t* opt = &(Options[i]);
-    fprintf(stderr, "-%c\t%s\t%s\n",
+    fprintf(stderr, "-%c\t--%s\t%s\n",
 	    opt->optch, opt->name, opt->description);
     i++;
   }
