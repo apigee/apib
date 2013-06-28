@@ -118,7 +118,7 @@ static char* trimString(char* s)
   }
 
   len = strlen(s);
-  while (apr_isspace(ret[len - 1])) {
+  while (len > 0 && apr_isspace(ret[len - 1])) {
     ret[len - 1] = 0;
     len--;
   }
