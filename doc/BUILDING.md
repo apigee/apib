@@ -42,4 +42,10 @@ This should work -- if you get any errors you should email me (greg@brail.org)
 
 make
 
+(NOTE: On CentOS and Ubuntu, run make with the LDFLAGS attribute set to "-L /lib64 -l pthread" if make fails;
+% make "LDFLAGS=-L /lib64 -l pthread"
+
+If this fails to work, export the attribute manually before running make; 
+% export $LDFLAGS=-L /lib64 -l pthread")
+
 *Done*: You are done and it should work now.
