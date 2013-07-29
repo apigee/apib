@@ -29,12 +29,15 @@ AC_SUBST(CC, ["$CC -pedantic -Wall -Wno-deprecated-declarations"])
 [fi]
 
 # Checks for libraries.
-AC_CHECK_LIB([aprutil-1], [apr_uri_parse])
-AC_CHECK_LIB([apr-1], [apr_initialize])
-AC_CHECK_LIB([ssl], [SSL_read])
-AC_SEARCH_LIBS([pthread_create], pthread)
-AC_SEARCH_LIBS([CRYPTO_num_locks], crypto)
 AC_SEARCH_LIBS([sqrt], m)
+AC_SEARCH_LIBS([CRYPTO_num_locks], crypto)
+AC_SEARCH_LIBS([pthread_create], pthread)
+AC_CHECK_LIB([ssl], [SSL_read], [],
+             [AC_MSG_ERROR([OpenSSL library missing. Install "openssl-devel" or the equivalent])])
+AC_CHECK_LIB([apr-1], [apr_initialize], [],
+             [AC_MSG_ERROR([APR library missing. Install "apr-devel" or the equivalent])])
+AC_CHECK_LIB([aprutil-1], [apr_uri_parse], [],
+             [AC_MSG_ERROR([APR Utilities library missing. Install "apr-util-devel" or the equivalent])])
 
 # Checks for header files.
 AC_CHECK_HEADERS([stdlib.h string.h sys/time.h unistd.h pthread.h])

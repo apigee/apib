@@ -17,6 +17,11 @@ all:
 clean:
 	cd src && $(MAKE) clean
 
+realclean: clean
+	rm -f Makefile src/Makefile src/config.h
+	rm -f apib apibmon
+	rm -f config.log config.status
+
 test:
 	cd src && $(MAKE) test
 

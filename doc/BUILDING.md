@@ -12,13 +12,20 @@ Sample build instructions for CentOS:
 
 *git*: First, install if you don't already have it in order to get source from Google Code:
 
-yum install git
+    yum install git
 
 *Get Source*: Pull the source from Google Code
 
-git clone https://code.google.com/p/apib/
+    git clone https://code.google.com/p/apib/
 
 *Install Dependencies*: Install dependent packages required to build
+
+*Compiler*
+
+To build, you will need gcc and make -- these are not always installed
+by default -- you may need to use "yum" or "apt-get" to install them.
+
+*Libraries*
 
 There are three dependencies:
 
@@ -30,7 +37,11 @@ You need the "devel" versions of these libraries in order to build.
 
 On CentOS, you can install them like this:
 
-yum install apr-devel apr-util-devel openssl-devel
+    sudo yum install apr-devel apr-util-devel openssl-devel
+
+On Ubuntu, you would do it like this:
+
+    sudo apt-get install libapr1-dev libaprutil1-dev openssl
 
 *Configure*: Run "configure" to generate build scripts for the platform
 
