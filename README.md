@@ -4,6 +4,15 @@ This is a tool that makes it easy to test API servers. It is supported for Unix
 systems that include the Apache Portable Runtime and OpenSSL. That includes implementations
 of Linux, Windows under Cygwin, and Apple OS X.
 
+## Status
+
+apib has been fairly stable for a little while now. Please submit issues
+or pull requests if you find that you'd like it to do more within reason!
+
+## Current Version
+
+1.0.
+
 ## Usage:
 
 Running apib can be as simple as:
