@@ -38,10 +38,9 @@ a more modern replacement. In particular, it will support:
 * Ability to spawn multiple I/O threads to take advantage of multiple
   CPU cores
 * Support for POST and PUT of large objects
-* Support for templates so that requests may vary
-* Support for OAuth 1.0 and 2.0 signatures
+* Support for templates so that requests may vary (not done yet)
+* Support for OAuth 1.0 signatures
 * Ability to output results to a file so they may be automated
-* Possibily a "graphical mode" using curses so it's sexy
 
 However, like "ab," it will also support:
 
@@ -51,7 +50,7 @@ However, like "ab," it will also support:
 
 ## Dependencies:
 
-* apr -- makes it more portable to Linux, Solaris, Macintosh I think
+* apr -- makes it more portable to Linux, Solaris, Macintosh and others
 * openssl -- because we need SSL
 
 Any reasonable platform will have both of these.
