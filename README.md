@@ -13,7 +13,7 @@ or pull requests if you find that you'd like it to do more within reason!
 
 1.0.
 
-## Usage:
+## Usage
 
 Running apib can be as simple as:
 
@@ -21,6 +21,14 @@ Running apib can be as simple as:
 
 The command above will hammer "test.example.com" as fast as it can for up to
 60 seconds using 100 concurrent network connections. 
+
+## Installation
+
+On the Mac, you can now install via [Homebrew](http://brew.sh/):
+
+    brew install apib
+    
+Otherwise, you can [build it yourself from source](./doc/BUILDING.md).
 
 See additional documentation for more:
 
@@ -30,22 +38,21 @@ See additional documentation for more:
 
 ## Design
 
-apib is intended
-to have many of the features of Apache Bench (ab), but is also intended as
-a more modern replacement. In particular, it will support:
+apib has most of the features of Apache Bench (ab), but is also intended as
+a more modern replacement. In particular, it supports:
 
-* Proper HTTP 1.1 support including keep-alives
+* Proper HTTP 1.1 support including keep-alives and chunked encoding
 * Ability to spawn multiple I/O threads to take advantage of multiple
   CPU cores
 * Support for POST and PUT of large objects
-* Support for templates so that requests may vary (not done yet)
 * Support for OAuth 1.0 signatures
 * Ability to output results to a file so they may be automated
+* Remote CPU monitoring
 
-However, like "ab," it will also support:
+In addition, like "ab," it also supports:
 
-* A very simple command-line interface
-* Very few dependencies, so it may be easily built and deployed
+* A simple command-line interface
+* Few dependencies, so it may be easily built and deployed
 * Non-blocking I/O for high concurrency
 
 ## Dependencies:

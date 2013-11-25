@@ -14,9 +14,9 @@ Sample build instructions for CentOS:
 
     yum install git
 
-*Get Source*: Pull the source from Google Code
+*Get Source*: Pull the source from GitHub
 
-    git clone https://code.google.com/p/apib/
+    git clone https://github.com/apigee/apib.git
 
 *Install Dependencies*: Install dependent packages required to build
 
@@ -45,12 +45,12 @@ On Ubuntu, you would do it like this:
 
 *Configure*: Run "configure" to generate build scripts for the platform
 
-./configure
+    ./configure
 
 This should work -- if you get any errors you should email me (greg@brail.org)
 
 *Make*: Build the code
 
-make
+    make
 
 *Done*: You are done and it should work now.
