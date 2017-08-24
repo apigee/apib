@@ -333,7 +333,7 @@ static unsigned long getLatencyPercent(int percent)
     return latencies[latenciesCount - 1];
   }
   unsigned int index = 
-    (latenciesCount / 100) * percent;
+    (latenciesCount / 100.0) * percent;
   return latencies[index];
 }
 
