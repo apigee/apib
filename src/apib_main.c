@@ -84,6 +84,7 @@ static apr_getopt_option_t Options[] =
     { "verbose", 'v', 0, "Verbose output" },
     { "warmup", 'w', 1, "Warm-up duration, in seconds (default 0)" },
     { "method", 'x', 1, "HTTP request method (default GET)" },
+    { "cipherlist", 'C', 1, "Cipher list offered to server for HTTPS" },
     { "header", 'H', 1, "HTTP header line in Name: Value format" },
     { "oauth", 'O', 1, "OAuth 1.0 signature, in format consumerkey:secret:token:secret" },
     { "iothreads", 'K', 1, "Number of I/O threads to spawn, default == number of CPU cores" },
@@ -248,7 +249,7 @@ static void sslInfoCallback(const SSL* ssl, int where, int ret)
   printf("  ssl: op = %s ret = %i %s\n", op, ret, SSL_state_string_long(ssl));
 }
 
-static void createSslContext(IOArgs* args, int isFirst)
+static int createSslContext(IOArgs* args, int isFirst)
 {
   if (isFirst) {
     SSL_load_error_strings();
@@ -261,6 +262,15 @@ static void createSslContext(IOArgs* args, int isFirst)
   if (args->verbose) {
     SSL_CTX_set_info_callback(args->sslCtx, sslInfoCallback);
   }
+
+  if (args->sslCipher) {
+    int res = SSL_CTX_set_cipher_list( args->sslCtx, args->sslCipher );
+    if (res != 1) {
+      fprintf( stderr, "Set Cipher list to %s failed\n", args->sslCipher );
+      return -1;
+    }
+  }
+  return 0;
 }
 
 static int readFile(const char* name, IOArgs* args)
@@ -396,6 +406,7 @@ int main(int ac, char const* const* av)
   char* verb = NULL;
   char* fileName = NULL;
   char* contentType = NULL;
+  char* sslCipher = NULL;
   const char* url = NULL;
   char* monitorHost = NULL;
   char* monitor2Host = NULL;
@@ -452,6 +463,9 @@ int main(int ac, char const* const* av)
       case 'x':
 	verb = apr_pstrdup(MainPool, curArg);
 	break;
+      case 'C':
+        sslCipher = apr_pstrdup(MainPool, curArg);
+        break;
       case 'H':
         addHeader(apr_pstrdup(MainPool, curArg));
         break;
@@ -558,6 +572,7 @@ int main(int ac, char const* const* av)
       ioArgs[i].keepRunning = JustOnce;
       ioArgs[i].numConnections = numConn;
       ioArgs[i].contentType = contentType;
+      ioArgs[i].sslCipher = sslCipher;
       ioArgs[i].headers = Headers;
       ioArgs[i].numHeaders = NumHeaders;
       ioArgs[i].hostHeaderOverride = HostHeaderOverride;
@@ -571,7 +586,9 @@ int main(int ac, char const* const* av)
       ioArgs[i].readCount = ioArgs[i].writeCount = 0;
       ioArgs[i].readBytes = ioArgs[i].writeBytes = 0;
 
-      createSslContext(&(ioArgs[i]), (i == 0));
+      if (createSslContext(&(ioArgs[i]), (i == 0)) != 0) {
+          goto finished;
+      }
 
 #if HAVE_PTHREAD_CREATE
       pthread_create(&(ioThreads[i]), NULL, IOThreadFunc, &(ioArgs[i]));

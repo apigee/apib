@@ -38,6 +38,7 @@ typedef struct {
   char*           httpVerb;
   char*           contentType;
   char*           sendData;
+  char*           sslCipher;
   unsigned int    sendDataSize;
   SSL_CTX*        sslCtx;
   char**          headers;
