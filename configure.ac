@@ -55,7 +55,8 @@ AC_FUNC_REALLOC
 AC_FUNC_STRTOD
 AC_CHECK_FUNCS([memmove pow sqrt strcasecmp strtol \
                pthread_create pthread_rwlock_init \
-               random_r random rand_r rand lrand48_r])
+               random_r random rand_r rand lrand48_r \
+							 EVP_sha1])
 
 AC_CONFIG_FILES([Makefile
                  src/Makefile])

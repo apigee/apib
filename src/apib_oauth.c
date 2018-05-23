@@ -240,9 +240,14 @@ static char* generateHmac(const char* base,
   if (tokenSecret != NULL) {
     appendEncoded(&keyBuf, tokenSecret);
   }
-  
+
+#ifdef HAVE_EVP_SHA1  
   HMAC(EVP_sha1(), keyBuf.buf, keyBuf.len, (const unsigned char*)base, 
        strlen(base), hmac, &hmacLen);
+#else
+  fprintf(stderr, "No SHA1 support on this platform\n");
+  abort();
+#endif
 
   ret = apr_palloc(pool, apr_base64_encode_len(hmacLen));
   apr_base64_encode_binary(ret, hmac, hmacLen);
