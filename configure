@@ -625,6 +625,7 @@ ac_includes_default="\
 ac_subst_vars='LTLIBOBJS
 POW_LIB
 LIBOBJS
+SSL_LOC
 APR_LOC
 EGREP
 GREP
@@ -655,7 +656,6 @@ infodir
 docdir
 oldincludedir
 includedir
-runstatedir
 localstatedir
 sharedstatedir
 sysconfdir
@@ -726,7 +726,6 @@ datadir='${datarootdir}'
 sysconfdir='${prefix}/etc'
 sharedstatedir='${prefix}/com'
 localstatedir='${prefix}/var'
-runstatedir='${localstatedir}/run'
 includedir='${prefix}/include'
 oldincludedir='/usr/include'
 docdir='${datarootdir}/doc/${PACKAGE_TARNAME}'
@@ -979,15 +978,6 @@ do
   | -silent | --silent | --silen | --sile | --sil)
     silent=yes ;;
 
-  -runstatedir | --runstatedir | --runstatedi | --runstated \
-  | --runstate | --runstat | --runsta | --runst | --runs \
-  | --run | --ru | --r)
-    ac_prev=runstatedir ;;
-  -runstatedir=* | --runstatedir=* | --runstatedi=* | --runstated=* \
-  | --runstate=* | --runstat=* | --runsta=* | --runst=* | --runs=* \
-  | --run=* | --ru=* | --r=*)
-    runstatedir=$ac_optarg ;;
-
   -sbindir | --sbindir | --sbindi | --sbind | --sbin | --sbi | --sb)
     ac_prev=sbindir ;;
   -sbindir=* | --sbindir=* | --sbindi=* | --sbind=* | --sbin=* \
@@ -1125,7 +1115,7 @@ fi
 for ac_var in	exec_prefix prefix bindir sbindir libexecdir datarootdir \
 		datadir sysconfdir sharedstatedir localstatedir includedir \
 		oldincludedir docdir infodir htmldir dvidir pdfdir psdir \
-		libdir localedir mandir runstatedir
+		libdir localedir mandir
 do
   eval ac_val=\$$ac_var
   # Remove trailing slashes.
@@ -1278,7 +1268,6 @@ Fine tuning of the installation directories:
   --sysconfdir=DIR        read-only single-machine data [PREFIX/etc]
   --sharedstatedir=DIR    modifiable architecture-independent data [PREFIX/com]
   --localstatedir=DIR     modifiable single-machine data [PREFIX/var]
-  --runstatedir=DIR       modifiable per-process data [LOCALSTATEDIR/run]
   --libdir=DIR            object code libraries [EPREFIX/lib]
   --includedir=DIR        C header files [PREFIX/include]
   --oldincludedir=DIR     C header files for non-gcc [/usr/include]
@@ -4037,6 +4026,68 @@ fi
 
 
 APR_LOC=$APR_LOC
+
+
+{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for /usr/include/openssl/ssl.h" >&5
+$as_echo_n "checking for /usr/include/openssl/ssl.h... " >&6; }
+if ${ac_cv_file__usr_include_openssl_ssl_h+:} false; then :
+  $as_echo_n "(cached) " >&6
+else
+  test "$cross_compiling" = yes &&
+  as_fn_error $? "cannot check for file existence when cross compiling" "$LINENO" 5
+if test -r "/usr/include/openssl/ssl.h"; then
+  ac_cv_file__usr_include_openssl_ssl_h=yes
+else
+  ac_cv_file__usr_include_openssl_ssl_h=no
+fi
+fi
+{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $ac_cv_file__usr_include_openssl_ssl_h" >&5
+$as_echo "$ac_cv_file__usr_include_openssl_ssl_h" >&6; }
+if test "x$ac_cv_file__usr_include_openssl_ssl_h" = xyes; then :
+  SSL_LOC="/usr/include"
+fi
+
+{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for /opt/openssl/include/openssl/ssl.h" >&5
+$as_echo_n "checking for /opt/openssl/include/openssl/ssl.h... " >&6; }
+if ${ac_cv_file__opt_openssl_include_openssl_ssl_h+:} false; then :
+  $as_echo_n "(cached) " >&6
+else
+  test "$cross_compiling" = yes &&
+  as_fn_error $? "cannot check for file existence when cross compiling" "$LINENO" 5
+if test -r "/opt/openssl/include/openssl/ssl.h"; then
+  ac_cv_file__opt_openssl_include_openssl_ssl_h=yes
+else
+  ac_cv_file__opt_openssl_include_openssl_ssl_h=no
+fi
+fi
+{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $ac_cv_file__opt_openssl_include_openssl_ssl_h" >&5
+$as_echo "$ac_cv_file__opt_openssl_include_openssl_ssl_h" >&6; }
+if test "x$ac_cv_file__opt_openssl_include_openssl_ssl_h" = xyes; then :
+  SSL_LOC="/opt/openssl/include"
+fi
+
+as_ac_File=`$as_echo "ac_cv_file_$HOME/homebrew/opt/openssl/include/openssl/ssl.h" | $as_tr_sh`
+{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for $HOME/homebrew/opt/openssl/include/openssl/ssl.h" >&5
+$as_echo_n "checking for $HOME/homebrew/opt/openssl/include/openssl/ssl.h... " >&6; }
+if eval \${$as_ac_File+:} false; then :
+  $as_echo_n "(cached) " >&6
+else
+  test "$cross_compiling" = yes &&
+  as_fn_error $? "cannot check for file existence when cross compiling" "$LINENO" 5
+if test -r "$HOME/homebrew/opt/openssl/include/openssl/ssl.h"; then
+  eval "$as_ac_File=yes"
+else
+  eval "$as_ac_File=no"
+fi
+fi
+eval ac_res=\$$as_ac_File
+	       { $as_echo "$as_me:${as_lineno-$LINENO}: result: $ac_res" >&5
+$as_echo "$ac_res" >&6; }
+if eval test \"x\$"$as_ac_File"\" = x"yes"; then :
+  SSL_LOC="$HOME/homebrew/opt/openssl/include"
+fi
+
+SSL_LOC=$SSL_LOC
 
 
 # Checks for typedefs, structures, and compiler characteristics.

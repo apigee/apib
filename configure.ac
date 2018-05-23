@@ -46,6 +46,14 @@ AC_CHECK_HEADER([/usr/include/apr-1/apr_general.h], [APR_LOC="/usr/include/apr-1
 AC_CHECK_HEADER([/usr/include/apr-1.0/apr_general.h],[APR_LOC="/usr/include/apr-1.0"])
 AC_SUBST(APR_LOC, [$APR_LOC])
 
+# Homebrew on OS X puts the OpenSSL headers in a variety of different places,
+# and this is harder if you install Homebrew in a non-standard location.
+# This finds it.
+AC_CHECK_FILE([/usr/include/openssl/ssl.h], [SSL_LOC="/usr/include"])
+AC_CHECK_FILE([/opt/openssl/include/openssl/ssl.h], [SSL_LOC="/opt/openssl/include"])
+AC_CHECK_FILE([$HOME/homebrew/opt/openssl/include/openssl/ssl.h], [SSL_LOC="$HOME/homebrew/opt/openssl/include"])
+AC_SUBST(SSL_LOC, [$SSL_LOC])
+
 # Checks for typedefs, structures, and compiler characteristics.
 AC_TYPE_SIZE_T
 

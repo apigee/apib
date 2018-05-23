@@ -14,15 +14,13 @@
    limitations under the License.
 */
 
-#ifdef __FreeBSD__
-#include <sys/types.h>
-#include <sys/sysctl.h>
-#include <sys/times.h>
-#endif
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <sys/types.h>
+#include <sys/sysctl.h>
+#include <sys/times.h>
 
 #include <apr_env.h>
 #include <apr_file_io.h>
@@ -77,16 +75,22 @@ int cpu_Count(apr_pool_t* pool)
 #endif
 }
 
+#ifdef __FreeBSD__
+
 static int getTicks(CPUUsage* cpu, apr_pool_t* pool)
 {
-#ifdef __FreeBSD__
   struct tms ticks;
   cpu->idle = times(&ticks);
   if (cpu->idle == -1)
     return 0;
   cpu->nonIdle = ticks.tms_utime + ticks.tms_stime;
   return 1;
+}
+
 #else
+
+static int getTicks(CPUUsage* cpu, apr_pool_t* pool)
+{
   apr_status_t s;
   apr_file_t* proc;
   char buf[PROC_BUF_LEN];
@@ -135,36 +139,19 @@ static int getTicks(CPUUsage* cpu, apr_pool_t* pool)
   }
 
   return 0;
-#endif
 }
+
+#endif
+
+#ifdef __FreeBSD__
 
 double cpu_GetMemoryUsage(apr_pool_t* pool)
 {
-#ifdef __linux__
-  apr_status_t s;
-  apr_file_t* proc;
-  char buf[PROC_BUF_LEN];
-  LineState line;
-  
-  s = apr_file_open(&proc, "/proc/meminfo", APR_READ, APR_OS_DEFAULT, pool);
-  if (s != APR_SUCCESS) {
-    return 0.0;
-  }
-
-  linep_Start(&line, buf, PROC_BUF_LEN, 0);
-  s = linep_ReadFile(&line, proc);
-  apr_file_close(proc);
-  if (s != APR_SUCCESS) {
-    return 0.0;
-  }
-#endif
-
   long totalMem = 0;
   long freeMem = 0;
   long buffers = 0;
   long cache = 0;
 
-#ifdef __FreeBSD__
   /* Let's work with kilobytes. */
   long pagesize = sysconf(_SC_PAGESIZE) / 1024;
   totalMem = sysconf(_SC_PHYS_PAGES) * pagesize;
@@ -186,7 +173,40 @@ double cpu_GetMemoryUsage(apr_pool_t* pool)
   len = sizeof(inact);
   sysctlbyname("vm.stats.vm.v_inactive_count", &inact, &len, NULL, 0);
   cache = inact * pagesize;
+
+  if ((totalMem <= 0) || (freeMem <= 0)) {
+    return 0.0;
+  }
+
+  return (double)(totalMem - (freeMem + buffers + cache)) / (double)totalMem;
+}
+
 #else
+
+double cpu_GetMemoryUsage(apr_pool_t* pool)
+{
+  apr_status_t s;
+  apr_file_t* proc;
+  char buf[PROC_BUF_LEN];
+  LineState line;
+  
+  s = apr_file_open(&proc, "/proc/meminfo", APR_READ, APR_OS_DEFAULT, pool);
+  if (s != APR_SUCCESS) {
+    return 0.0;
+  }
+
+  linep_Start(&line, buf, PROC_BUF_LEN, 0);
+  s = linep_ReadFile(&line, proc);
+  apr_file_close(proc);
+  if (s != APR_SUCCESS) {
+    return 0.0;
+  }
+
+  long totalMem = 0;
+  long freeMem = 0;
+  long buffers = 0;
+  long cache = 0;
+
   while (linep_NextLine(&line)) {
     char* n = linep_NextToken(&line, " ");
     char* v = linep_NextToken(&line, " ");
@@ -201,7 +221,6 @@ double cpu_GetMemoryUsage(apr_pool_t* pool)
       cache = atol(v);
     }
   }
-#endif
 
   if ((totalMem <= 0) || (freeMem <= 0)) {
     return 0.0;
@@ -209,6 +228,8 @@ double cpu_GetMemoryUsage(apr_pool_t* pool)
 
   return (double)(totalMem - (freeMem + buffers + cache)) / (double)totalMem;
 }
+
+#endif
 
 void cpu_Init(apr_pool_t* pool)
 {
