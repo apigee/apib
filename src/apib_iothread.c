@@ -194,8 +194,6 @@ panic:
   SETSTATE(conn, STATE_PANIC);
 }
 
-
-
 static int setupConnection(ConnectionInfo* conn)
 {
   apr_status_t s;
@@ -239,6 +237,10 @@ static int handshakeSsl(ConnectionInfo* conn)
       return STATUS_CONTINUE;
     }
     assert(FALSE);
+  }
+
+  if (!conn->ioArgs->tlsConfig) {
+    conn->ioArgs->tlsConfig = strdup(SSL_get_cipher_name(conn->ssl));
   }
 
   SETSTATE(conn, STATE_SEND_READY);

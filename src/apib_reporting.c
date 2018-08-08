@@ -39,6 +39,7 @@ typedef struct
 
 static volatile int reporting = 0;
 static volatile apr_uint32_t completedRequests = 0;
+static volatile char* tlsConfig = NULL;
 static volatile apr_uint32_t successfulRequests = 0;
 static volatile apr_uint32_t intervalSuccessful = 0;
 static volatile apr_uint32_t unsuccessfulRequests = 0;
@@ -398,6 +399,8 @@ static void PrintNormalResults(FILE* out, double elapsed)
   fprintf(out, "Non-200 results:      %u\n", unsuccessfulRequests);
   fprintf(out, "Connections opened:   %u\n", connectionsOpened);
   fprintf(out, "Socket errors:        %u\n", socketErrors);
+  if (tlsConfig)
+    fprintf(out, "TLS configuration:    %s\n", tlsConfig);
   fprintf(out, "\n");
   fprintf(out, "Throughput:           %.3lf requests/second\n", 
           successfulRequests / elapsed);
@@ -505,6 +508,26 @@ void PrintResults(FILE* out)
   }
 }
 
+void CompareTLSConfigs(IOArgs* args, int numThreads)
+{
+  if (args == NULL || args[0].sslCtx == NULL) {
+    return;
+  }
+  tlsConfig = args[0].tlsConfig;
+  if (numThreads <= 1) {
+    return;
+  }
+  for (int i = 1; i < numThreads; i++) {
+    if (!args[i].tlsConfig) {
+      continue;
+    }
+    if (strcmp(tlsConfig, args[i].tlsConfig)) {
+      fprintf(stderr, "WARN: thread %i established different "
+              "TLS connection parameters: %s\n", i, args[i].tlsConfig);
+    }
+    free(args[i].tlsConfig);
+  }
+}
 
 void ConsolidateLatencies(IOArgs* args, int numThreads)
 {
@@ -551,5 +574,8 @@ void EndReporting(void)
     freeSamples(&clientSamples);
     freeSamples(&remoteSamples);
     freeSamples(&remote2Samples);
+  }
+  if (tlsConfig) {
+    free(tlsConfig);
   }
 }

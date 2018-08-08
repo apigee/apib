@@ -256,6 +256,7 @@ static int createSslContext(IOArgs* args, int isFirst)
     SSL_library_init();
     initSSLLocks();
   }
+  args->tlsConfig = NULL;
   args->sslCtx = SSL_CTX_new(SSLv23_client_method());
   SSL_CTX_set_options(args->sslCtx, SSL_OP_ALL);
   SSL_CTX_set_mode(args->sslCtx, SSL_MODE_ENABLE_PARTIAL_WRITE);
@@ -635,6 +636,7 @@ int main(int ac, char const* const* av)
     return 0;
   }
 
+  CompareTLSConfigs(ioArgs, NumThreads);
   ConsolidateLatencies(ioArgs, NumThreads);
   PrintResults(stdout);
   EndReporting();
