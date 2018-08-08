@@ -240,7 +240,21 @@ static int handshakeSsl(ConnectionInfo* conn)
   }
 
   if (!conn->ioArgs->tlsConfig) {
-    conn->ioArgs->tlsConfig = strdup(SSL_get_cipher_name(conn->ssl));
+    int len;
+    char *fmt = "%s,%s\n";
+    const char *name = SSL_get_cipher_name(conn->ssl);
+    const char *vers = SSL_get_version(conn->ssl);
+    len = snprintf(NULL, 0, fmt, vers, name);
+    char *ret = malloc(len+1);
+    if (!ret) {
+      SETSTATE(conn, STATE_FAILED);
+      return STATUS_CONTINUE;
+    }
+    if (len != sprintf(ret, fmt, vers, name)) {
+      SETSTATE(conn, STATE_FAILED);
+      return STATUS_CONTINUE;
+    }
+    conn->ioArgs->tlsConfig = ret;
   }
 
   SETSTATE(conn, STATE_SEND_READY);
