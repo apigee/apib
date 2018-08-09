@@ -34,6 +34,7 @@
 
 #include <openssl/err.h>
 #include <openssl/ssl.h>
+#include <openssl/evp.h>
 
 #define DEBUG 0
 
@@ -218,6 +219,56 @@ static int setupConnection(ConnectionInfo* conn)
   return STATUS_CONTINUE;
 }
 
+static char* tmpKey(SSL *ssl)
+{
+  char *ret;
+  int len;
+  EVP_PKEY *key;
+  char *fmt;
+  if (!SSL_get_server_tmp_key(ssl, &key)) {
+    return strdup("");
+  }
+  switch (EVP_PKEY_id(key)) {
+    case EVP_PKEY_RSA:
+      fmt = "RSA-%ibits";
+      len = snprintf(NULL, 0, fmt, EVP_PKEY_bits(key));
+      ret = malloc(len+1);
+      sprintf(ret, fmt, EVP_PKEY_bits(key));
+      break;
+    case EVP_PKEY_DH:
+      fmt = "DHE-%ibits";
+      len = snprintf(NULL, 0, fmt, EVP_PKEY_bits(key));
+      ret = malloc(len+1);
+      sprintf(ret, fmt, EVP_PKEY_bits(key));
+      break;
+    case EVP_PKEY_EC:
+      fmt = "ECDHE-%sbits";
+      EC_KEY *ec = EVP_PKEY_get1_EC_KEY(key);
+      int nid;
+      const char *cname;
+      nid = EC_GROUP_get_curve_name(EC_KEY_get0_group(ec));
+      EC_KEY_free(ec);
+      cname = EC_curve_nid2nist(nid);
+      if (cname == NULL) {
+        cname = OBJ_nid2sn(nid);
+      }
+      len = snprintf(NULL, 0, fmt, cname);
+      ret = malloc(len+1);
+      sprintf(ret, fmt, cname);
+      break;
+    default:
+      fmt = "%s-%ibits";
+      const char *name = OBJ_nid2sn(EVP_PKEY_id(key));
+      int bits = EVP_PKEY_bits(key);
+      len = snprintf(NULL, 0, fmt, name, bits);
+      ret = malloc(len+1);
+      sprintf(ret, fmt, name, bits);
+      break;
+  }
+  EVP_PKEY_free(key);
+  return ret;
+}
+
 static int handshakeSsl(ConnectionInfo* conn)
 {
   int sslStatus;
@@ -241,19 +292,21 @@ static int handshakeSsl(ConnectionInfo* conn)
 
   if (!conn->ioArgs->tlsConfig) {
     int len;
-    char *fmt = "%s,%s\n";
+    char *fmt = "%s,%s,%s\n";
     const char *name = SSL_get_cipher_name(conn->ssl);
     const char *vers = SSL_get_version(conn->ssl);
-    len = snprintf(NULL, 0, fmt, vers, name);
+    char *eph_key = tmpKey(conn->ssl);
+    len = snprintf(NULL, 0, fmt, vers, name, eph_key);
     char *ret = malloc(len+1);
     if (!ret) {
       SETSTATE(conn, STATE_FAILED);
       return STATUS_CONTINUE;
     }
-    if (len != sprintf(ret, fmt, vers, name)) {
+    if (len != sprintf(ret, fmt, vers, name, eph_key)) {
       SETSTATE(conn, STATE_FAILED);
       return STATUS_CONTINUE;
     }
+    free(eph_key);
     conn->ioArgs->tlsConfig = ret;
   }
 
