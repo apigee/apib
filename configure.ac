@@ -34,6 +34,8 @@ AC_SEARCH_LIBS([CRYPTO_num_locks], crypto)
 AC_SEARCH_LIBS([pthread_create], pthread)
 AC_CHECK_LIB([ssl], [SSL_read], [],
              [AC_MSG_ERROR([OpenSSL library missing. Install "openssl-devel" or the equivalent])])
+AC_CHECK_LIB([crypto], [EVP_PKEY_id], [],
+             [AC_MSG_ERROR([OpenSSL library missing. Install "openssl-devel" or the equivalent])])
 AC_CHECK_LIB([apr-1], [apr_initialize], [],
              [AC_MSG_ERROR([APR library missing. Install "apr-devel" or the equivalent])])
 AC_CHECK_LIB([aprutil-1], [apr_uri_parse], [],
