@@ -42,6 +42,7 @@ typedef struct {
   unsigned int    sendDataSize;
   SSL_CTX*        sslCtx;
   char*           tlsConfig;
+  char***         sslSettings;
   char**          headers;
   pq_Queue*       delayQueue;
   unsigned int    thinkTime;

@@ -34,6 +34,7 @@
 
 #include <openssl/ssl.h>
 #include <openssl/crypto.h>
+#include <openssl/err.h>
 
 #if HAVE_PTHREAD_H
 #include <pthread.h>
@@ -79,6 +80,7 @@ static apr_getopt_option_t Options[] =
     { "input-file", 'f', 1, "File name to send on PUT and POST requests" },
     { "help", 'h', 0, "Display this message" },
     { "keep-alive", 'k', 1, "Keep-alive duration -- 0 to disable, non-zero for timeout (default 9999)" },
+    { "openssl-conf", 'o', 1, "Set the SSL_CONF_cmd(3) settings, with name separated from value with '='" },
     { "content-type", 't', 1, "Value of the Content-Type header" },
     { "username-password", 'u', 1, "Credentials for HTTP Basic authentication in username:password format" },
     { "verbose", 'v', 0, "Verbose output" },
@@ -271,6 +273,27 @@ static int createSslContext(IOArgs* args, int isFirst)
       return -1;
     }
   }
+
+  SSL_CONF_CTX *cctx = NULL;
+  cctx = SSL_CONF_CTX_new();
+  SSL_CONF_CTX_set_flags(cctx, SSL_CONF_FLAG_FILE|SSL_CONF_FLAG_CLIENT);
+  SSL_CONF_CTX_set_ssl_ctx(cctx, args->sslCtx);
+  for (int i=0; args->sslSettings[i]; i++) {
+    if (SSL_CONF_cmd(cctx, args->sslSettings[i][0], args->sslSettings[i][1])
+        <= 0) {
+      fprintf(stderr, "Set CMD '%s' to val '%s' failed\n",
+              args->sslSettings[i][0], args->sslSettings[i][1]);
+      ERR_print_errors_fp(stderr);
+      fflush(stderr);
+      return -1;
+    }
+  }
+  if (!SSL_CONF_CTX_finish(cctx)) {
+    fprintf(stderr, "Finalizing SSL_CONF_CTX failed\n");
+    return -1;
+  }
+  SSL_CONF_CTX_free(cctx);
+
   return 0;
 }
 
@@ -389,6 +412,47 @@ static void processBasic(const char* arg)
   addHeader(hdr);
 }
 
+void addEntryToSslSettings(char**** sslSettings, const char* opt)
+{
+  int count=0;
+  char**** tmp = sslSettings;
+  char*** strings;
+  for (char*** i = *sslSettings; *i; i++) {
+    count++;
+  }
+  *tmp = realloc(*sslSettings, sizeof(char***) * (count+2));
+  if (!*tmp)
+    abort();
+  *sslSettings = *tmp;
+  strings = *tmp;
+  strings[count] = malloc(sizeof(char**) * 2);
+  if (!strings[count])
+    abort();
+  // keep null termination of array
+  strings[count+1] = NULL;
+  strings[count][0] = strdup(opt);
+  // split the name of config from value of config
+  strings[count][1] = strchr(strings[count][0], '=');
+  if (!strings[count][1]) {
+    fprintf(stderr, "The openssl CONF setting '%s' is missing a '=' sign",
+            opt);
+    abort();
+  }
+  *strings[count][1] = '\0';
+  strings[count][1]++;
+}
+
+void freeSslSettings(char*** sslSettings)
+{
+  for (int i=0; sslSettings[i]; i++) {
+    free(sslSettings[i][0]);
+    // the second element in the tuple is a substring of the first one
+    // so they share the allocation
+    free(sslSettings[i]);
+  }
+  free(sslSettings);
+}
+
 int main(int ac, char const* const* av)
 {
   int argc = ac;
@@ -412,6 +476,13 @@ int main(int ac, char const* const* av)
   char* monitorHost = NULL;
   char* monitor2Host = NULL;
   unsigned int thinkTime = 0;
+  char*** sslSettings;
+
+  sslSettings = calloc(1, sizeof(char***));
+  if (!sslSettings)
+    abort();
+  if (*sslSettings != NULL)
+    abort();
 
   NumConnections = DEFAULT_NUM_CONNECTIONS;
   NumThreads = -1;
@@ -449,6 +520,10 @@ int main(int ac, char const* const* av)
       case 'k':
 	KeepAlive = atoi(curArg);
 	break;
+      case 'o':
+        addEntryToSslSettings(&sslSettings, curArg);
+        break;
+
       case 't':
 	contentType = apr_pstrdup(MainPool, curArg);
 	break;
@@ -574,6 +649,7 @@ int main(int ac, char const* const* av)
       ioArgs[i].numConnections = numConn;
       ioArgs[i].contentType = contentType;
       ioArgs[i].sslCipher = sslCipher;
+      ioArgs[i].sslSettings = sslSettings;
       ioArgs[i].headers = Headers;
       ioArgs[i].numHeaders = NumHeaders;
       ioArgs[i].hostHeaderOverride = HostHeaderOverride;
@@ -641,6 +717,7 @@ int main(int ac, char const* const* av)
   PrintResults(stdout);
   EndReporting();
   cleanup(ioArgs);
+  freeSslSettings(sslSettings);
 
 finished:
   apr_pool_destroy(MainPool);
