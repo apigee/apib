@@ -219,15 +219,11 @@ static int setupConnection(ConnectionInfo* conn)
   return STATUS_CONTINUE;
 }
 
-static char* tmpKey(SSL *ssl)
+static char* key_info(EVP_PKEY *key, int is_dh)
 {
   char *ret;
   int len;
-  EVP_PKEY *key;
   char *fmt;
-  if (!SSL_get_server_tmp_key(ssl, &key)) {
-    return strdup("");
-  }
   switch (EVP_PKEY_id(key)) {
     case EVP_PKEY_RSA:
       fmt = "RSA-%ibits";
@@ -236,13 +232,19 @@ static char* tmpKey(SSL *ssl)
       sprintf(ret, fmt, EVP_PKEY_bits(key));
       break;
     case EVP_PKEY_DH:
-      fmt = "DHE-%ibits";
+      if (is_dh)
+        fmt = "DHE-%ibits";
+      else
+        fmt = "DH-%ibits";
       len = snprintf(NULL, 0, fmt, EVP_PKEY_bits(key));
       ret = malloc(len+1);
       sprintf(ret, fmt, EVP_PKEY_bits(key));
       break;
     case EVP_PKEY_EC:
-      fmt = "ECDHE-%sbits";
+      if (is_dh)
+        fmt = "ECDHE-%s";
+      else
+        fmt = "ECDSA-%s";
       EC_KEY *ec = EVP_PKEY_get1_EC_KEY(key);
       int nid;
       const char *cname;
@@ -256,6 +258,12 @@ static char* tmpKey(SSL *ssl)
       ret = malloc(len+1);
       sprintf(ret, fmt, cname);
       break;
+    case NID_X25519:
+    case NID_X448:
+    case NID_ED25519:
+    case NID_ED448:
+      ret = strdup(OBJ_nid2sn(EVP_PKEY_id(key)));
+      break;
     default:
       fmt = "%s-%ibits";
       const char *name = OBJ_nid2sn(EVP_PKEY_id(key));
@@ -265,7 +273,107 @@ static char* tmpKey(SSL *ssl)
       sprintf(ret, fmt, name, bits);
       break;
   }
+  return ret;
+}
+
+static char* tmpKey(SSL *ssl)
+{
+  char *ret;
+  EVP_PKEY *key;
+  if (!SSL_get_server_tmp_key(ssl, &key)) {
+    return strdup("");
+  }
+  ret = key_info(key, 1);
   EVP_PKEY_free(key);
+  return ret;
+}
+
+static const char *get_sigtype(int nid)
+{
+  switch (nid) {
+  case EVP_PKEY_RSA:
+    return "RSA";
+
+  case EVP_PKEY_RSA_PSS:
+    return "RSA-PSS";
+
+  case EVP_PKEY_DSA:
+    return "DSA";
+
+  case EVP_PKEY_EC:
+    return "ECDSA";
+
+  case NID_ED25519:
+    return "Ed25519";
+
+  case NID_ED448:
+    return "Ed448";
+
+  case NID_id_GostR3410_2001:
+    return "gost2001";
+
+  case NID_id_GostR3410_2012_256:
+    return "gost2012_256";
+
+  case NID_id_GostR3410_2012_512:
+    return "gost2012_512";
+
+  default:
+    return OBJ_nid2sn(nid);
+  }
+}
+
+static char* srvCert(SSL* ssl)
+{
+  char *ret;
+  X509 *cert;
+  cert = SSL_get_peer_certificate(ssl);
+  char* pkey_type;
+  const char* hash_name = NULL;
+  const char* sig_alg_name = NULL;
+  const char* tmp;
+
+  if (cert) {
+    EVP_PKEY *pkey;
+    pkey = X509_get0_pubkey(cert);
+    pkey_type = key_info(pkey, 0);
+    int nid;
+    if (SSL_get_peer_signature_nid(ssl, &nid))
+        hash_name = OBJ_nid2sn(nid);
+    if (SSL_get_peer_signature_type_nid(ssl, &nid))
+        sig_alg_name = get_sigtype(nid);
+
+    char *fmt;
+    if (hash_name && sig_alg_name) {
+        fmt = "%s,%s-%s";
+    }
+    else if (hash_name || sig_alg_name) {
+        fmt = "%s,%s";
+        if (hash_name)
+          tmp = hash_name;
+        else
+          tmp = sig_alg_name;
+    } else {
+        fmt = "%s";
+    }
+
+    int len;
+    if (hash_name && sig_alg_name) {
+      len = snprintf(NULL, 0, fmt, pkey_type, sig_alg_name, hash_name);
+      ret = malloc(len + 1);
+      sprintf(ret, fmt, pkey_type, sig_alg_name, hash_name);
+      free(pkey_type);
+    } else if (hash_name || sig_alg_name) {
+      len = snprintf(NULL, 0, fmt, pkey_type, tmp);
+      ret = malloc(len + 1);
+      sprintf(ret, fmt, pkey_type, tmp);
+      free(pkey_type);
+    } else {
+      ret = pkey_type;
+    }
+
+    X509_free(cert);
+  }
   return ret;
 }
 
@@ -292,21 +400,23 @@ static int handshakeSsl(ConnectionInfo* conn)
 
   if (!conn->ioArgs->tlsConfig) {
     int len;
-    char *fmt = "%s,%s,%s\n";
+    char *fmt = "%s,%s,%s,%s\n";
     const char *name = SSL_get_cipher_name(conn->ssl);
     const char *vers = SSL_get_version(conn->ssl);
     char *eph_key = tmpKey(conn->ssl);
-    len = snprintf(NULL, 0, fmt, vers, name, eph_key);
+    char *cer_key = srvCert(conn->ssl);
+    len = snprintf(NULL, 0, fmt, vers, name, eph_key, cer_key);
     char *ret = malloc(len+1);
     if (!ret) {
       SETSTATE(conn, STATE_FAILED);
       return STATUS_CONTINUE;
     }
-    if (len != sprintf(ret, fmt, vers, name, eph_key)) {
+    if (len != sprintf(ret, fmt, vers, name, eph_key, cer_key)) {
       SETSTATE(conn, STATE_FAILED);
       return STATUS_CONTINUE;
     }
     free(eph_key);
+    free(cer_key);
     conn->ioArgs->tlsConfig = ret;
   }
 
