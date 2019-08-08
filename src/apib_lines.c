@@ -145,17 +145,20 @@ int linep_Reset(LineState* l)
   return (remaining >= l->bufSize);
 }
 
-#if 0
-int linep_ReadFile(LineState* l, apr_file_t* file)
+int linep_ReadFile(LineState* l, FILE* file)
 {
-  int len = l->bufSize - l->bufLen;
-  apr_status_t s;
-
-  s = apr_file_read(file, l->buf + l->bufLen, &len);
-  l->bufLen += len;
-  return s;
+  const int len = l->bufSize - l->bufLen;
+  const size_t r = fread(l->buf + l->bufLen, 1, len, file);
+  if (r == 0) {
+    if (ferror(file)) {
+      return -1;
+    }
+  }
+  l->bufLen += r;
+  return r;
 }
 
+#if 0
 int linep_ReadSocket(LineState* l, apr_socket_t* sock)
 {
   int len = l->bufSize - l->bufLen;

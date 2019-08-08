@@ -5,9 +5,13 @@ cc_library(
     srcs = [
         "apib_lines.c",
         "apib_priorityq.c",
+        "apib_rand_48.c",
+        "apib_url.c",
     ],
     hdrs = [
         "apib_lines.h",
         "apib_priorityq.h",
+        "apib_rand.h",
+        "apib_url.h",
     ],
 )

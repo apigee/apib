@@ -65,10 +65,10 @@ extern char* linep_NextToken(LineState* l, const char* toks);
    are too long and stop processing. */
 extern int linep_Reset(LineState* l);
 
-#if 0
 /* Fill the line buffer with data from a file. Return what the read call did. */
-extern int linep_ReadFile(LineState* l, apr_file_t* file);
+extern int linep_ReadFile(LineState* l, FILE* file);
 
+#if 0
 /* Fill the buffer with data from a socket */
 extern int linep_ReadSocket(LineState* l, apr_socket_t* sock);
 #endif

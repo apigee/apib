@@ -1,0 +1,6 @@
+http://localhost/foo/bar
+http://localhost:1234/bar/baz
+http://localhost
+https://localhost:90/baz?one=two&three=four
+https://localhost/one?two=three&four=1234
+https://localhost

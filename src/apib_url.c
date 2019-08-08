@@ -1,135 +1,155 @@
 /*
-   Copyright 2013 Apigee Corp.
+Copyright 2019 Google LLC
 
-   Licensed under the Apache License, Version 2.0 (the "License");
-   you may not use this file except in compliance with the License.
-   You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-       http://www.apache.org/licenses/LICENSE-2.0
+    https://www.apache.org/licenses/LICENSE-2.0
 
-   Unless required by applicable law or agreed to in writing, software
-   distributed under the License is distributed on an "AS IS" BASIS,
-   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-   See the License for the specific language governing permissions and
-   limitations under the License.
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 */
 
+#include "apib_url.h"
+
+#include <assert.h>
+#include <netdb.h>
+#include <regex.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
+#include <sys/socket.h>
+#include <sys/types.h>
 
-#include <apib_common.h>
+#include "src/apib_lines.h"
 
 #define URL_BUF_LEN 8192
 #define INITIAL_URLS 16
-#define MAX_ENTROPY_ROUNDS 100
-#define SEED_SIZE 8192
+
+#define URL_REGEXP "^(https?):\\/\\/([a-zA-Z0-9\\-\\.]+)(:([0-9]+))?(\\/.*)?$"
+// Number of "()"s in the expression above, plus 1
+#define URL_REGEXP_MATCHES 6
 
 static unsigned int urlCount = 0;
 static unsigned int urlSize = 0;
-static URLInfo*     urls;
+static URLInfo* urls;
+static int initialized = 0;
 
-const URLInfo* url_GetNext(RandState rand)
-{
-  long randVal;
+static regex_t urlExpression;
 
-  if (urlCount == 0) {
-    return NULL;
-  }
-  if (urlCount == 1) {
-    return &(urls[0]);
-  }
-
-#if HAVE_LRAND48_R
-  lrand48_r(rand, &randVal);
-#elif HAVE_RAND_R
-  randVal = rand_r(rand);
-#else
-  randVal = rand();
-#endif
-
-  return &(urls[randVal % urlCount]);
+static void initializeExpression() {
+  const int e = regcomp(&urlExpression, URL_REGEXP, REG_EXTENDED);
+  assert(e == 0);
 }
 
-static int initUrl(URLInfo* u, apr_pool_t* pool)
-{
-  apr_status_t s;
-  char errBuf[128];
-  apr_sockaddr_t* newAddrs;
-  apr_sockaddr_t* a;
-  int addrCount;
+static int initHost(const char* hostname, URLInfo* u) {
+  struct addrinfo hints;
+  struct addrinfo* results;
 
-  if (u->url.scheme == NULL) {
-    fprintf(stderr, "Missing URL scheme\n");
+  // For now, look up only IP V4 addresses
+  hints.ai_family = AF_INET;
+  hints.ai_socktype = SOCK_STREAM;
+  hints.ai_protocol = 0;
+  hints.ai_flags = 0;
+
+  const int addrerr = getaddrinfo(hostname, NULL, &hints, &results);
+  if (addrerr) {
     return -1;
-  } else if (!strcmp(u->url.scheme, "https")) {
-    u->isSsl = TRUE;
-  } else if (!strcmp(u->url.scheme, "http")) {
-    u->isSsl = FALSE;
+  }
+
+  struct addrinfo* a = results;
+  u->addresses = results;
+  int c = 1;
+  for (; a->ai_next != NULL; c++) {
+    a = a->ai_next;
+  }
+  u->addressCount = c;
+  return 0;
+}
+
+static char* getRegexPart(const char* urlstr, const regmatch_t* matches,
+                          const int ix) {
+  const regmatch_t* match = &(matches[ix]);
+  if (match->rm_so >= 0) {
+    assert(match->rm_eo >= match->rm_so);
+    return strndup(urlstr + match->rm_so, match->rm_eo - match->rm_so);
+  }
+  return NULL;
+}
+
+static int initUrl(const char* urlstr, URLInfo* u) {
+  regmatch_t matches[URL_REGEXP_MATCHES];
+  const int match =
+      regexec(&urlExpression, urlstr, URL_REGEXP_MATCHES, matches, 0);
+  if (match) {
+    char errBuf[128];
+    regerror(match, &urlExpression, errBuf, 128);
+    fprintf(stderr, "Error matching URL: %s\n", errBuf);
+    return -1;
+  }
+
+  // Match 1 is either "http" or "https". Just count characters.
+  u->isSsl = ((matches[1].rm_eo - matches[1].rm_so) == 5);
+
+  // Match 2 is the "hostname"
+  char* hoststr = getRegexPart(urlstr, matches, 2);
+  assert(hoststr != NULL);
+  const int hosterr = initHost(hoststr, u);
+  free(hoststr);
+  if (hosterr) {
+    // No addresses, which is OK now
+    u->addresses = NULL;
+    u->addressCount = 0;
+  }
+
+  // Match 4 is the port number, if any
+  char* portstr = getRegexPart(urlstr, matches, 4);
+  if (portstr != NULL) {
+    u->port = atoi(portstr);
+    free(portstr);
+  } else if (u->isSsl) {
+    u->port = 443;
   } else {
-    fprintf(stderr, "Invalid URL scheme\n");
-    return -1;
+    u->port = 80;
   }
 
-  if (u->url.port_str == NULL) {
-    if (u->isSsl) {
-      u->port = 443;
-    } else {
-      u->port = 80;
-    }
+  // Match 5 is the path, if any
+  char* path = getRegexPart(urlstr, matches, 5);
+  if (path != NULL) {
+    u->path = path;
   } else {
-    u->port = atoi(u->url.port_str);
-  }
-
-  s = apr_sockaddr_info_get(&newAddrs, u->url.hostname,
-			    APR_INET, u->port, 0, pool);
-  if (s != APR_SUCCESS) {
-    apr_strerror(s, errBuf, 128);
-    fprintf(stderr, "Error looking up host \"%s\": %s\n", 
-	    u->url.hostname, errBuf);
-    return -1;
-  }
-
-  addrCount = 0;
-  a = newAddrs;
-  while (a != NULL) {
-    addrCount++;
-    a = a->next;
-  }
-
-  u->addressCount = addrCount;
-  u->addresses = (apr_sockaddr_t**)apr_palloc(pool, sizeof(apr_sockaddr_t*) * addrCount);
-  a = newAddrs;
-  for (int i = 0; i < addrCount; i++) {
-    u->addresses[i] = a;
-    a = a->next;
+    // strdup here because "Reset" will actually call "free"
+    u->path = strdup("/");
   }
 
   return 0;
 }
 
-static apr_sockaddr_t* getConn(const URLInfo* u, int index) 
-{
+/*
+static apr_sockaddr_t* getConn(const URLInfo* u, int index) {
   return u->addresses[index % u->addressCount];
 }
+*/
 
-int url_InitOne(const char* urlStr, apr_pool_t* pool)
-{
-  apr_status_t s;
+int url_InitOne(const char* urlStr) {
+  assert(!initialized);
+  initializeExpression();
 
   urlCount = urlSize = 1;
   urls = (URLInfo*)malloc(sizeof(URLInfo));
-
-  s = apr_uri_parse(pool, urlStr, &(urls[0].url));
-  if (s != APR_SUCCESS) {
-    fprintf(stderr, "Invalid URL\n");
-    return -1;
+  const int e = initUrl(urlStr, &(urls[0]));
+  if (e == 0) {
+    initialized = 1;
   }
-
-  return initUrl(&(urls[0]), pool);
+  return e;
 }
 
-apr_sockaddr_t* url_GetAddress(const URLInfo* url, int index)
-{
+/*
+apr_sockaddr_t* url_GetAddress(const URLInfo* url, int index) {
   apr_sockaddr_t* a = getConn(url, index);
 
 #if DEBUG
@@ -140,19 +160,19 @@ apr_sockaddr_t* url_GetAddress(const URLInfo* url, int index)
   return a;
 }
 
-int url_IsSameServer(const URLInfo* u1, const URLInfo* u2, int index)
-{
+int url_IsSameServer(const URLInfo* u1, const URLInfo* u2, int index) {
   if (u1->port != u2->port) {
     return 0;
   }
-  return apr_sockaddr_equal(getConn(u1, index), 
-                            getConn(u2, index));
+  return apr_sockaddr_equal(getConn(u1, index), getConn(u2, index));
 }
+*/
 
-int url_InitFile(const char* fileName, apr_pool_t* pool)
-{
-  apr_status_t s;
-  apr_file_t* file;
+int url_InitFile(const char* fileName) {
+  assert(!initialized);
+  initializeExpression();
+
+  FILE* file;
   char buf[URL_BUF_LEN];
   LineState line;
 
@@ -160,16 +180,16 @@ int url_InitFile(const char* fileName, apr_pool_t* pool)
   urlSize = INITIAL_URLS;
   urls = (URLInfo*)malloc(sizeof(URLInfo) * INITIAL_URLS);
 
-  s = apr_file_open(&file, fileName, APR_READ, APR_OS_DEFAULT, pool);
-  if (s != APR_SUCCESS) {
+  file = fopen(fileName, "r");
+  if (file == NULL) {
     fprintf(stderr, "Can't open \"%s\"\n", fileName);
     return -1;
   }
 
   linep_Start(&line, buf, URL_BUF_LEN, 0);
-  s = linep_ReadFile(&line, file);
-  if (s != APR_SUCCESS) {
-    apr_file_close(file);
+  int rc = linep_ReadFile(&line, file);
+  if (rc < 0) {
+    fclose(file);
     return -1;
   }
 
@@ -177,41 +197,51 @@ int url_InitFile(const char* fileName, apr_pool_t* pool)
     while (linep_NextLine(&line)) {
       char* urlStr = linep_GetLine(&line);
       if (urlCount == urlSize) {
-	urlSize *= 2;
-	urls = (URLInfo*)realloc(urls, sizeof(URLInfo) * urlSize);
+        urlSize *= 2;
+        urls = (URLInfo*)realloc(urls, sizeof(URLInfo) * urlSize);
       }
-      s = apr_uri_parse(pool, urlStr, &(urls[urlCount].url));
-      if (s != APR_SUCCESS) {
-	fprintf(stderr, "Invalid URL \"%s\"\n", urlStr);
-	apr_file_close(file);
-	return -1;
-      }
-      if (initUrl(&(urls[urlCount]), pool) != 0) {
-	apr_file_close(file);
-	return -1;
+
+      int err = initUrl(urlStr, &(urls[urlCount]));
+      if (err) {
+        fprintf(stderr, "Invalid URL \"%s\"\n", urlStr);
+        fclose(file);
+        return -1;
       }
       urlCount++;
     }
     linep_Reset(&line);
-    s = linep_ReadFile(&line, file);
-  } while (s == APR_SUCCESS);
+    rc = linep_ReadFile(&line, file);
+  } while (rc > 0);
 
   printf("Read %i URLs from \"%s\"\n", urlCount, fileName);
 
-  apr_file_close(file);
+  fclose(file);
+  initialized = 1;
   return 0;
 }
 
-void url_InitRandom(RandState state)
-{
-  unsigned int seed;
+const URLInfo* url_GetNext(RandState rand) {
+  if (urlCount == 0) {
+    return NULL;
+  }
+  if (urlCount == 1) {
+    return &(urls[0]);
+  }
 
-  apr_generate_random_bytes((unsigned char*)&seed, sizeof(int));
-
-#if HAVE_LRAND48_R
-  srand48_r(seed, state);
-#else
-  srand(seed);
-#endif
+  const long randVal = apib_Rand(rand);
+  return &(urls[randVal % urlCount]);
 }
 
+void url_Reset() {
+  if (initialized) {
+    for (int i = 0; i < urlCount; i++) {
+      free(urls[i].path);
+      if (urls[i].addresses != NULL) {
+        freeaddrinfo(urls[i].addresses);
+      }
+    }
+    urlCount = urlSize = 0;
+    free(urls);
+    initialized = 0;
+  }
+}
