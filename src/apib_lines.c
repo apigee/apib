@@ -1,20 +1,22 @@
 /*
-   Copyright 2013 Apigee Corp.
+Copyright 2019 Google LLC
 
-   Licensed under the Apache License, Version 2.0 (the "License");
-   you may not use this file except in compliance with the License.
-   You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-       http://www.apache.org/licenses/LICENSE-2.0
+    https://www.apache.org/licenses/LICENSE-2.0
 
-   Unless required by applicable law or agreed to in writing, software
-   distributed under the License is distributed on an "AS IS" BASIS,
-   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-   See the License for the specific language governing permissions and
-   limitations under the License.
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 */
 
-#include <apib_common.h>
+#include "apib_lines.h"
+
+#include <string.h>
 
 static int isChar(const char c, const char* match)
 {
@@ -29,8 +31,8 @@ static int isChar(const char c, const char* match)
   return 0;
 }
 
-void linep_Start(LineState* l, char* line, apr_size_t size,
-		 apr_size_t len)
+void linep_Start(LineState* l, char* line, int size,
+		 int len)
 {
   l->httpMode = 0;
   l->buf = line;
@@ -130,7 +132,7 @@ char* linep_NextToken(LineState* l, const char* toks)
 
 int linep_Reset(LineState* l)
 {
-  apr_size_t remaining;
+  int remaining;
   if (!l->lineComplete) {
     remaining = l->bufLen - l->lineStart;
     memmove(l->buf, l->buf + l->lineStart, remaining);
@@ -143,9 +145,10 @@ int linep_Reset(LineState* l)
   return (remaining >= l->bufSize);
 }
 
+#if 0
 int linep_ReadFile(LineState* l, apr_file_t* file)
 {
-  apr_size_t len = l->bufSize - l->bufLen;
+  int len = l->bufSize - l->bufLen;
   apr_status_t s;
 
   s = apr_file_read(file, l->buf + l->bufLen, &len);
@@ -155,16 +158,17 @@ int linep_ReadFile(LineState* l, apr_file_t* file)
 
 int linep_ReadSocket(LineState* l, apr_socket_t* sock)
 {
-  apr_size_t len = l->bufSize - l->bufLen;
+  int len = l->bufSize - l->bufLen;
   apr_status_t s;
 
   s = apr_socket_recv(sock, l->buf + l->bufLen, &len);
   l->bufLen += len;
   return s;
 }
+#endif
 
 void linep_GetReadInfo(const LineState* l, char** buf, 
-		       apr_size_t* remaining)
+		       int* remaining)
 {
   if (buf != NULL) {
     *buf = l->buf + l->bufLen;
@@ -174,7 +178,7 @@ void linep_GetReadInfo(const LineState* l, char** buf,
   }
 }
 
-void linep_GetDataRemaining(const LineState* l, apr_size_t* remaining)
+void linep_GetDataRemaining(const LineState* l, int* remaining)
 {
   *remaining = l->bufLen - l->lineEnd;
 }
@@ -184,12 +188,12 @@ void linep_WriteRemaining(const LineState* l, FILE* out)
   fwrite(l->buf + l->lineEnd, l->bufLen - l->lineEnd, 1, out);
 }
 
-void linep_Skip(LineState* l, apr_size_t toSkip)
+void linep_Skip(LineState* l, int toSkip)
 {
   l->lineEnd += toSkip;
 }
 
-void linep_SetReadLength(LineState* l, apr_size_t len)
+void linep_SetReadLength(LineState* l, int len)
 {
   l->bufLen += len;
 }
@@ -197,7 +201,7 @@ void linep_SetReadLength(LineState* l, apr_size_t len)
 void linep_Debug(const LineState* l, FILE* out)
 {
   fprintf(out, 
-          "buf len = %zu line start = %zu end = %zu tok start = %zu end = %zu\n",
+          "buf len = %i line start = %i end = %i tok start = %i end = %i\n",
 	  l->bufLen, l->lineStart, l->lineEnd, 
 	  l->tokStart, l->tokEnd);
 }

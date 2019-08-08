@@ -1,17 +1,17 @@
 /*
-   Copyright 2013 Apigee Corp.
+Copyright 2019 Google LLC
 
-   Licensed under the Apache License, Version 2.0 (the "License");
-   you may not use this file except in compliance with the License.
-   You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-       http://www.apache.org/licenses/LICENSE-2.0
+    https://www.apache.org/licenses/LICENSE-2.0
 
-   Unless required by applicable law or agreed to in writing, software
-   distributed under the License is distributed on an "AS IS" BASIS,
-   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-   See the License for the specific language governing permissions and
-   limitations under the License.
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 */
 
 /*
@@ -21,24 +21,26 @@
  
 #include <stdlib.h>
 
-#include <apr_pools.h>
-
-#include <apib_common.h>
+#include "apib_priorityq.h"
 
 #define INITIAL_SIZE 16
 
-pq_Queue* pq_Create(apr_pool_t* pool)
+pq_Queue* pq_Create()
 {
   pq_Queue* q =
-    (pq_Queue*)apr_palloc(pool, sizeof(pq_Queue));
-  q->pool = pool;
+    (pq_Queue*)malloc(sizeof(pq_Queue));
   q->allocated = INITIAL_SIZE;
   q->size = 1;
   q->items = 
-    (pq_Item*)apr_palloc(pool, sizeof(pq_Item) * INITIAL_SIZE);
+    (pq_Item*)malloc(sizeof(pq_Item) * INITIAL_SIZE);
   q->items[0].weight = 0;
   q->items[0].item = NULL;
   return q;
+}
+
+void pq_Free(pq_Queue* q) {
+  free(q->items);
+  free(q);
 }
 
 /*
@@ -93,12 +95,9 @@ static void downheap(pq_Queue* q, int p)
 void pq_Push(pq_Queue* q, void* item, long long priority)
 {
   if (q->size >= q->allocated) {
-    pq_Item* ni;
     /* Expand the array */
     q->allocated *= 2;
-    ni = apr_palloc(q->pool, sizeof(pq_Item) * q->allocated);
-    memcpy(ni, q->items, sizeof(pq_Item) * q->size);
-    q->items = ni;
+    q->items = realloc(q->items, sizeof(pq_Item) * q->allocated);
   }
   /* Put the element on the end and fix up the heap */
   q->items[q->size].item = item;
