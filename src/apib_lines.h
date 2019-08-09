@@ -68,10 +68,8 @@ extern int linep_Reset(LineState* l);
 /* Fill the line buffer with data from a file. Return what the read call did. */
 extern int linep_ReadFile(LineState* l, FILE* file);
 
-#if 0
 /* Fill the buffer with data from a socket */
-extern int linep_ReadSocket(LineState* l, apr_socket_t* sock);
-#endif
+extern int linep_ReadFd(LineState* l, int fd);
 
 /* Get info to fill the rest of the buffer */
 extern void linep_GetReadInfo(const LineState* l, char** buf, 
@@ -90,6 +88,27 @@ extern void linep_Skip(LineState* l, int toSkip);
 extern void linep_SetReadLength(LineState* l, int len);
 
 extern void linep_Debug(const LineState* l, FILE* out);
+
+/*
+Code for managing buffered output. It's just an auto-resizing string buffer.
+*/
+typedef struct {
+  char* buf;
+  int size;
+  int pos;
+} StringBuf;
+
+#define DEFAULT_STRINGBUF_SIZE 128
+
+extern void buf_New(StringBuf* b, int sizeHint);
+
+extern void buf_Free(StringBuf* b);
+
+extern void buf_Append(StringBuf* b, const char* s);
+
+extern const char* buf_Get(const StringBuf* b);
+
+extern int buf_Length(const StringBuf* b);
 
 #ifdef __cplusplus
 }

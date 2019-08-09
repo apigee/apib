@@ -25,6 +25,8 @@ limitations under the License.
 extern "C" {
 #endif
 
+typedef enum { Request, Response } MessageType;
+
 // State values. They are increasing integers so that you can do a ">"
 #define MESSAGE_INIT 0
 #define MESSAGE_STATUS 1
@@ -38,12 +40,19 @@ extern "C" {
 #define CHUNK_END 3
 
 typedef struct {
+  MessageType type;
   int state;
 
   // Available when state >= MESSAGE_STATUS
-  int statusCode;
   int majorVersion;
   int minorVersion;
+
+  // Only available for a response
+  int statusCode;
+
+  // Only available for a request
+  char* method;
+  char* path;
 
   // Available when state >= MESSAGE_HEADERS
   int contentLength;
@@ -72,7 +81,12 @@ Create a response object.
 extern HttpMessage* message_NewResponse();
 
 /*
-Free a response object.
+Create a request.
+*/
+extern HttpMessage* message_NewRequest();
+
+/*
+Free a message.
 */
 extern void message_Free(HttpMessage* r);
 

@@ -17,6 +17,9 @@ limitations under the License.
 #include "apib_lines.h"
 
 #include <string.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
 
 static int isChar(const char c, const char* match)
 {
@@ -158,17 +161,15 @@ int linep_ReadFile(LineState* l, FILE* file)
   return r;
 }
 
-#if 0
-int linep_ReadSocket(LineState* l, apr_socket_t* sock)
-{
-  int len = l->bufSize - l->bufLen;
-  apr_status_t s;
-
-  s = apr_socket_recv(sock, l->buf + l->bufLen, &len);
-  l->bufLen += len;
-  return s;
+int linep_ReadFd(LineState* l, int fd) {
+  const int len = l->bufSize - l->bufLen;
+  const size_t r = read(fd, l->buf + l->bufLen, len);
+  if (r <= 0) {
+    return r;
+  }
+  l->bufLen += r;
+  return r;
 }
-#endif
 
 void linep_GetReadInfo(const LineState* l, char** buf, 
 		       int* remaining)
@@ -207,4 +208,38 @@ void linep_Debug(const LineState* l, FILE* out)
           "buf len = %i line start = %i end = %i tok start = %i end = %i\n",
 	  l->bufLen, l->lineStart, l->lineEnd, 
 	  l->tokStart, l->tokEnd);
+}
+
+void buf_New(StringBuf* b, int sizeHint) {
+  int newSize = (sizeHint > 0 ? sizeHint : DEFAULT_STRINGBUF_SIZE);
+  b->buf = (char*)malloc(newSize);
+  b->pos = 0;
+  b->size = newSize;
+}
+
+void buf_Free(StringBuf* b) {
+  free(b->buf);
+}
+
+void buf_Append(StringBuf* b, const char* s) {
+  const int newLen = strlen(s);
+  const int neededLen = (b->size - b->pos) + newLen + 1;
+  if (neededLen > (b->size - b->pos)) {
+    int newAlloc = b->size;
+    while (newAlloc < neededLen) {
+      newAlloc *= 2;
+    }
+    b->buf = (char*)realloc(b->buf, newAlloc);
+  }
+  memcpy(b->buf + b->pos, s, newLen);
+  b->pos += newLen;
+  b->buf[b->pos] = 0;
+}
+
+const char* buf_Get(const StringBuf* b) {
+  return b->buf;
+}
+
+int buf_Length(const StringBuf* b) {
+  return b->pos;
 }

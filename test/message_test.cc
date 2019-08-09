@@ -14,12 +14,11 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-#include "src/apib_message.h"
-#include "src/apib_lines.h"
-
 #include "gtest/gtest.h"
+#include "src/apib_lines.h"
+#include "src/apib_message.h"
 
-TEST(Response, GoodStatus) {
+TEST(Message, GoodStatus) {
   message_Init();
   char* buf = strdup("HTTP/1.1 200 Awesome!\r\n");
   size_t len = strlen(buf);
@@ -36,9 +35,11 @@ TEST(Response, GoodStatus) {
   free(buf);
 }
 
-TEST(Response, GoodHeaders) {
+TEST(Message, GoodHeaders) {
   message_Init();
-  char* buf = strdup("HTTP/1.1 201 CONTINUE\r\nFoo: bar\r\n extended stuff\r\nContent-Type:xxx\r\nContent-Length: 100  \r\n\r\n");
+  char* buf = strdup(
+      "HTTP/1.1 201 CONTINUE\r\nFoo: bar\r\n extended "
+      "stuff\r\nContent-Type:xxx\r\nContent-Length: 100  \r\n\r\n");
   size_t len = strlen(buf);
   LineState l;
   linep_Start(&l, buf, len + 1, len);
@@ -57,7 +58,7 @@ TEST(Response, GoodHeaders) {
   free(buf);
 }
 
-TEST(Response, CompleteResponse) {
+TEST(Message, CompleteResponse) {
   message_Init();
   FILE* rf = fopen("./test/data/response.txt", "r");
   ASSERT_NE(nullptr, rf);
@@ -82,7 +83,7 @@ TEST(Response, CompleteResponse) {
   free(buf);
 }
 
-TEST(Response, ChunkedResponse) {
+TEST(Message, ChunkedResponse) {
   message_Init();
   FILE* rf = fopen("./test/data/chunkedresponse.txt", "r");
   ASSERT_NE(nullptr, rf);
@@ -104,6 +105,59 @@ TEST(Response, ChunkedResponse) {
 
   EXPECT_EQ(200, r->statusCode);
   EXPECT_EQ(103, r->bodyLength);
+
+  message_Free(r);
+  free(buf);
+}
+
+TEST(Message, LengthRequest) {
+  message_Init();
+  FILE* rf = fopen("./test/data/bodyrequest.txt", "r");
+  ASSERT_NE(nullptr, rf);
+  LineState l;
+  char* buf = (char*)malloc(100);
+  linep_Start(&l, buf, 100, 0);
+  linep_SetHttpMode(&l, 1);
+
+  HttpMessage* r = message_NewRequest();
+
+  do {
+    linep_ReadFile(&l, rf);
+    ASSERT_EQ(0, message_Fill(r, &l));
+    linep_Reset(&l);
+  } while (r->state != MESSAGE_DONE);
+  fclose(rf);
+
+  EXPECT_STREQ("GET", r->method);
+  EXPECT_STREQ("/foo?bar=baz&true=123", r->path);
+  EXPECT_EQ(r->contentLength, r->bodyLength);
+
+  message_Free(r);
+  free(buf);
+}
+
+
+TEST(Message, GetRequest) {
+  message_Init();
+  FILE* rf = fopen("./test/data/getrequest.txt", "r");
+  ASSERT_NE(nullptr, rf);
+  LineState l;
+  char* buf = (char*)malloc(100);
+  linep_Start(&l, buf, 100, 0);
+  linep_SetHttpMode(&l, 1);
+
+  HttpMessage* r = message_NewRequest();
+
+  do {
+    linep_ReadFile(&l, rf);
+    ASSERT_EQ(0, message_Fill(r, &l));
+    linep_Reset(&l);
+  } while (r->state != MESSAGE_DONE);
+  fclose(rf);
+
+  EXPECT_STREQ("GET", r->method);
+  EXPECT_STREQ("/foo?bar=baz&true=123", r->path);
+  EXPECT_EQ(0, r->contentLength);
 
   message_Free(r);
   free(buf);

@@ -1,0 +1,7 @@
+GET /foo?bar=baz&true=123 HTTP/1.1
+User-Agent: Greg's Test Client
+Content-Type: text/plain
+Content-Length: 139
+
+This is a set of content that came from my test. It is exactly 139 bytes long,
+including a newline character which comes right about NOW.

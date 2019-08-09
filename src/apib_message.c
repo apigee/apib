@@ -22,18 +22,23 @@ limitations under the License.
 #include <string.h>
 #include <sys/types.h>
 
+#define REQUEST_LINE_EXP "^([a-zA-Z]+) ([^ ]+) HTTP/([0-9])\\.([0-9])$"
+#define REQUEST_LINE_PARTS 5
 #define STATUS_LINE_EXP "^HTTP/([0-9])\\.([0-9]) ([0-9]+) .*$"
 #define STATUS_LINE_PARTS 4
 #define HEADER_LINE_EXP "^([^:]+):[ \t]+?(.*)$"
 #define HEADER_LINE_PARTS 3
 
+static regex_t requestLineRegex;
 static regex_t statusLineRegex;
 static regex_t headerLineRegex;
 static int initialized = 0;
 
 void message_Init() {
   if (!initialized) {
-    int s = regcomp(&statusLineRegex, STATUS_LINE_EXP, REG_EXTENDED);
+    int s = regcomp(&requestLineRegex, REQUEST_LINE_EXP, REG_EXTENDED);
+    assert(s == 0);
+    s = regcomp(&statusLineRegex, STATUS_LINE_EXP, REG_EXTENDED);
     assert(s == 0);
     s = regcomp(&headerLineRegex, HEADER_LINE_EXP, REG_EXTENDED);
     assert(s == 0);
@@ -43,6 +48,7 @@ void message_Init() {
 
 HttpMessage* message_NewResponse() {
   HttpMessage* r = (HttpMessage*)malloc(sizeof(HttpMessage));
+  r->type = Response;
   r->state = MESSAGE_INIT;
   r->statusCode = -1;
   r->majorVersion = -1;
@@ -52,10 +58,37 @@ HttpMessage* message_NewResponse() {
   r->shouldClose = -1;
   r->bodyLength = 0;
   r->chunkState = CHUNK_INIT;
+  r->method = NULL;
+  r->path = NULL;
   return r;
 }
 
-void message_Free(HttpMessage* r) { free(r); }
+HttpMessage* message_NewRequest() {
+  HttpMessage* r = (HttpMessage*)malloc(sizeof(HttpMessage));
+  r->type = Request;
+  r->state = MESSAGE_INIT;
+  r->statusCode = -1;
+  r->majorVersion = -1;
+  r->minorVersion = -1;
+  r->contentLength = -1;
+  r->chunked = -1;
+  r->shouldClose = -1;
+  r->bodyLength = 0;
+  r->chunkState = CHUNK_INIT;
+  r->method = NULL;
+  r->path = NULL;
+  return r;
+}
+
+void message_Free(HttpMessage* r) {
+  if (r->method) {
+    free(r->method);
+  }
+  if (r->path) {
+    free(r->path);
+  }
+  free(r);
+}
 
 static char* getPart(const char* s, const regmatch_t* matches, const int ix) {
   const regmatch_t* match = &(matches[ix]);
@@ -114,6 +147,30 @@ static int parseStatus(HttpMessage* r, LineState* buf) {
   return 0;
 }
 
+static int parseRequestLine(HttpMessage* r, LineState* buf) {
+  if (!linep_NextLine(buf)) {
+    // no request line yet
+    return 1;
+  }
+
+  const char* rl = linep_GetLine(buf);
+  regmatch_t matches[REQUEST_LINE_PARTS];
+  const int rs = regexec(&requestLineRegex, rl, REQUEST_LINE_PARTS, matches, 0);
+  if (rs != 0) {
+    return -1;
+  }
+
+  // 1 and 2 are method and path
+  r->method = getPart(rl, matches, 1);
+  r->path = getPart(rl, matches, 2);
+  // 3 and 4 are version numbers
+  r->majorVersion = getIntPart(rl, matches, 3);
+  r->minorVersion = getIntPart(rl, matches, 4);
+
+  r->state = MESSAGE_STATUS;
+  return 0;
+}
+
 static void finishHeaders(HttpMessage* r) {
   if ((r->contentLength >= 0) && (r->chunked < 0)) {
     r->chunked = 0;
@@ -124,7 +181,12 @@ static void finishHeaders(HttpMessage* r) {
   if (r->shouldClose < 0) {
     r->shouldClose = 0;
   }
-  r->state = MESSAGE_HEADERS;
+
+  if (r->contentLength == 0) {
+    r->state = MESSAGE_DONE;
+  } else {
+    r->state = MESSAGE_HEADERS;
+  }
 }
 
 static void examineHeader(HttpMessage* r, const char* line,
@@ -168,7 +230,7 @@ static int parseHeaderLine(HttpMessage* r, LineState* buf) {
 static int parseLengthBody(HttpMessage* r, LineState* buf) {
   assert(!r->chunked);
   assert(r->contentLength >= 0);
-  
+
   const int bufLeft = linep_GetDataRemaining(buf);
   if (bufLeft == 0) {
     // Done with what we have -- we need more!
@@ -307,7 +369,16 @@ int message_Fill(HttpMessage* r, LineState* buf) {
     int s;
     switch (r->state) {
       case MESSAGE_INIT:
-        s = parseStatus(r, buf);
+        switch (r->type) {
+          case Request:
+            s = parseRequestLine(r, buf);
+            break;
+          case Response:
+            s = parseStatus(r, buf);
+            break;
+          default:
+            assert(0);
+        }
         break;
       case MESSAGE_STATUS:
         s = parseHeaderLine(r, buf);

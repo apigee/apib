@@ -1,3 +1,21 @@
+cc_library(
+    name = "testserver_lib",
+    srcs = ["test_server.c"],
+    hdrs = ["test_server.h"],
+    linkopts = ["-lpthread"],
+    deps = [
+        "//src:common",
+    ]
+)
+
+cc_binary(
+    name = "testserver",
+    srcs = ["test_server_main.c"],
+    deps = [
+        ":testserver_lib"
+    ]
+)
+
 cc_test(
     name = "priorityq",
     srcs = ["priorityq_test.cc"],
@@ -40,7 +58,19 @@ cc_test(
         "@gtest//:gtest_main"
     ],
     data = [
+        ":data/bodyrequest.txt",
         ":data/chunkedresponse.txt",
+        ":data/getrequest.txt",
         ":data/response.txt"
     ]
+)
+
+cc_test(
+    name = "testserver_test",
+    srcs = ["test_server_test.cc"],
+    deps = [
+        ":testserver_lib",
+        "@gtest",
+        "@gtest//:gtest_main"
+    ],
 )
