@@ -6,9 +6,10 @@ cc_library(
         "apib_lines.c",
         "apib_message.c",
         "apib_priorityq.c",
-        "apib_rand_48.c",
-        "apib_url.c",
-    ],
+        "apib_url.c"
+    ] + select({
+        "//conditions:default": ["apib_rand_48.c"]
+    }),
     hdrs = [
         "apib_lines.h",
         "apib_message.h",
