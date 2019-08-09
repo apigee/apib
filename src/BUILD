@@ -1,5 +1,12 @@
 package(default_visibility = ["//visibility:public"])
 
+config_setting(
+  name = "apple",
+  constraint_values = [
+    "@platforms//os:osx"
+  ]
+)
+
 cc_library(
     name = "common",
     srcs = [
@@ -8,6 +15,7 @@ cc_library(
         "apib_priorityq.c",
         "apib_url.c"
     ] + select({
+        "apple": ["apib_rand.c"],
         "//conditions:default": ["apib_rand_48.c"]
     }),
     hdrs = [

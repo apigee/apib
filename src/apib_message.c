@@ -26,8 +26,8 @@ limitations under the License.
 #define REQUEST_LINE_PARTS 5
 #define STATUS_LINE_EXP "^HTTP/([0-9])\\.([0-9]) ([0-9]+) .*$"
 #define STATUS_LINE_PARTS 4
-#define HEADER_LINE_EXP "^([^:]+):[ \t]+?(.*)$"
-#define HEADER_LINE_PARTS 3
+#define HEADER_LINE_EXP "^([^:]+):([ \\t]+)?(.*)$"
+#define HEADER_LINE_PARTS 4
 
 static regex_t requestLineRegex;
 static regex_t statusLineRegex;
@@ -192,11 +192,11 @@ static void finishHeaders(HttpMessage* r) {
 static void examineHeader(HttpMessage* r, const char* line,
                           const regmatch_t* matches) {
   if (!comparePart("Content-Length", line, matches, 1)) {
-    r->contentLength = getIntPart(line, matches, 2);
+    r->contentLength = getIntPart(line, matches, 3);
   } else if (!comparePart("Transfer-Encoding", line, matches, 1)) {
-    r->chunked = !comparePart("chunked", line, matches, 2);
+    r->chunked = !comparePart("chunked", line, matches, 3);
   } else if (!comparePart("Connection", line, matches, 1)) {
-    r->shouldClose = !comparePart("close", line, matches, 2);
+    r->shouldClose = !comparePart("close", line, matches, 3);
   }
 }
 
