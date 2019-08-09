@@ -78,7 +78,7 @@ extern void linep_GetReadInfo(const LineState* l, char** buf,
 			      int* remaining);
 
 /* Find out how much data is left unprocessed */
-extern void linep_GetDataRemaining(const LineState* l, int* remaining);
+extern int linep_GetDataRemaining(const LineState* l);
 
 /* Write data from the end of the last line to the end of the buffer */
 extern void linep_WriteRemaining(const LineState* l, FILE* out);

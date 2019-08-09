@@ -30,3 +30,17 @@ cc_test(
         ":data/urls.txt"
     ]
 )
+
+cc_test(
+    name = "response",
+    srcs = ["response_test.cc"],
+    deps = [
+        "//src:common",
+        "@gtest",
+        "@gtest//:gtest_main"
+    ],
+    data = [
+        ":data/chunkedresponse.txt",
+        ":data/response.txt"
+    ]
+)

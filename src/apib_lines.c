@@ -181,9 +181,9 @@ void linep_GetReadInfo(const LineState* l, char** buf,
   }
 }
 
-void linep_GetDataRemaining(const LineState* l, int* remaining)
+int linep_GetDataRemaining(const LineState* l)
 {
-  *remaining = l->bufLen - l->lineEnd;
+  return (l->bufLen - l->lineEnd);
 }
 
 void linep_WriteRemaining(const LineState* l, FILE* out)

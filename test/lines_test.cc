@@ -133,6 +133,29 @@ TEST(Lines, Tokens) {
   free(buf);
 }
 
+TEST(Lines, HttpMode) {
+  LineState l;
+
+  char* buf = strdup("One\r\nTwo\r\n\r\nThree\r\n\r\n");
+  size_t len = strlen(buf);
+  linep_Start(&l, buf, len + 1, len);
+  linep_SetHttpMode(&l, 1);
+
+  ASSERT_NE(0, linep_NextLine(&l));
+  EXPECT_STREQ("One", linep_GetLine(&l));
+  ASSERT_NE(0, linep_NextLine(&l));
+  EXPECT_STREQ("Two", linep_GetLine(&l));
+  ASSERT_NE(0, linep_NextLine(&l));
+  EXPECT_STREQ("", linep_GetLine(&l));
+  ASSERT_NE(0, linep_NextLine(&l));
+  EXPECT_STREQ("Three", linep_GetLine(&l));
+  ASSERT_NE(0, linep_NextLine(&l));
+  EXPECT_STREQ("", linep_GetLine(&l));
+  ASSERT_EQ(0, linep_NextLine(&l));
+
+  free(buf);
+}
+
 TEST(Lines, TooLong) {
   LineState l;
 
