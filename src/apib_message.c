@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-#include "src/apib_response.h"
+#include "src/apib_message.h"
 
 #include <assert.h>
 #include <regex.h>
@@ -31,7 +31,7 @@ static regex_t statusLineRegex;
 static regex_t headerLineRegex;
 static int initialized = 0;
 
-void response_Init() {
+void message_Init() {
   if (!initialized) {
     int s = regcomp(&statusLineRegex, STATUS_LINE_EXP, REG_EXTENDED);
     assert(s == 0);
@@ -41,9 +41,9 @@ void response_Init() {
   }
 }
 
-HttpResponse* response_New() {
-  HttpResponse* r = (HttpResponse*)malloc(sizeof(HttpResponse));
-  r->state = RESPONSE_INIT;
+HttpMessage* message_NewResponse() {
+  HttpMessage* r = (HttpMessage*)malloc(sizeof(HttpMessage));
+  r->state = MESSAGE_INIT;
   r->statusCode = -1;
   r->majorVersion = -1;
   r->minorVersion = -1;
@@ -55,7 +55,7 @@ HttpResponse* response_New() {
   return r;
 }
 
-void response_Free(HttpResponse* r) { free(r); }
+void message_Free(HttpMessage* r) { free(r); }
 
 static char* getPart(const char* s, const regmatch_t* matches, const int ix) {
   const regmatch_t* match = &(matches[ix]);
@@ -91,7 +91,7 @@ static int comparePart(const char* expected, const char* s,
 // 0: Success
 // > 0: Not enough data -- call again with a more full buffer
 
-static int parseStatus(HttpResponse* r, LineState* buf) {
+static int parseStatus(HttpMessage* r, LineState* buf) {
   if (!linep_NextLine(buf)) {
     // no status line yet
     return 1;
@@ -110,11 +110,11 @@ static int parseStatus(HttpResponse* r, LineState* buf) {
   // 3 is the actual status code
   r->statusCode = getIntPart(sl, matches, 3);
 
-  r->state = RESPONSE_STATUS;
+  r->state = MESSAGE_STATUS;
   return 0;
 }
 
-static void finishHeaders(HttpResponse* r) {
+static void finishHeaders(HttpMessage* r) {
   if ((r->contentLength >= 0) && (r->chunked < 0)) {
     r->chunked = 0;
   } else if ((r->contentLength < 0) && (r->chunked < 0)) {
@@ -124,10 +124,10 @@ static void finishHeaders(HttpResponse* r) {
   if (r->shouldClose < 0) {
     r->shouldClose = 0;
   }
-  r->state = RESPONSE_HEADERS;
+  r->state = MESSAGE_HEADERS;
 }
 
-static void examineHeader(HttpResponse* r, const char* line,
+static void examineHeader(HttpMessage* r, const char* line,
                           const regmatch_t* matches) {
   if (!comparePart("Content-Length", line, matches, 1)) {
     r->contentLength = getIntPart(line, matches, 2);
@@ -138,7 +138,7 @@ static void examineHeader(HttpResponse* r, const char* line,
   }
 }
 
-static int parseHeaderLine(HttpResponse* r, LineState* buf) {
+static int parseHeaderLine(HttpMessage* r, LineState* buf) {
   if (!linep_NextLine(buf)) {
     return 1;
   }
@@ -165,7 +165,7 @@ static int parseHeaderLine(HttpResponse* r, LineState* buf) {
   return 0;
 }
 
-static int parseLengthBody(HttpResponse* r, LineState* buf) {
+static int parseLengthBody(HttpMessage* r, LineState* buf) {
   assert(!r->chunked);
   assert(r->contentLength >= 0);
   
@@ -186,12 +186,12 @@ static int parseLengthBody(HttpResponse* r, LineState* buf) {
 
   if (r->bodyLength == r->contentLength) {
     // Regular message bodies have no trailers
-    r->state = RESPONSE_DONE;
+    r->state = MESSAGE_DONE;
   }
   return 0;
 }
 
-static int parseChunkHeader(HttpResponse* r, LineState* buf) {
+static int parseChunkHeader(HttpMessage* r, LineState* buf) {
   if (!linep_NextLine(buf)) {
     return 1;
   }
@@ -209,7 +209,7 @@ static int parseChunkHeader(HttpResponse* r, LineState* buf) {
   return 0;
 }
 
-static int parseChunkBody(HttpResponse* r, LineState* buf) {
+static int parseChunkBody(HttpMessage* r, LineState* buf) {
   const int bufLeft = linep_GetDataRemaining(buf);
   if (bufLeft == 0) {
     // Done with what we have -- we need more!
@@ -232,7 +232,7 @@ static int parseChunkBody(HttpResponse* r, LineState* buf) {
   return 0;
 }
 
-static int parseChunkEnd(HttpResponse* r, LineState* buf) {
+static int parseChunkEnd(HttpMessage* r, LineState* buf) {
   if (!linep_NextLine(buf)) {
     return 1;
   }
@@ -245,7 +245,7 @@ static int parseChunkEnd(HttpResponse* r, LineState* buf) {
   return 0;
 }
 
-static int parseTrailerLine(HttpResponse* r, LineState* buf) {
+static int parseTrailerLine(HttpMessage* r, LineState* buf) {
   if (!linep_NextLine(buf)) {
     return 1;
   }
@@ -253,7 +253,7 @@ static int parseTrailerLine(HttpResponse* r, LineState* buf) {
   const char* hl = linep_GetLine(buf);
   if (hl[0] == 0) {
     // Empty line -- means end of everything!
-    r->state = RESPONSE_DONE;
+    r->state = MESSAGE_DONE;
     return 0;
   }
   if ((hl[0] == ' ') || (hl[0] == '\t')) {
@@ -271,7 +271,7 @@ static int parseTrailerLine(HttpResponse* r, LineState* buf) {
   return 0;
 }
 
-static int fillChunk(HttpResponse* r, LineState* buf) {
+static int fillChunk(HttpMessage* r, LineState* buf) {
   assert(r->chunked);
   for (;;) {
     int s;
@@ -286,7 +286,7 @@ static int fillChunk(HttpResponse* r, LineState* buf) {
         s = parseChunkEnd(r, buf);
         break;
       case CHUNK_END:
-        r->state = RESPONSE_BODY;
+        r->state = MESSAGE_BODY;
         return 0;
     }
 
@@ -302,27 +302,27 @@ static int fillChunk(HttpResponse* r, LineState* buf) {
   }
 }
 
-int response_Fill(HttpResponse* r, LineState* buf) {
+int message_Fill(HttpMessage* r, LineState* buf) {
   for (;;) {
     int s;
     switch (r->state) {
-      case RESPONSE_INIT:
+      case MESSAGE_INIT:
         s = parseStatus(r, buf);
         break;
-      case RESPONSE_STATUS:
+      case MESSAGE_STATUS:
         s = parseHeaderLine(r, buf);
         break;
-      case RESPONSE_HEADERS:
+      case MESSAGE_HEADERS:
         if (!r->chunked) {
           s = parseLengthBody(r, buf);
         } else {
           s = fillChunk(r, buf);
         }
         break;
-      case RESPONSE_BODY:
+      case MESSAGE_BODY:
         s = parseTrailerLine(r, buf);
         break;
-      case RESPONSE_DONE:
+      case MESSAGE_DONE:
         return 0;
       default:
         assert(0);

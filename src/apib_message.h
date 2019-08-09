@@ -14,8 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-#ifndef APIB_RESPONSE_H
-#define APIB_RESPONSE_H
+#ifndef APIB_MESSAGE_H
+#define APIB_MESSAGE_H
 
 #include <sys/types.h>
 
@@ -26,11 +26,11 @@ extern "C" {
 #endif
 
 // State values. They are increasing integers so that you can do a ">"
-#define RESPONSE_INIT 0
-#define RESPONSE_STATUS 1
-#define RESPONSE_HEADERS 2
-#define RESPONSE_BODY 3
-#define RESPONSE_DONE 4
+#define MESSAGE_INIT 0
+#define MESSAGE_STATUS 1
+#define MESSAGE_HEADERS 2
+#define MESSAGE_BODY 3
+#define MESSAGE_DONE 4
 
 #define CHUNK_INIT 0
 #define CHUNK_LENGTH 1
@@ -40,53 +40,53 @@ extern "C" {
 typedef struct {
   int state;
 
-  // Available when state >= RESPONSE_STATUS
+  // Available when state >= MESSAGE_STATUS
   int statusCode;
   int majorVersion;
   int minorVersion;
 
-  // Available when state >= RESPONSE_HEADERS
+  // Available when state >= MESSAGE_HEADERS
   int contentLength;
   int chunked;
   int shouldClose;
 
-  // Available when state >= RESPONSE_BODY
+  // Available when state >= MESSAGE_BODY
   int bodyLength;
 
   // Internal stuff for chunked encoding.
   int chunkState;
   int chunkLength;
   int chunkPosition;
-} HttpResponse;
+} HttpMessage;
 
 /*
 One-time initialization of response processing. This is required to be called once,
 and is generally idempotent but doesn't go to great lengths to ensure that
 in a multi-threaded environment.
 */
-extern void response_Init();
+extern void message_Init();
 
 /*
 Create a response object.
 */
-extern HttpResponse* response_New();
+extern HttpMessage* message_NewResponse();
 
 /*
 Free a response object.
 */
-extern void response_Free(HttpResponse* r);
+extern void message_Free(HttpMessage* r);
 
 /*
 Add data to a response object. The data should consist of a valid
 HTTP response. Returns 0 on success and non-zero on error.
 Callers should check the "state" parameter and keep feeding data
-until the state is RESPONSE_DONE. An error means that we got 
+until the state is MESSAGE_DONE. An error means that we got 
 invalid HTTP data. The passed "LineState" MUST be in "HTTP" mode.
 */
-extern int response_Fill(HttpResponse* r, LineState* buf);
+extern int message_Fill(HttpMessage* r, LineState* buf);
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif  // APIB_RESPONSE_H
+#endif  // APIB_MESSAGE_H

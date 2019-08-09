@@ -32,8 +32,8 @@ cc_test(
 )
 
 cc_test(
-    name = "response",
-    srcs = ["response_test.cc"],
+    name = "message",
+    srcs = ["message_test.cc"],
     deps = [
         "//src:common",
         "@gtest",
