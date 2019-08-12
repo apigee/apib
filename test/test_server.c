@@ -37,15 +37,12 @@ typedef struct {
 
 static void sendText(int fd, int code, const char* codestr, const char* msg) {
   StringBuf buf;
-  char line[128];
-
+  
   buf_New(&buf, 0);
-  sprintf(line, "HTTP/1.1 %i %s\r\n", code, codestr);
-  buf_Append(&buf, line);
+  buf_Printf(&buf, "HTTP/1.1 %i %s\r\n", code, codestr);
   buf_Append(&buf, "Server: apib test server\r\n");
   buf_Append(&buf, "Content-Type: text/plain\r\n");
-  sprintf(line, "Content-Length: %lu\r\n", strlen(msg));
-  buf_Append(&buf, line);
+  buf_Printf(&buf, "Content-Length: %lu\r\n", strlen(msg));
   buf_Append(&buf, "\r\n");
   buf_Append(&buf, msg);
 

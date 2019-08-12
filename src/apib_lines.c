@@ -19,6 +19,7 @@ limitations under the License.
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdarg.h>
 #include <unistd.h>
 
 static int isChar(const char c, const char* match)
@@ -215,14 +216,14 @@ void buf_New(StringBuf* b, int sizeHint) {
   b->buf = (char*)malloc(newSize);
   b->pos = 0;
   b->size = newSize;
+  b->buf[0] = 0;
 }
 
 void buf_Free(StringBuf* b) {
   free(b->buf);
 }
 
-void buf_Append(StringBuf* b, const char* s) {
-  const int newLen = strlen(s);
+static void ensureSpace(StringBuf* b, int newLen) {
   const int neededLen = (b->size - b->pos) + newLen + 1;
   if (neededLen > (b->size - b->pos)) {
     int newAlloc = b->size;
@@ -230,10 +231,38 @@ void buf_Append(StringBuf* b, const char* s) {
       newAlloc *= 2;
     }
     b->buf = (char*)realloc(b->buf, newAlloc);
+    b->size = newAlloc;
   }
+}
+
+void buf_Append(StringBuf* b, const char* s) {
+  const int newLen = strlen(s);
+  ensureSpace(b, newLen);
   memcpy(b->buf + b->pos, s, newLen);
   b->pos += newLen;
   b->buf[b->pos] = 0;
+}
+
+void buf_Printf(StringBuf* b, const char* format, ...) {
+  va_list args;
+  int remaining;
+  int printLen;
+
+  do {
+    remaining = b->size - b->pos;
+    va_start(args, format);
+    printLen = vsnprintf(b->buf + b->pos, remaining, format, args);
+    va_end(args);
+
+    if (printLen >= remaining) {
+      // vsnprintf couldn't write the whole string in the space provided.
+      // We loop this because sometimes it takes a few tries.
+      ensureSpace(b, printLen);
+    }
+  } while (printLen >= remaining);
+
+  b->pos += printLen;
+  b->buf[b->pos] = 0; 
 }
 
 const char* buf_Get(const StringBuf* b) {

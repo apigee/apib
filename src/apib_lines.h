@@ -18,6 +18,7 @@ limitations under the License.
 #define APIB_LINEP_H
 
 #include <stdio.h>
+#include <stdarg.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -100,12 +101,19 @@ typedef struct {
 
 #define DEFAULT_STRINGBUF_SIZE 128
 
+// Initialize a StringBuf
 extern void buf_New(StringBuf* b, int sizeHint);
 
 extern void buf_Free(StringBuf* b);
 
+// Append the specified null-terminated string,
+// expanding the buffer as necessary
 extern void buf_Append(StringBuf* b, const char* s);
 
+// buf_Append but supporting sprintf-like stuff
+extern void buf_Printf(StringBuf* b, const char* format, ...);
+
+// Get the null-terminated buff
 extern const char* buf_Get(const StringBuf* b);
 
 extern int buf_Length(const StringBuf* b);

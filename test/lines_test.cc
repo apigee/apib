@@ -199,3 +199,50 @@ TEST(Lines, TooLong) {
 
   free(buf);
 }
+
+TEST(Lines, StringBufEmpty) {
+  StringBuf b;
+  buf_New(&b, 10);
+  EXPECT_EQ(0, buf_Length(&b));
+  EXPECT_STREQ("", buf_Get(&b));
+  buf_Free(&b);
+}
+
+TEST(Lines, StringBufAppend) {
+  StringBuf b;
+  buf_New(&b, 10);
+  buf_Append(&b, "One");
+  EXPECT_STREQ("One", buf_Get(&b));
+  // Something more than 10 bytes long
+  buf_Append(&b, "TwoTwoTwoTwoTwo");
+  EXPECT_STREQ("OneTwoTwoTwoTwoTwo", buf_Get(&b));
+  // Something more than 10 bytes long
+  buf_Append(&b, "01234567890123456789012345");
+  EXPECT_STREQ("OneTwoTwoTwoTwoTwo01234567890123456789012345", buf_Get(&b));
+  buf_Free(&b);
+}
+
+TEST(Lines, StringBufAppendBoundary) {
+  StringBuf b;
+  buf_New(&b, 10);
+  buf_Append(&b, "0123456789");
+  EXPECT_STREQ("0123456789", buf_Get(&b));
+  // Something more than 10 bytes long
+  buf_Append(&b, "01234567890123456789");
+  EXPECT_STREQ("012345678901234567890123456789", buf_Get(&b));
+  // Something more than 10 bytes long
+  buf_Append(&b, "Foo");
+  EXPECT_STREQ("012345678901234567890123456789Foo", buf_Get(&b));
+  buf_Free(&b);
+}
+
+TEST(Lines, StringBufPrintf) {
+  StringBuf b;
+  buf_New(&b, 10);
+  buf_Printf(&b, "Foo %s ", "the");
+  EXPECT_STREQ("Foo the ", buf_Get(&b));
+  // Something more than 10 bytes long
+  buf_Printf(&b, "Bar has %i drinks, including %s", 99, "bourbon");
+  EXPECT_STREQ("Foo the Bar has 99 drinks, including bourbon", buf_Get(&b));
+  buf_Free(&b);
+}
