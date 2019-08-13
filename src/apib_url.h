@@ -35,9 +35,10 @@ functions don't change state.
 */
 
 typedef struct {
-  struct addrinfo* addresses;
+  struct sockaddr_storage* addresses;
+  size_t* addressLengths;
   int addressCount;
-  int port;
+  unsigned int port;
   int isSsl;
   char* path;
 } URLInfo;
@@ -62,7 +63,7 @@ extern void url_Reset();
  * Get a randomly-selected URL, plus address and port, for the next
  * request. This allows us to balance requests over many separate URLs.
  */
-extern const URLInfo* url_GetNext(RandState rand);
+extern URLInfo* url_GetNext(RandState rand);
 
 /*
  * Get the network address for the next request based on which connection is
@@ -70,7 +71,7 @@ extern const URLInfo* url_GetNext(RandState rand);
  * with multiple IPs, we evenly distribute requests across them without opening
  * a new connection for each request.
  */
-extern struct sockaddr* url_GetAddress(const URLInfo* url, int index);
+extern struct sockaddr* url_GetAddress(const URLInfo* url, int index, size_t* len);
 
 /*
  * Return whether the two URLs refer to the same host and port for the given

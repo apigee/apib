@@ -1,10 +1,10 @@
 package(default_visibility = ["//visibility:public"])
 
 config_setting(
-  name = "apple",
-  constraint_values = [
-    "@platforms//os:osx"
-  ]
+    name = "apple",
+    constraint_values = [
+        "@platforms//os:osx",
+    ],
 )
 
 cc_library(
@@ -13,10 +13,10 @@ cc_library(
         "apib_lines.c",
         "apib_message.c",
         "apib_priorityq.c",
-        "apib_url.c"
+        "apib_url.c",
     ] + select({
         "apple": ["apib_rand.c"],
-        "//conditions:default": ["apib_rand_48.c"]
+        "//conditions:default": ["apib_rand_48.c"],
     }),
     hdrs = [
         "apib_lines.h",
@@ -25,4 +25,21 @@ cc_library(
         "apib_rand.h",
         "apib_url.h",
     ],
+)
+
+cc_library(
+    name = "io",
+    srcs = [
+      "apib_iothread.c",
+    ], 
+    hdrs = [
+      "apib_iothread.h",
+    ],
+    deps = [
+      ":common",
+      "@libev",
+    ],
+    linkopts = [
+      "-lpthread"
+    ]
 )

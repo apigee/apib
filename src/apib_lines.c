@@ -47,6 +47,17 @@ void linep_Start(LineState* l, char* line, int size,
   l->lineComplete = 0;
 }
 
+void linep_Free(LineState* l) {
+  free(l->buf);
+}
+
+void linep_Clear(LineState* l) {
+  l->bufLen = 0;
+  l->lineStart = l->lineEnd = 0;
+  l->tokStart = l->tokEnd = 0;
+  l->lineComplete = 0;
+}
+
 void linep_SetHttpMode(LineState* l, int on)
 {
   l->httpMode = on;
@@ -224,8 +235,8 @@ void buf_Free(StringBuf* b) {
 }
 
 static void ensureSpace(StringBuf* b, int newLen) {
-  const int neededLen = (b->size - b->pos) + newLen + 1;
-  if (neededLen > (b->size - b->pos)) {
+  const int neededLen = b->pos + newLen + 1;
+  if (neededLen > b->size) {
     int newAlloc = b->size;
     while (newAlloc < neededLen) {
       newAlloc *= 2;
@@ -265,10 +276,15 @@ void buf_Printf(StringBuf* b, const char* format, ...) {
   b->buf[b->pos] = 0; 
 }
 
-const char* buf_Get(const StringBuf* b) {
+char* buf_Get(const StringBuf* b) {
   return b->buf;
 }
 
 int buf_Length(const StringBuf* b) {
   return b->pos;
+}
+
+void buf_Clear(StringBuf* b) {
+  b->pos = 0;
+  b->buf[0] = 0;
 }

@@ -46,6 +46,13 @@ typedef struct {
 extern void linep_Start(LineState* l, char* line, int size,
 			int len);
 
+/* Free the initial buffer passed to linep_Start */
+extern void linep_Free(LineState* l);
+
+/* Reset the structure but keep the original buffer the same.
+   Does not reset HTTP mode. */
+extern void linep_Clear(LineState* l);
+
 /* If set to non-zero, then every line is terminated by a single CRLF. Otherwise
    we eat them all up and return no blank lines. Http relies on blank lines! */
 extern void linep_SetHttpMode(LineState* l, int on);
@@ -114,9 +121,11 @@ extern void buf_Append(StringBuf* b, const char* s);
 extern void buf_Printf(StringBuf* b, const char* format, ...);
 
 // Get the null-terminated buff
-extern const char* buf_Get(const StringBuf* b);
+extern char* buf_Get(const StringBuf* b);
 
 extern int buf_Length(const StringBuf* b);
+
+extern void buf_Clear(StringBuf* b);
 
 #ifdef __cplusplus
 }

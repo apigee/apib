@@ -94,6 +94,7 @@ static void* requestThread(void* a) {
 finish:
   close(i->fd);
   message_Free(m);
+  linep_Free(&lines);
   free(i);
   return NULL;
 }

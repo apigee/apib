@@ -5,15 +5,15 @@ cc_library(
     linkopts = ["-lpthread"],
     deps = [
         "//src:common",
-    ]
+    ],
 )
 
 cc_binary(
     name = "testserver",
     srcs = ["test_server_main.c"],
     deps = [
-        ":testserver_lib"
-    ]
+        ":testserver_lib",
+    ],
 )
 
 cc_test(
@@ -39,30 +39,30 @@ cc_test(
 cc_test(
     name = "urls",
     srcs = ["url_test.cc"],
+    data = [
+        ":data/urls.txt",
+    ],
     deps = [
         "//src:common",
         "@gtest",
-        "@gtest//:gtest_main"
+        "@gtest//:gtest_main",
     ],
-    data = [
-        ":data/urls.txt"
-    ]
 )
 
 cc_test(
     name = "message",
     srcs = ["message_test.cc"],
-    deps = [
-        "//src:common",
-        "@gtest",
-        "@gtest//:gtest_main"
-    ],
     data = [
         ":data/bodyrequest.txt",
         ":data/chunkedresponse.txt",
         ":data/getrequest.txt",
-        ":data/response.txt"
-    ]
+        ":data/response.txt",
+    ],
+    deps = [
+        "//src:common",
+        "@gtest",
+        "@gtest//:gtest_main",
+    ],
 )
 
 cc_test(
@@ -71,6 +71,16 @@ cc_test(
     deps = [
         ":testserver_lib",
         "@gtest",
-        "@gtest//:gtest_main"
+        "@gtest//:gtest_main",
     ],
+)
+
+cc_test(
+    name = "iotest",
+    srcs = ["io_test.cc"],
+    deps = [
+        ":testserver_lib",
+        "//src:io",
+        "@gtest",
+    ]
 )

@@ -16,6 +16,7 @@ limitations under the License.
 
 #include "apib_url.h"
 
+#include <arpa/inet.h>
 #include <assert.h>
 #include <netdb.h>
 #include <regex.h>
@@ -61,13 +62,30 @@ static int initHost(const char* hostname, URLInfo* u) {
     return -1;
   }
 
+  // Count results
   struct addrinfo* a = results;
-  u->addresses = results;
-  int c = 1;
-  for (; a->ai_next != NULL; c++) {
+  int c = 0;
+  while (a != NULL) {
+    c++; 
     a = a->ai_next;
   }
+
+  u->addresses = (struct sockaddr_storage*)malloc(sizeof(struct sockaddr_storage) * c);
+  u->addressLengths = (size_t*)malloc(sizeof(size_t) * c);
   u->addressCount = c;
+
+  // Copy results to more permanent storage
+  a = results;
+  for (int i = 0; a != NULL; i++) {
+    memcpy(&(u->addresses[i]), a->ai_addr, a->ai_addrlen);
+    u->addressLengths[i] = a->ai_addrlen;
+    // IP4 and IP6 versions of this should have port in same place
+    ((struct sockaddr_in*)&(u->addresses[i]))->sin_port = htons(u->port);
+    a = a->ai_next;
+  }
+
+  freeaddrinfo(results);
+
   return 0;
 }
 
@@ -98,13 +116,6 @@ static int initUrl(const char* urlstr, URLInfo* u) {
   // Match 2 is the "hostname"
   char* hoststr = getRegexPart(urlstr, matches, 2);
   assert(hoststr != NULL);
-  const int hosterr = initHost(hoststr, u);
-  free(hoststr);
-  if (hosterr) {
-    // No addresses, which is OK now
-    u->addresses = NULL;
-    u->addressCount = 0;
-  }
 
   // Match 4 is the port number, if any
   char* portstr = getRegexPart(urlstr, matches, 4);
@@ -126,14 +137,17 @@ static int initUrl(const char* urlstr, URLInfo* u) {
     u->path = strdup("/");
   }
 
+  // Now look up the host and add the port...
+  const int hosterr = initHost(hoststr, u);
+  free(hoststr);
+  if (hosterr) {
+    // No addresses, which is OK now
+    u->addresses = NULL;
+    u->addressCount = 0;
+  }
+
   return 0;
 }
-
-/*
-static apr_sockaddr_t* getConn(const URLInfo* u, int index) {
-  return u->addresses[index % u->addressCount];
-}
-*/
 
 int url_InitOne(const char* urlStr) {
   assert(!initialized);
@@ -148,25 +162,24 @@ int url_InitOne(const char* urlStr) {
   return e;
 }
 
-/*
-apr_sockaddr_t* url_GetAddress(const URLInfo* url, int index) {
-  apr_sockaddr_t* a = getConn(url, index);
-
-#if DEBUG
-  char* str;
-  apr_sockaddr_ip_get(&str, a);
-  printf("Connecting to %s\n", str);
-#endif
-  return a;
+struct sockaddr* url_GetAddress(const URLInfo* url, int index, size_t* len) {
+  const int ix = index % url->addressCount;
+  if (len != NULL) {
+    *len = url->addressLengths[ix];
+  }
+  return (struct sockaddr*)&(url->addresses[ix]);
 }
 
 int url_IsSameServer(const URLInfo* u1, const URLInfo* u2, int index) {
-  if (u1->port != u2->port) {
-    return 0;
+  if (u1->addressCount != u2->addressCount) {
+    return -1;
   }
-  return apr_sockaddr_equal(getConn(u1, index), getConn(u2, index));
+  const int ix = index % u1->addressCount;
+  if (u1->addressLengths[ix] != u2->addressLengths[ix]) {
+    return -1;
+  }
+  return !memcmp(&(u1->addresses[ix]), &(u2->addresses[ix]), u1->addressLengths[ix]);
 }
-*/
 
 int url_InitFile(const char* fileName) {
   assert(!initialized);
@@ -220,7 +233,7 @@ int url_InitFile(const char* fileName) {
   return 0;
 }
 
-const URLInfo* url_GetNext(RandState rand) {
+URLInfo* url_GetNext(RandState rand) {
   if (urlCount == 0) {
     return NULL;
   }
@@ -236,9 +249,7 @@ void url_Reset() {
   if (initialized) {
     for (int i = 0; i < urlCount; i++) {
       free(urls[i].path);
-      if (urls[i].addresses != NULL) {
-        freeaddrinfo(urls[i].addresses);
-      }
+      free(urls[i].addresses);
     }
     urlCount = urlSize = 0;
     free(urls);

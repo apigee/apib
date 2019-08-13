@@ -15,6 +15,9 @@ limitations under the License.
 */
 
 #include <memory>
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <netdb.h>
 
 #include "src/apib_rand.h"
 #include "src/apib_url.h"
@@ -27,6 +30,8 @@ TEST(URL, ParseGood1) {
   EXPECT_EQ(0, u1->isSsl);
   EXPECT_EQ(1234, u1->port);
   EXPECT_STREQ("/bar?baz=yes", u1->path);
+  struct sockaddr_in* a = (struct sockaddr_in*)url_GetAddress(u1, 0, NULL);
+  EXPECT_EQ(1234, ntohs(a->sin_port));
   url_Reset();
 
   ASSERT_EQ(0, url_InitOne("http://foo.com/bar?baz=yes"));

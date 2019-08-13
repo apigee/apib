@@ -1,0 +1,40 @@
+package(default_visibility = ["//visibility:public"])
+
+genrule(
+    name = "config",
+    srcs = glob(["*"]),
+    outs = [
+        "config.h",
+    ],
+    cmd = "sh $(location configure) &&" +
+          "cp config.h $(location config.h)",
+)
+
+cc_library(
+    name = "libev",
+    srcs = [
+        "config.h",
+        "ev.c",
+        "ev_vars.h",
+        "ev_wrap.h",
+        "event.h",
+    ],
+    hdrs = [
+        "ev.h",
+    ],
+    copts = [
+        "-DHAVE_CONFIG_H",
+        "-Wno-comment",
+        "-Wno-dangling-else",
+        "-Wno-parenthesis",
+        "-Wno-unused-value",
+    ],
+    textual_hdrs = [
+        "ev_epoll.c",
+        "ev_linuxaio.c",
+        "ev_kqueue.c",
+        "ev_poll.c",
+        "ev_port.c",
+        "ev_select.c",
+    ],
+)
