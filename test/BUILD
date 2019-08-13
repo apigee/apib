@@ -5,6 +5,7 @@ cc_library(
     linkopts = ["-lpthread"],
     deps = [
         "//src:common",
+        "@httpparser",
     ],
 )
 
@@ -60,16 +61,6 @@ cc_test(
     ],
     deps = [
         "//src:common",
-        "@gtest",
-        "@gtest//:gtest_main",
-    ],
-)
-
-cc_test(
-    name = "testserver_test",
-    srcs = ["test_server_test.cc"],
-    deps = [
-        ":testserver_lib",
         "@gtest",
         "@gtest//:gtest_main",
     ],

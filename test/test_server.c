@@ -28,11 +28,18 @@ limitations under the License.
 #include "src/apib_lines.h"
 #include "src/apib_message.h"
 
+#include "http_parser.h"
+
 #define BACKLOG 32
-#define READ_BUF 512
+#define READ_BUF 1024
+
+static http_parser_settings ParserSettings;
 
 typedef struct {
   int fd;
+  int done;
+  char* url;
+  http_parser parser;
 } RequestInfo;
 
 static void sendText(int fd, int code, const char* codestr, const char* msg) {
@@ -43,6 +50,7 @@ static void sendText(int fd, int code, const char* codestr, const char* msg) {
   buf_Append(&buf, "Server: apib test server\r\n");
   buf_Append(&buf, "Content-Type: text/plain\r\n");
   buf_Printf(&buf, "Content-Length: %lu\r\n", strlen(msg));
+  buf_Append(&buf, "Connection: close\r\n");
   buf_Append(&buf, "\r\n");
   buf_Append(&buf, msg);
 
@@ -50,17 +58,31 @@ static void sendText(int fd, int code, const char* codestr, const char* msg) {
   buf_Free(&buf);
 }
 
+static int parsedUrl(http_parser* p, const char* buf, size_t len) {
+  RequestInfo* i = (RequestInfo*)p->data;
+  i->url = (char*)malloc(len + 1);
+  memcpy(i->url, buf, len);
+  i->url[len] = 0;
+  return 0;
+}
+
+static int parseComplete(http_parser* p) {
+  RequestInfo* i = (RequestInfo*)p->data;
+  i->done = 1;
+  return 0;
+}
+
 static void* requestThread(void* a) {
   RequestInfo* i = (RequestInfo*)a;
-  LineState lines;
   char* buf = (char*)malloc(READ_BUF);
-  linep_Start(&lines, buf, READ_BUF, 0);
-  linep_SetHttpMode(&lines, 1);
+  size_t bufPos = 0;
 
-  HttpMessage* m = message_NewRequest();
+  i->done = 0;
+  http_parser_init(&(i->parser), HTTP_REQUEST);
+  i->parser.data = i;
 
   do {
-    const int readCount = linep_ReadFd(&lines, i->fd);
+    const ssize_t readCount = read(i->fd, buf + bufPos, READ_BUF - bufPos);
     if (readCount < 0) {
       perror("Error on read from socket");
       goto finish;
@@ -69,21 +91,22 @@ static void* requestThread(void* a) {
       break;
     }
 
-    int err = message_Fill(m, &lines);
-    if (err != 0) {
-      fprintf(stderr, "Error parsing HTTP request: %i", err);
-      // TODO should we return 400?
+    const size_t parseCount = http_parser_execute(&(i->parser), &ParserSettings, 
+      buf, readCount);
+    if (i->parser.http_errno != 0) {
+      fprintf(stderr, "Error parsing HTTP request: %i\n", i->parser.http_errno);
       goto finish;
     }
-    err = linep_Reset(&lines);
-    if (err != 0) {
-      fprintf(stderr, "HTTP lines too long");
-      goto finish;
+    bufPos += parseCount;
+
+    if (parseCount < readCount) {
+      memmove(buf, buf + parseCount, readCount - parseCount);
+      bufPos = readCount - parseCount;
     }
-  } while (m->state != MESSAGE_DONE);
+  } while (!i->done);
  
-  if (!strcmp("/hello", m->path)) {
-    if (!strcmp("GET", m->method)) {
+  if (!strcmp("/hello", i->url)) {
+    if (i->parser.method == HTTP_GET) {
       sendText(i->fd, 200, "OK", "Hello, World!\n");
     } else {
       sendText(i->fd, 405, "BAD METHOD", "Wrong method");
@@ -93,8 +116,8 @@ static void* requestThread(void* a) {
  
 finish:
   close(i->fd);
-  message_Free(m);
-  linep_Free(&lines);
+  free(buf);
+  free(i->url);
   free(i);
   return NULL;
 }
@@ -124,6 +147,10 @@ static void* acceptThread(void* a) {
 
 int testserver_Start(TestServer* s, int port) {
   message_Init();
+
+  http_parser_settings_init(&ParserSettings);
+  ParserSettings.on_url = parsedUrl;
+  ParserSettings.on_message_complete = parseComplete;
 
   s->listenfd = socket(AF_INET, SOCK_STREAM, 0);
   if (s->listenfd < 0) {
