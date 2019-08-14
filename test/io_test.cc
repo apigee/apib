@@ -27,18 +27,42 @@ limitations under the License.
 
 static int testServerPort;
 
-TEST(IO, OneThread) {
+class IOTest : public ::testing::Test {
+  protected:
+  IOTest() {}
+  ~IOTest() {
+    url_Reset();
+  } 
+};
+
+TEST_F(IOTest, OneThread) {
   char url[128];
-  sprintf(url, "http://localhost:%i", testServerPort);
+  sprintf(url, "http://localhost:%i/hello", testServerPort);
   url_InitOne(url);
 
   IOThread t;
   memset(&t, 0, sizeof(IOThread));
   t.numConnections = 1;
-  t.verbose = 1;
+  //t.verbose = 1;
   t.httpVerb = strdup("GET");
 
-  message_Init();
+  iothread_Start(&t);
+  sleep(2);
+  iothread_Stop(&t);
+
+  free(t.httpVerb);
+}
+
+TEST_F(IOTest, OneThreadLarge) {
+  char url[128];
+  sprintf(url, "http://localhost:%i/data?size=4000", testServerPort);
+  url_InitOne(url);
+
+  IOThread t;
+  memset(&t, 0, sizeof(IOThread));
+  t.numConnections = 1;
+  //t.verbose = 1;
+  t.httpVerb = strdup("GET");
 
   iothread_Start(&t);
   sleep(2);

@@ -14,19 +14,21 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+#include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <pthread.h>
+#include <regex.h>
 
 #include "test/test_server.h"
 
 #include "src/apib_lines.h"
-#include "src/apib_message.h"
 
 #include "http_parser.h"
 
@@ -35,12 +37,26 @@ limitations under the License.
 
 static http_parser_settings ParserSettings;
 
+static regex_t sizeParameter;
+
+#define SIZE_PARAMETER_REGEX "^size=([0-9]+)"
+
 typedef struct {
   int fd;
   int done;
-  char* url;
+  char* path;
+  int queryLen;
+  char** query;
   http_parser parser;
 } RequestInfo;
+
+static char* makeData(const int len) {
+  char* b = (char*)malloc(len);
+  for (int i = 0; i < len; i++) {
+    b[i] = '0' + (i % 10);
+  }
+  return b;
+}
 
 static void sendText(int fd, int code, const char* codestr, const char* msg) {
   StringBuf buf;
@@ -58,11 +74,67 @@ static void sendText(int fd, int code, const char* codestr, const char* msg) {
   buf_Free(&buf);
 }
 
+static void sendData(int fd, int len) {
+  StringBuf buf;
+  
+  buf_New(&buf, 0);
+  buf_Append(&buf, "HTTP/1.1 200 OK\r\n");
+  buf_Append(&buf, "Server: apib test server\r\n");
+  buf_Append(&buf, "Content-Type: text/plain\r\n");
+  buf_Printf(&buf, "Content-Length: %i\r\n", len);
+  buf_Append(&buf, "Connection: close\r\n");
+  buf_Append(&buf, "\r\n");
+
+  write(fd, buf_Get(&buf), buf_Length(&buf));
+  buf_Free(&buf);
+
+  char* data = makeData(len);
+  write(fd, data, len);
+  free(data);
+}
+
+// Called by http_parser when we get the URL.
 static int parsedUrl(http_parser* p, const char* buf, size_t len) {
   RequestInfo* i = (RequestInfo*)p->data;
-  i->url = (char*)malloc(len + 1);
-  memcpy(i->url, buf, len);
-  i->url[len] = 0;
+  char* url = (char*)malloc(len + 1);
+  memcpy(url, buf, len);
+  url[len] = 0;
+
+  char* sp;
+  char* t = strtok_r(url, "?", &sp);
+  i->path = strdup(t);
+  t = strtok_r(NULL, "?", &sp);
+
+  if (t == NULL) {
+    i->queryLen = 0;
+    i->query = NULL;
+  } else {
+    // Going to run strtok twice -- first time to count
+    char* query1 = strdup(t);
+    char* query2 = strdup(t);
+
+    int queryLen = 0;
+    t = strtok_r(query1, "&", &sp);
+    while (t != NULL) {
+      queryLen++;
+      t = strtok_r(NULL, "&", &sp);
+    }
+
+    i->queryLen = queryLen;
+    i->query = (char**)malloc(sizeof(char*) * queryLen);
+
+    t = strtok_r(query2, "&", &sp);
+    for (int inc = 0; inc < queryLen; inc++) {
+      assert(t != NULL);
+      i->query[inc] = strdup(t);
+      t = strtok_r(NULL, "&", &sp);
+    }
+
+    free(query1);
+    free(query2);
+  }
+
+  free(url);
   return 0;
 }
 
@@ -70,6 +142,35 @@ static int parseComplete(http_parser* p) {
   RequestInfo* i = (RequestInfo*)p->data;
   i->done = 1;
   return 0;
+}
+
+static void handleRequest(RequestInfo* i) {
+  if (!strcmp("/hello", i->path)) {
+    if (i->parser.method == HTTP_GET) {
+      sendText(i->fd, 200, "OK", "Hello, World!\n");
+    } else {
+      sendText(i->fd, 405, "BAD METHOD", "Wrong method");
+    }
+  
+  } else if (!strcmp("/data", i->path)) {
+    if (i->parser.method == HTTP_GET) {
+      int size = 1024;
+      for (int j = 0; j < i->queryLen; j++) {
+        regmatch_t matches[2];
+        if (regexec(&sizeParameter, i->query[j], 2, matches, 0) == 0) {
+          assert(matches[1].rm_so < matches[1].rm_eo);
+          char* tmp = strndup(i->query[j] + matches[1].rm_so, matches[1].rm_eo - matches[1].rm_so);
+          size = atoi(tmp);
+          free(tmp);
+        }
+      }
+
+      sendData(i->fd, size);
+    } else {
+      sendText(i->fd, 405, "BAD METHOD", "Wrong method");
+    }
+  }
+  sendText(i->fd, 404, "NOT FOUND", "Not found");
 }
 
 static void* requestThread(void* a) {
@@ -105,19 +206,18 @@ static void* requestThread(void* a) {
     }
   } while (!i->done);
  
-  if (!strcmp("/hello", i->url)) {
-    if (i->parser.method == HTTP_GET) {
-      sendText(i->fd, 200, "OK", "Hello, World!\n");
-    } else {
-      sendText(i->fd, 405, "BAD METHOD", "Wrong method");
-    }
-  }
-  sendText(i->fd, 404, "NOT FOUND", "Not found");
+  handleRequest(i);
  
 finish:
   close(i->fd);
   free(buf);
-  free(i->url);
+  free(i->path);
+  if (i->queryLen > 0) {
+    for (int inc = 0; inc < i->queryLen; inc++) {
+      free(i->query[inc]);
+    }
+    free(i->query);
+  }
   free(i);
   return NULL;
 }
@@ -137,16 +237,14 @@ static void* acceptThread(void* a) {
     i->fd = fd;
 
     pthread_t thread;
-    //pthread_attr_t threadAttrs;
-    //pthread_attr_init(&threadAttrs);
     pthread_create(&thread, NULL, requestThread, i);
-    //pthread_attr_destroy(&threadAttrs);
     pthread_detach(thread);
   }
 }
 
 int testserver_Start(TestServer* s, int port) {
-  message_Init();
+  int err = regcomp(&sizeParameter, SIZE_PARAMETER_REGEX, REG_EXTENDED);
+  assert(err == 0);
 
   http_parser_settings_init(&ParserSettings);
   ParserSettings.on_url = parsedUrl;
@@ -163,7 +261,7 @@ int testserver_Start(TestServer* s, int port) {
   addr.sin_port = htons(port);
   addr.sin_addr.s_addr = htonl(INADDR_ANY);
 
-  int err = bind(s->listenfd, (const struct sockaddr*)&addr, sizeof(struct sockaddr_in));
+  err = bind(s->listenfd, (const struct sockaddr*)&addr, sizeof(struct sockaddr_in));
   if (err != 0) {
     perror("Can't bind to port");
     return -2;

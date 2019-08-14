@@ -130,12 +130,14 @@ void io_WriteDone(ConnectionState* c, int err) {
 void io_ReadDone(ConnectionState* c, int err) {
   if (!c->t->keepRunning) {
     io_Verbose(c, "Stopping\n");
+    io_Close(c);
     return;
   }
 
   if (err != 0) {
-    io_Verbose(c, "Error on write: %i\n", err);
+    io_Verbose(c, "Error on read: %i\n", err);
     recycle(c, 1);
+    return;
   }
 
   if (!http_should_keep_alive(&(c->parser))) {
