@@ -30,16 +30,18 @@ cc_library(
 cc_library(
     name = "io",
     srcs = [
-      "apib_iothread.c",
-    ], 
-    hdrs = [
-      "apib_iothread.h",
+        "apib_io_clear.c",
+        "apib_iothread.c",
     ],
-    deps = [
-      ":common",
-      "@libev",
+    hdrs = [
+        "apib_iothread.h",
     ],
     linkopts = [
-      "-lpthread"
-    ]
+        "-lpthread",
+    ],
+    deps = [
+        ":common",
+        "@httpparser",
+        "@libev",
+    ],
 )
