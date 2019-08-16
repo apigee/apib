@@ -19,8 +19,6 @@ limitations under the License.
 
 #include <stdio.h>
 
-#include "src/apib_iothread.h"
-
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -66,21 +64,22 @@ extern void RecordInit(const char* monitorHost, const char* monitor2Host);
 extern void RecordStart(int startReporting);
 // Stop it
 extern void RecordStop(void);
-// Calculate latencies -- necessary if you want them
-extern void ConsolidateLatencies(IOThread* args, int numThreads);
+
 // Get results since last interval -- may be called while running
 extern void ReportIntervalResults(BenchmarkIntervalResults* r);
 // Get total results -- must be called after stop
 extern void ReportResults(BenchmarkResults* r);
-// And clean it up
+// And clean it up. Don't call before reporting.
 extern void EndReporting(void);
 
 // Record an HTTP response and response code
-extern void RecordResult(int code);
+extern void RecordResult(int code, long long latency);
 // Record an error connecting
 extern void RecordSocketError(void);
 // Report any time we open a connection
 extern void RecordConnectionOpen(void);
+// Add to the total number of bytes processes
+extern void RecordByteCounts(long long sent, long long received);
 
 // Call ReportResults and print to a file
 extern void PrintShortResults(FILE* out, const char* runName, int threads, int connections);

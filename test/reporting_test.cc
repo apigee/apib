@@ -14,7 +14,6 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-#include "src/apib_iothread.h"
 #include "src/apib_reporting.h"
 #include "gtest/gtest.h"
 
@@ -45,14 +44,15 @@ TEST_F(Reporting, ReportingZero) {
 TEST_F(Reporting, ReportingCount) {
   RecordStart(1);
   RecordConnectionOpen();
-  RecordResult(200);
-  RecordResult(201);
-  RecordResult(204);
-  RecordResult(403);
-  RecordResult(401);
-  RecordResult(500);
+  RecordResult(200, 100000000);
+  RecordResult(201, 110000000);
+  RecordResult(204, 120000000);
+  RecordResult(403, 100000000);
+  RecordResult(401, 100000000);
+  RecordResult(500, 100000000);
   RecordSocketError();
   RecordConnectionOpen();
+  RecordByteCounts(100, 200);
   RecordStop();
 
   BenchmarkResults r;
@@ -63,27 +63,29 @@ TEST_F(Reporting, ReportingCount) {
   EXPECT_EQ(3, r.unsuccessfulRequests);
   EXPECT_EQ(1, r.socketErrors);
   EXPECT_EQ(2, r.connectionsOpened);
-  EXPECT_EQ(0, r.totalBytesSent);
-  EXPECT_EQ(0, r.totalBytesReceived);
+  EXPECT_EQ(100, r.totalBytesSent);
+  EXPECT_EQ(200, r.totalBytesReceived);
+  EXPECT_EQ(100.0, r.latencies[0]);
+  EXPECT_EQ(120.0, r.latencies[100]);
 }
 
 TEST_F(Reporting, ReportingInterval) {
   RecordStart(1);
   RecordConnectionOpen();
-  RecordResult(200);
-  RecordResult(201);
-  RecordResult(400);
+  RecordResult(200, 100000000);
+  RecordResult(201, 100000000);
+  RecordResult(400, 100000000);
 
   BenchmarkIntervalResults ri;
   ReportIntervalResults(&ri);
   EXPECT_EQ(2, ri.successfulRequests);
   EXPECT_LT(0.0, ri.averageThroughput);
 
-  RecordResult(204);
-  RecordResult(403);
-  RecordResult(401);
-  RecordResult(500);
-  RecordResult(200);
+  RecordResult(204, 100000000);
+  RecordResult(403, 100000000);
+  RecordResult(401, 100000000);
+  RecordResult(500, 100000000);
+  RecordResult(200, 100000000);
 
   ReportIntervalResults(&ri);
   EXPECT_EQ(2, ri.successfulRequests);
@@ -100,36 +102,4 @@ TEST_F(Reporting, ReportingInterval) {
   EXPECT_EQ(1, r.connectionsOpened);
   EXPECT_EQ(0, r.totalBytesSent);
   EXPECT_EQ(0, r.totalBytesReceived);
-}
-
-TEST_F(Reporting, Latencies) {
-  IOThread threads[2];
-  threads[0].latencies = (long long*)malloc(sizeof(long long) * 4);
-  threads[0].latencies[0] = 100000000;
-  threads[0].latencies[1] = 110000000;
-  threads[0].latencies[2] = 140000000;
-  threads[0].latencies[3] = 100000000;
-  threads[0].latenciesSize = threads[0].latenciesCount = 4;
-  threads[0].readBytes = 123;
-  threads[0].writeBytes = 456;
-
-  threads[1].latencies = (long long*)malloc(sizeof(long long) * 3);
-  threads[1].latencies[0] = 50000000;
-  threads[1].latencies[1] = 60000000;
-  threads[1].latencies[2] = 70000000;
-  threads[1].latenciesSize = threads[1].latenciesCount = 3;
-  threads[1].readBytes = 999;
-  threads[1].writeBytes = 1000;
-
-  ConsolidateLatencies(threads, 2);
-
-  free(threads[0].latencies);
-  free(threads[1].latencies);
-
-  BenchmarkResults r;
-  ReportResults(&r);
-  EXPECT_EQ(50.0, r.latencies[0]);
-  EXPECT_EQ(140.0, r.latencies[100]);
-  EXPECT_EQ(123 + 999, r.totalBytesReceived);
-  EXPECT_EQ(456 + 1000, r.totalBytesSent);
 }

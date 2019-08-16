@@ -26,6 +26,7 @@ limitations under the License.
 #include "src/apib_reporting.h"
 
 #define NUM_CPU_SAMPLES 4
+#define NUM_INITIAL_LATENCIES 8192
 
 #define CPU_CMD "cpu\n"
 #define MEM_CMD "mem\n"
@@ -52,7 +53,8 @@ static long long stopTime;
 static long long intervalStartTime;
 
 static long long* latencies = NULL;
-static unsigned int latenciesCount = 0;
+static size_t latenciesCount = 0;
+static size_t latenciesSize = 0;
 
 static CPUSamples clientSamples;
 static CPUSamples remoteSamples;
@@ -149,7 +151,7 @@ static double getRemoteStat(const char* cmd, apr_socket_t** sock)
 }
 */
 
-void RecordResult(int code) {
+void RecordResult(int code, long long latency) {
   pthread_mutex_lock(&latch);
   completedRequests++;
   if ((code >= 200) && (code < 300)) {
@@ -158,6 +160,12 @@ void RecordResult(int code) {
   } else {
     unsuccessfulRequests++;
   }
+  if (latenciesCount == latenciesSize) {
+    latenciesSize *= 2;
+    latencies = (long long*)malloc(sizeof(long long) * latenciesSize);
+  }
+  latencies[latenciesCount] = latency;
+  latenciesCount++;
   pthread_mutex_unlock(&latch);
 }
 
@@ -173,10 +181,20 @@ void RecordConnectionOpen(void) {
   pthread_mutex_unlock(&latch);
 }
 
+void RecordByteCounts(long long sent, long long received) {
+  pthread_mutex_lock(&latch);
+  totalBytesSent += sent;
+  totalBytesReceived += received;
+  pthread_mutex_unlock(&latch);
+}
+
 void RecordInit(const char* monitorHost, const char* host2) {
   pthread_mutex_init(&latch, NULL);
   int err = cpu_Init();
   cpuAvailable = (err == 0);
+  latenciesSize = NUM_INITIAL_LATENCIES;
+  latencies = (long long*)malloc(sizeof(long long) * NUM_INITIAL_LATENCIES);
+
   assert(monitorHost == NULL);
   assert(host2 == NULL);
   /*
@@ -199,6 +217,9 @@ void RecordStart(int startReporting)
   unsuccessfulRequests = 0;
   socketErrors = 0;
   connectionsOpened = 0;
+  totalBytesSent = 0;
+  totalBytesReceived = 0;
+  latenciesCount = 0;
 
   reporting = startReporting;  
   cpu_GetUsage(&cpuUsage);
@@ -390,6 +411,7 @@ static double getMaxCpu(CPUSamples* s)
 void ReportResults(BenchmarkResults* r) {
   pthread_mutex_lock(&latch);
 
+  qsort(latencies, latenciesCount, sizeof(long long), compareLLongs);
   r->completedRequests = completedRequests;
   r->successfulRequests = successfulRequests;
   r->unsuccessfulRequests = unsuccessfulRequests;
@@ -522,34 +544,6 @@ void PrintReportingHeader(FILE* out)
 	  "Avg. Send Bandwidth,Avg. Recv. Bandwidth\n");
 }
 
-void ConsolidateLatencies(IOThread* args, int numThreads)
-{
-  if (args == NULL) {
-    return;
-  }
-
-  pthread_mutex_lock(&latch);
-  size_t latenciesSize = 0;
-  for (int i = 0; i < numThreads; i++) {
-    latenciesSize += args[i].latenciesCount;
-  }
-  latencies = (long long*)malloc(sizeof(long long) * latenciesSize);
-  latenciesCount = 0;
-  totalBytesSent = 0;
-  totalBytesReceived = 0;
-
-  for (int i = 0; i < numThreads; i++) {
-    memcpy(latencies + latenciesCount, args[i].latencies, 
-	    sizeof(long long) * args[i].latenciesCount);
-    latenciesCount += args[i].latenciesCount;
-    totalBytesSent += args[i].writeBytes;
-    totalBytesReceived += args[i].readBytes;
-  }
-
-  qsort(latencies, latenciesCount, sizeof(long long), compareLLongs);
-  pthread_mutex_unlock(&latch);
-}
-
 void EndReporting(void)
 {
   /*
@@ -562,8 +556,8 @@ void EndReporting(void)
   */
   if (latencies != NULL) {
     free(latencies);
-    freeSamples(&clientSamples);
-    freeSamples(&remoteSamples);
-    freeSamples(&remote2Samples);
   }
+  freeSamples(&clientSamples);
+  freeSamples(&remoteSamples);
+  freeSamples(&remote2Samples);
 }

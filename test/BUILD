@@ -70,7 +70,7 @@ cc_test(
     name = "reporting",
     srcs = ["reporting_test.cc"],
     deps = [
-        "//src:io",
+        "//src:common",
         "@gtest",
         "@gtest//:gtest_main",
     ]
