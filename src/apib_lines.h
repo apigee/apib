@@ -117,6 +117,8 @@ extern void buf_Free(StringBuf* b);
 // expanding the buffer as necessary
 extern void buf_Append(StringBuf* b, const char* s);
 
+extern void buf_AppendN(StringBuf* b, const char* s, size_t len);
+
 // buf_Append but supporting sprintf-like stuff
 extern void buf_Printf(StringBuf* b, const char* format, ...);
 

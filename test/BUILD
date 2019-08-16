@@ -67,6 +67,16 @@ cc_test(
 )
 
 cc_test(
+    name = "reporting",
+    srcs = ["reporting_test.cc"],
+    deps = [
+        "//src:io",
+        "@gtest",
+        "@gtest//:gtest_main",
+    ]
+)
+
+cc_test(
     name = "iotest",
     srcs = ["io_test.cc"],
     deps = [

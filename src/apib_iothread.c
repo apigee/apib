@@ -17,22 +17,13 @@ limitations under the License.
 #include "src/apib_iothread.h"
 
 #include <assert.h>
-#include <errno.h>
-#include <fcntl.h>
-#include <netdb.h>
-#include <netinet/in.h>
-#include <netinet/tcp.h>
 #include <pthread.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <sys/socket.h>
-#include <sys/types.h>
-#include <unistd.h>
 
 #include "ev.h"
 #include "src/apib_lines.h"
-#include "src/apib_message.h"
 #include "src/apib_rand.h"
 #include "src/apib_url.h"
 
@@ -68,6 +59,7 @@ static int httpComplete(http_parser* p) {
 }
 
 void writeRequest(ConnectionState* c) {
+  // TODO if we didn't change URL, then don't do this every time!
   c->writeBufPos = 0;
   buf_Clear(&(c->writeBuf));
   buf_Append(&(c->writeBuf), c->t->httpVerb);
@@ -75,8 +67,15 @@ void writeRequest(ConnectionState* c) {
   buf_Append(&(c->writeBuf), c->url->path);
   buf_Append(&(c->writeBuf), " HTTP/1.1\r\n");
   buf_Append(&(c->writeBuf), "User-Agent: apib\r\n");
+  if (c->t->sendDataLen > 0) {
+    buf_Append(&(c->writeBuf), "Content-Type: text-plain\r\n");
+    buf_Printf(&(c->writeBuf), "Content-Length: %lu\r\n", c->t->sendDataLen);
+  }
   // TODO write other headers, including host override
   buf_Append(&(c->writeBuf), "\r\n");
+  if (c->t->sendDataLen > 0) {
+    buf_AppendN(&(c->writeBuf), c->t->sendData, c->t->sendDataLen);
+  }
   c->state = SENDING;
 }
 
@@ -157,6 +156,15 @@ void io_ReadDone(ConnectionState* c, int err) {
 
 static void* ioThread(void* a) {
   IOThread* t = (IOThread*)a;
+  // TODO increment all these while running
+  t->latenciesSize = 1024;
+  t->latenciesCount = 0;
+  t->latencies = (long long*)malloc(sizeof(long long) * 1024);
+  t->readCount = 0;
+  t->writeCount = 0;
+  t->readBytes = 0;
+  t->writeBytes = 0;
+
   ConnectionState* conns =
       (ConnectionState*)malloc(sizeof(ConnectionState) * t->numConnections);
   t->rand = apib_InitRand();
@@ -195,6 +203,7 @@ finish:
     free(s->readBuf);
   }
   free(conns);
+  free(t->latencies);
   apib_FreeRand(t->rand);
   ev_loop_destroy(t->loop);
   return NULL;

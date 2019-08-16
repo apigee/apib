@@ -247,10 +247,14 @@ static void ensureSpace(StringBuf* b, int newLen) {
 }
 
 void buf_Append(StringBuf* b, const char* s) {
-  const int newLen = strlen(s);
-  ensureSpace(b, newLen);
-  memcpy(b->buf + b->pos, s, newLen);
-  b->pos += newLen;
+  const size_t len = strlen(s);
+  buf_AppendN(b, s, len);
+}
+
+void buf_AppendN(StringBuf* b, const char* s, size_t len) {
+  ensureSpace(b, len);
+  memcpy(b->buf + b->pos, s, len);
+  b->pos += len;
   b->buf[b->pos] = 0;
 }
 

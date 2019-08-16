@@ -36,21 +36,22 @@ typedef struct {
   char* httpVerb;
   char* sslCipher;
   char* sendData;
-  unsigned int sendDataSize;
+  size_t sendDataLen;
   // SSL_CTX*        sslCtx;
   char** headers;
   unsigned int numHeaders;
   unsigned int thinkTime;
   int hostHeaderOverride;
-  unsigned long* latencies;
-  unsigned int latenciesSize;
-  unsigned int latenciesCount;
-  unsigned long readCount;
-  unsigned long writeCount;
-  unsigned long long readBytes;
-  unsigned long long writeBytes;
 
   // Everything ABOVE must be initialized.
+  long long* latencies;
+  size_t latenciesSize;
+  size_t latenciesCount;
+  long readCount;
+  long writeCount;
+  long long readBytes;
+  long long writeBytes;
+  
   // Internal stuff -- no need for anyone to set
   pthread_t thread;
   volatile int keepRunning;

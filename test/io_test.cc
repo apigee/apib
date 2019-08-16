@@ -31,6 +31,7 @@ class IOTest : public ::testing::Test {
   protected:
   IOTest() {}
   ~IOTest() {
+    // The "url_" family of functions use static data, so reset every time.
     url_Reset();
   } 
 };
@@ -63,6 +64,32 @@ TEST_F(IOTest, OneThreadLarge) {
   t.numConnections = 1;
   //t.verbose = 1;
   t.httpVerb = strdup("GET");
+
+  iothread_Start(&t);
+  sleep(2);
+  iothread_Stop(&t);
+
+  free(t.httpVerb);
+}
+
+#define POST_LEN 3000
+
+TEST_F(IOTest, OneThreadBigPost) {
+  char url[128];
+  sprintf(url, "http://localhost:%i/echo", testServerPort);
+  url_InitOne(url);
+
+  IOThread t;
+  memset(&t, 0, sizeof(IOThread));
+  t.numConnections = 1;
+  //t.verbose = 1;
+  t.httpVerb = strdup("POST");
+  t.sendData = (char*)malloc(POST_LEN);
+  t.sendDataLen = POST_LEN;
+
+  for (int p = 0; p < POST_LEN; p += 10) {
+    memcpy(t.sendData + p, "abcdefghij", 10);
+  }
 
   iothread_Start(&t);
   sleep(2);

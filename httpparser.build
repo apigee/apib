@@ -3,7 +3,6 @@ package(default_visibility = ["//visibility:public"])
 cc_library(
     name = "httpparser",
     srcs = [
-        "contrib/url_parser.c",
         "http_parser.c",
     ],
     hdrs = [

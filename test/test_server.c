@@ -14,6 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+#include <arpa/inet.h>
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -34,6 +35,7 @@ limitations under the License.
 
 #define BACKLOG 32
 #define READ_BUF 1024
+#define LOCALHOST "127.0.0.1"
 
 static http_parser_settings ParserSettings;
 
@@ -45,8 +47,10 @@ typedef struct {
   int fd;
   int done;
   char* path;
-  int queryLen;
+  size_t queryLen;
   char** query;
+  char* body;
+  size_t bodyLen;
   http_parser parser;
 } RequestInfo;
 
@@ -74,7 +78,7 @@ static void sendText(int fd, int code, const char* codestr, const char* msg) {
   buf_Free(&buf);
 }
 
-static void sendData(int fd, int len) {
+static void sendData(int fd, char* data, size_t len) {
   StringBuf buf;
   
   buf_New(&buf, 0);
@@ -88,9 +92,23 @@ static void sendData(int fd, int len) {
   write(fd, buf_Get(&buf), buf_Length(&buf));
   buf_Free(&buf);
 
-  char* data = makeData(len);
   write(fd, data, len);
-  free(data);
+}
+
+// Called by http_parser to collect the request body
+static int parsedBody(http_parser* p, const char* buf, size_t len) {
+  RequestInfo* i = (RequestInfo*)p->data;
+  if (i->body == NULL) {
+    i->bodyLen = len;
+    i->body = (char*)malloc(len);
+    memcpy(i->body, buf, len);
+  } else {
+    const size_t newLen = i->bodyLen + len;
+    i->body = (char*)realloc(i->body, newLen);
+    memcpy(i->body + i->bodyLen, buf, len);
+    i->bodyLen = newLen;
+  }
+  return 0;
 }
 
 // Called by http_parser when we get the URL.
@@ -164,13 +182,22 @@ static void handleRequest(RequestInfo* i) {
           free(tmp);
         }
       }
-
-      sendData(i->fd, size);
+      char* data = makeData(size);
+      sendData(i->fd, data, size);
+      free(data);
     } else {
       sendText(i->fd, 405, "BAD METHOD", "Wrong method");
     }
+  
+  } else if (!strcmp("/echo", i->path)) {
+    if (i->parser.method == HTTP_POST) {
+      sendData(i->fd, i->body, i->bodyLen);
+    } else {
+      sendText(i->fd, 405, "BAD METHOD", "Wrong method");
+    }
+  } else {
+    sendText(i->fd, 404, "NOT FOUND", "Not found");
   }
-  sendText(i->fd, 404, "NOT FOUND", "Not found");
 }
 
 static void* requestThread(void* a) {
@@ -192,17 +219,22 @@ static void* requestThread(void* a) {
       break;
     }
 
+    const size_t available = bufPos + readCount;
     const size_t parseCount = http_parser_execute(&(i->parser), &ParserSettings, 
-      buf, readCount);
+      buf, available);
+   
     if (i->parser.http_errno != 0) {
-      fprintf(stderr, "Error parsing HTTP request: %i\n", i->parser.http_errno);
+      fprintf(stderr, "Error parsing HTTP request: %i: %s\n", 
+        i->parser.http_errno, http_errno_description(i->parser.http_errno));
       goto finish;
     }
-    bufPos += parseCount;
 
-    if (parseCount < readCount) {
-      memmove(buf, buf + parseCount, readCount - parseCount);
-      bufPos = readCount - parseCount;
+    if (parseCount < available) {
+      const size_t leftover = available - parseCount;
+      memmove(buf, buf + parseCount, leftover);
+      bufPos = leftover;
+    } else {
+      bufPos = 0;
     }
   } while (!i->done);
  
@@ -217,6 +249,9 @@ finish:
       free(i->query[inc]);
     }
     free(i->query);
+  }
+  if (i->body != NULL) {
+    free(i->body);
   }
   free(i);
   return NULL;
@@ -234,6 +269,7 @@ static void* acceptThread(void* a) {
     }
     
     RequestInfo* i = (RequestInfo*)malloc(sizeof(RequestInfo));
+    memset(i, 0, sizeof(RequestInfo));
     i->fd = fd;
 
     pthread_t thread;
@@ -248,6 +284,7 @@ int testserver_Start(TestServer* s, int port) {
 
   http_parser_settings_init(&ParserSettings);
   ParserSettings.on_url = parsedUrl;
+  ParserSettings.on_body = parsedBody;
   ParserSettings.on_message_complete = parseComplete;
 
   s->listenfd = socket(AF_INET, SOCK_STREAM, 0);
@@ -259,7 +296,9 @@ int testserver_Start(TestServer* s, int port) {
   struct sockaddr_in addr;
   addr.sin_family = AF_INET;
   addr.sin_port = htons(port);
-  addr.sin_addr.s_addr = htonl(INADDR_ANY);
+  // Listen on localhost to avoid weird firewall stuff on Macs
+  // We may have to revisit if we test on platforms with a different address.
+  addr.sin_addr.s_addr = inet_addr(LOCALHOST);
 
   err = bind(s->listenfd, (const struct sockaddr*)&addr, sizeof(struct sockaddr_in));
   if (err != 0) {
