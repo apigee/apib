@@ -82,7 +82,8 @@ extern void RecordConnectionOpen(void);
 extern void RecordByteCounts(long long sent, long long received);
 
 // Call ReportResults and print to a file
-extern void PrintShortResults(FILE* out, const char* runName, int threads, int connections);
+extern void PrintShortResults(FILE* out, const char* runName, int threads,
+                              int connections);
 extern void PrintFullResults(FILE* out);
 // Call ReportIntervalResults and print to a file
 extern void ReportInterval(FILE* out, int totalDuration, int warmup);

@@ -1,148 +1,137 @@
 /*
-   Copyright 2013 Apigee Corp.
+Copyright 2019 Google LLC
 
-   Licensed under the Apache License, Version 2.0 (the "License");
-   you may not use this file except in compliance with the License.
-   You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-       http://www.apache.org/licenses/LICENSE-2.0
+    https://www.apache.org/licenses/LICENSE-2.0
 
-   Unless required by applicable law or agreed to in writing, software
-   distributed under the License is distributed on an "AS IS" BASIS,
-   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-   See the License for the specific language governing permissions and
-   limitations under the License.
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 */
 
-#include <config.h>
+#include <assert.h>
+#include <fcntl.h>
+#include <getopt.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <sys/time.h>
 #include <sys/resource.h>
-#include <assert.h>
+#include <sys/stat.h>
+#include <sys/time.h>
+#include <unistd.h>
 
-#include <apr_atomic.h>
-#include <apr_base64.h>
-#include <apr_general.h>
-#include <apr_getopt.h>
-#include <apr_pools.h>
-#include <apr_portable.h>
-#include <apr_strings.h>
-#include <apr_thread_proc.h>
-#include <apr_thread_rwlock.h>
-#include <apr_time.h>
+#include "src/apib_cpu.h"
+#include "src/apib_iothread.h"
+#include "src/apib_reporting.h"
+#include "src/apib_url.h"
 
-#include <openssl/ssl.h>
-#include <openssl/crypto.h>
-
-#if HAVE_PTHREAD_H
-#include <pthread.h>
-#endif
-
-#ifndef OPENSSL_THREADS
-#error This program requires OpenSSL with thread support
-#endif
-
-#include <apib.h>
+#define DEFAULT_CONTENT_TYPE "application/octet-stream"
+#define KEEP_ALIVE_ALWAYS -1
+#define KEEP_ALIVE_NEVER 0
 
 /* Globals */
+volatile int Running;
+int ShortOutput;
+char* RunName;
+int NumConnections;
+int NumThreads;
+int JustOnce = 0;
+int KeepAlive;
 
-apr_pool_t*      MainPool;
-volatile int     Running;
-int              ShortOutput;
-char*            RunName;
-int              NumConnections;
-int              NumThreads;
-int              JustOnce = 0;
-int              KeepAlive;
+char** Headers = NULL;
+unsigned int HeadersSize = 0;
+unsigned int NumHeaders = 0;
+int HostHeaderOverride = 0;
 
-char**          Headers = NULL;
-unsigned int    HeadersSize = 0;
-unsigned int    NumHeaders = 0;
-int             HostHeaderOverride = 0;
+char* OAuthCK = NULL;
+char* OAuthCS = NULL;
+char* OAuthAT = NULL;
+char* OAuthAS = NULL;
 
-char*           OAuthCK = NULL;
-char*           OAuthCS = NULL;
-char*           OAuthAT = NULL;
-char*           OAuthAS = NULL;
+#define OPTIONS "c:d:f:hk:t:u:vw:x:C:H:O:K:M:X:N:ST1W:"
 
-#if HAVE_PTHREAD_RWLOCK_INIT
-pthread_rwlock_t* sslLocks = NULL;
-#else
-apr_thread_rwlock_t** sslLocks = NULL;
-#endif
+static const struct option Options[] = {
+    {"concurrency", required_argument, NULL, 'c'},
+    {"duration", required_argument, NULL, 'd'},
+    {"input-file", required_argument, NULL, 'f'},
+    {"help", no_argument, NULL, 'h'},
+    {"keep-alive", required_argument, NULL, 'k'},
+    {"content-type", required_argument, NULL, 't'},
+    {"username-password", required_argument, NULL, 'u'},
+    {"verbose", no_argument, NULL, 'v'},
+    {"warmup", required_argument, NULL, 'w'},
+    {"method", required_argument, NULL, 'x'},
+    {"cipherlist", required_argument, NULL, 'C'},
+    {"header", required_argument, NULL, 'H'},
+    {"oauth", required_argument, NULL, 'O'},
+    {"iothreads", required_argument, NULL, 'K'},
+    {"monitor", required_argument, NULL, 'M'},
+    {"monitor2", required_argument, NULL, 'X'},
+    {"name", required_argument, NULL, 'N'},
+    {"csv-output", no_argument, NULL, 'S'},
+    {"header-line", no_argument, NULL, 'T'},
+    {"one", no_argument, NULL, '1'},
+    {"think-time", required_argument, NULL, 'W'}};
 
-static apr_getopt_option_t Options[] =
-  { 
-    { "concurrency", 'c', 1, "Number of concurrent requests (default 1)" },
-    { "duration", 'd', 1, "Test duration in seconds" },
-    { "input-file", 'f', 1, "File name to send on PUT and POST requests" },
-    { "help", 'h', 0, "Display this message" },
-    { "keep-alive", 'k', 1, "Keep-alive duration -- 0 to disable, non-zero for timeout (default 9999)" },
-    { "content-type", 't', 1, "Value of the Content-Type header" },
-    { "username-password", 'u', 1, "Credentials for HTTP Basic authentication in username:password format" },
-    { "verbose", 'v', 0, "Verbose output" },
-    { "warmup", 'w', 1, "Warm-up duration, in seconds (default 0)" },
-    { "method", 'x', 1, "HTTP request method (default GET)" },
-    { "cipherlist", 'C', 1, "Cipher list offered to server for HTTPS" },
-    { "header", 'H', 1, "HTTP header line in Name: Value format" },
-    { "oauth", 'O', 1, "OAuth 1.0 signature, in format consumerkey:secret:token:secret" },
-    { "iothreads", 'K', 1, "Number of I/O threads to spawn, default == number of CPU cores" },
-    { "monitor", 'M', 1, "Host name and port number of host running apibmon" },
-    { "monitor2", 'X', 1, "Second host name and port number of host running apibmon" },
-    { "name", 'N', 1, "Name to put in CSV output to identify test run" },
-    { "csv-output", 'S', 0, "Output all test results in a single CSV line" },
-    { "header-line", 'T', 0, "Do not run, but output a single CSV header line" },
-    { "one", '1', 0, "Send just one request and exit" },
-    { "think-time", 'W', 1, "Think time to wait in between requests, in milliseconds" },
-    { NULL, 0, 0, NULL }
-  };
-
-#define USAGE_DOCS \
-  "\n" \
-  "The last argument may be an http or https URL, or an \"@\" symbol followed\n" \
-  "by a file name. If a file name, then apib will read the file as a list of\n" \
-  "URLs, one per line, and randoml Test each one.\n" \
-  "\n" \
-  "  if -S is used then output is CSV-separated on one line:\n" \
-  "  name,throughput,avg. latency,threads,connections,duration,completed,successful,errors,sockets,min. latency,max. latency,50%,90%,98%,99%\n" \
-  "\n" \
+#define USAGE_DOCS                                                             \
+  "-1 --one                Send just one request and exit\n"                   \
+  "-c --concurrency        Number of concurrent requests (default 1)\n"        \
+  "-d --duration           Test duration in seconds\n"                         \
+  "-f --input-file         File name to send on PUT and POST requests\n"       \
+  "-h --help               Display this message\n"                             \
+  "-k --keep-alive         Keep-alive duration -- 0 to disable, non-zero for " \
+  "timeout\n"                                                                  \
+  "-t --content-type       Value of the Content-Type header\n"                 \
+  "-u --username-password  Credentials for HTTP Basic authentication in "      \
+  "username:password format\n"                                                 \
+  "-v --verbose            Verbose output\n"                                   \
+  "-w --warmup             Warm-up duration, in seconds (default 0)\n"         \
+  "-x --method             HTTP request method (default GET)\n"                \
+  "-C --cipherlist         Cipher list offered to server for HTTPS\n"          \
+  "-H --header             HTTP header line in Name: Value format\n"           \
+  "-K --iothreads          Number of I/O threads to spawn, default == number " \
+  "of CPU cores\n"                                                             \
+  "-N --name               Name to put in CSV output to identify test run\n"   \
+  "-O --oauth              OAuth 1.0 signature, in format "                    \
+  "consumerkey:secret:token:secret\n"                                          \
+  "-S --csv-output         Output all test results in a single CSV line\n"     \
+  "-T --header-line        Do not run, but output a single CSV header line\n"  \
+  "-W --think-time         Think time to wait in between requests, in "        \
+  "milliseconds\n"                                                             \
+  "-M --monitor            Host name and port number of host running "         \
+  "apibmon\n"                                                                  \
+  "-X --monitor2           Second host name and port number of host running "  \
+  "apibmon\n"                                                                  \
+  "\n"                                                                         \
+  "The last argument may be an http or https URL, or an \"@\" symbol "         \
+  "followed\n"                                                                 \
+  "by a file name. If a file name, then apib will read the file as a list "    \
+  "of\n"                                                                       \
+  "URLs, one per line, and randoml Test each one.\n"                           \
+  "\n"                                                                         \
+  "  if -S is used then output is CSV-separated on one line:\n"                \
+  "  name,throughput,avg. "                                                    \
+  "latency,threads,connections,duration,completed,successful,errors,sockets,"  \
+  "min. latency,max. latency,50%,90%,98%,99%\n"                                \
+  "\n"                                                                         \
   "  if -O is used then the value is four parameters, separated by a colon:\n" \
   "  consumer key:secret:token:secret. You may omit the last two.\n"
-
 #define DEFAULT_NUM_CONNECTIONS 1
 #define DEFAULT_LATENCIES_SIZE 1024
 #define DEFAULT_DURATION 60
 #define DEFAULT_WARMUP 0
 #define REPORT_SLEEP_TIME 5
 
-static void printUsage(void)
-{
+static void printUsage() {
   fprintf(stderr, "Usage: apib [options] [URL | @file]\n");
-  int i = 0;
-  while (Options[i].optch != 0) {
-    apr_getopt_option_t* opt = &(Options[i]);
-    fprintf(stderr, "-%c\t--%s\t%s\n",
-	    opt->optch, opt->name, opt->description);
-    i++;
-  }
   fprintf(stderr, "%s", USAGE_DOCS);
 }
 
-#if HAVE_PTHREAD_CREATE
-static void* IOThreadFunc(void* arg)
-#else
-static void* IOThreadFunc(apr_thread_t* t, void* arg)
-#endif
-{
-  IOArgs* args = (IOArgs*)arg;
-
-  RunIO(args);
-  return NULL;
-}
-
-static int setProcessLimits(int numConnections)
-{
+static int setProcessLimits(int numConnections) {
   struct rlimit limits;
   int err;
 
@@ -160,15 +149,17 @@ static int setProcessLimits(int numConnections)
       return -1;
     }
   } else {
-    fprintf(stderr, "Current hard file descriptor limit is %lu: it is too low. Try sudo.\n", 
-	   limits.rlim_max);
+    fprintf(stderr,
+            "Current hard file descriptor limit is %llu: it is too low. Try "
+            "sudo.\n",
+            limits.rlim_max);
     return -1;
   }
 }
 
+#if 0
 #if HAVE_PTHREAD_RWLOCK_INIT
-static void sslLock(int mode, int n, const char* f, int l)
-{
+static void sslLock(int mode, int n, const char* f, int l) {
   if (mode & CRYPTO_LOCK) {
     if (mode & CRYPTO_READ) {
       pthread_rwlock_rdlock(&(sslLocks[n]));
@@ -180,8 +171,7 @@ static void sslLock(int mode, int n, const char* f, int l)
   }
 }
 
-static unsigned long sslThreadId(void)
-{ 
+static unsigned long sslThreadId(void) {
 #if HAVE_PTHREAD_CREATE
   return (unsigned long)pthread_self();
 #else
@@ -189,10 +179,9 @@ static unsigned long sslThreadId(void)
 #endif
 }
 
-static void initSSLLocks(void)
-{ 
-  sslLocks = (pthread_rwlock_t*)apr_pcalloc(MainPool,
-                sizeof(pthread_rwlock_t) * CRYPTO_num_locks());
+static void initSSLLocks(void) {
+  sslLocks = (pthread_rwlock_t*)apr_pcalloc(
+      MainPool, sizeof(pthread_rwlock_t) * CRYPTO_num_locks());
   for (int i = 0; i < CRYPTO_num_locks(); i++) {
     pthread_rwlock_init(&(sslLocks[i]), NULL);
   }
@@ -201,8 +190,7 @@ static void initSSLLocks(void)
 }
 
 #else
-static void sslLock(int mode, int n, const char* f, int l)
-{
+static void sslLock(int mode, int n, const char* f, int l) {
   if (mode & CRYPTO_LOCK) {
     if (mode & CRYPTO_READ) {
       apr_thread_rwlock_rdlock(sslLocks[n]);
@@ -214,15 +202,11 @@ static void sslLock(int mode, int n, const char* f, int l)
   }
 }
 
-static unsigned long sslThreadId(void)
-{ 
-  return apr_os_thread_current();
-}
+static unsigned long sslThreadId(void) { return apr_os_thread_current(); }
 
-static void initSSLLocks(void)
-{ 
-  sslLocks = (apr_thread_rwlock_t**)apr_palloc(MainPool,
-                sizeof(apr_thread_rwlock_t*) * CRYPTO_num_locks());
+static void initSSLLocks(void) {
+  sslLocks = (apr_thread_rwlock_t**)apr_palloc(
+      MainPool, sizeof(apr_thread_rwlock_t*) * CRYPTO_num_locks());
   for (int i = 0; i < CRYPTO_num_locks(); i++) {
     apr_thread_rwlock_create(&(sslLocks[i]), MainPool);
   }
@@ -231,10 +215,9 @@ static void initSSLLocks(void)
 }
 #endif
 
-static void sslInfoCallback(const SSL* ssl, int where, int ret)
-{
+static void sslInfoCallback(const SSL* ssl, int where, int ret) {
   const char* op;
-  
+
   if (where & SSL_CB_READ) {
     op = "READ";
   } else if (where & SSL_CB_WRITE) {
@@ -249,8 +232,7 @@ static void sslInfoCallback(const SSL* ssl, int where, int ret)
   printf("  ssl: op = %s ret = %i %s\n", op, ret, SSL_state_string_long(ssl));
 }
 
-static int createSslContext(IOArgs* args, int isFirst)
-{
+static int createSslContext(IOArgs* args, int isFirst) {
   if (isFirst) {
     SSL_load_error_strings();
     SSL_library_init();
@@ -264,55 +246,44 @@ static int createSslContext(IOArgs* args, int isFirst)
   }
 
   if (args->sslCipher) {
-    int res = SSL_CTX_set_cipher_list( args->sslCtx, args->sslCipher );
+    int res = SSL_CTX_set_cipher_list(args->sslCtx, args->sslCipher);
     if (res != 1) {
-      fprintf( stderr, "Set Cipher list to %s failed\n", args->sslCipher );
+      fprintf(stderr, "Set Cipher list to %s failed\n", args->sslCipher);
       return -1;
     }
   }
   return 0;
 }
+#endif
 
-static int readFile(const char* name, IOArgs* args)
-{
-  char errBuf[80];
-  apr_status_t s;
-  apr_file_t* f;
-  apr_finfo_t fInfo;
-
-  s = apr_file_open(&f, name, APR_READ | APR_BINARY, APR_OS_DEFAULT, MainPool);
-  if (s != APR_SUCCESS) {
-    apr_strerror(s, errBuf, 80);
-    fprintf(stderr, "Can't open input file %s: %i (%s)\n",
-	    name, s, errBuf);
+static int readFile(const char* name, IOThread* t) {
+  int fd = open(name, O_RDONLY);
+  if (fd < 0) {
+    perror("Can't open input file");
     return -1;
   }
 
-  s = apr_file_info_get(&fInfo, APR_FINFO_SIZE, f);
-  if (s != APR_SUCCESS) {
-    apr_strerror(s, errBuf, 80);
-    fprintf(stderr, "Can't get file info: %i (%s)\n",
-	    s, errBuf);
-    return -1;
+  struct stat s;
+  int err = fstat(fd, &s);
+  if (err != 0) {
+    perror("Can't get file size");
+    close(fd);
+    return -2;
   }
 
-  args->sendDataSize = fInfo.size;
-  args->sendData = (char*)apr_palloc(MainPool, sizeof(char) | fInfo.size);
-  
-  s = apr_file_read_full(f, args->sendData, fInfo.size, NULL);
-  if (s != APR_SUCCESS) {
-    apr_strerror(s, errBuf, 80);
-    fprintf(stderr, "Can't read input file: %i (%s)\n",
-	    s, errBuf);
-    return -1;
+  t->sendDataLen = s.st_size;
+  t->sendData = (char*)malloc(s.st_size);
+  ssize_t rc = read(fd, t->sendData, s.st_size);
+  if (rc != s.st_size) {
+    perror("Unable to read input file");
+    close(fd);
+    return -3;
   }
-
-  apr_file_close(f);
+  close(fd);
   return 0;
 }
 
-static void waitAndReport(int duration, int warmup)
-{
+static void waitAndReport(int duration, int warmup) {
   int durationLeft = duration;
   int toSleep;
 
@@ -322,62 +293,44 @@ static void waitAndReport(int duration, int warmup)
     } else {
       toSleep = REPORT_SLEEP_TIME;
     }
-    apr_sleep(apr_time_from_sec(toSleep));
+
+    sleep(toSleep);
     ReportInterval(stdout, duration, warmup);
     durationLeft -= toSleep;
   }
 }
 
-static void cleanup(IOArgs* args)
-{
-  if (args == NULL) {
-    return;
-  }
-  for (int i = 0; i < NumThreads; i++) {
-    if (args[i].sslCtx != NULL) {
-      /* TODO we should do this but it caused valgrind to puke if
-         we already freed all the SSL handles for each connection... */
-      /*      SSL_CTX_free(args[i].sslCtx); */
-    }
-  }
-}
-
-static void processOAuth(char* arg) 
-{
+static void processOAuth(char* arg) {
   char* last;
-  
-  OAuthCK = apr_strtok(arg, ":", &last);
-  OAuthCS = apr_strtok(NULL, ":", &last);
-  OAuthAT = apr_strtok(NULL, ":", &last);
-  OAuthAS = apr_strtok(NULL, ":", &last);
+
+  OAuthCK = strtok_r(arg, ":", &last);
+  OAuthCS = strtok_r(NULL, ":", &last);
+  OAuthAT = strtok_r(NULL, ":", &last);
+  OAuthAS = strtok_r(NULL, ":", &last);
 }
 
-static void addHeader(char* val)
-{
-  char* tokLast;
-  char* tok;
-
+static void addHeader(char* val) {
   if (Headers == NULL) {
-    Headers = (char**)apr_palloc(MainPool, sizeof(char*));
+    Headers = (char**)malloc(sizeof(char*));
     HeadersSize = 1;
   } else if (NumHeaders == HeadersSize) {
     HeadersSize *= 2;
-    char** nh = (char**)apr_palloc(MainPool, sizeof(char*) * HeadersSize);
-    memcpy(nh, Headers, sizeof(char*) * NumHeaders);
-    Headers = nh;
+    Headers = (char**)realloc(Headers, sizeof(char*) * HeadersSize);
   }
-  Headers[NumHeaders] = apr_pstrdup(MainPool, val);
+  Headers[NumHeaders] = strdup(val);
   NumHeaders++;
 
-  tok = apr_strtok(val, ":", &tokLast);
+  char* tokLast;
+  char* tok;
+  tok = strtok_r(val, ":", &tokLast);
   if ((tok != NULL) && !strcmp("Host", tok)) {
     HostHeaderOverride = 1;
   }
 }
 
-
-static void processBasic(const char* arg)
-{
+static void processBasic(const char* arg) {
+  assert(0);
+  /* TODO: Need a base64 implementation
   int inLen = strlen(arg);
   int outLen = apr_base64_encode_len(inLen);
   char* out = apr_palloc(MainPool, outLen);
@@ -386,18 +339,10 @@ static void processBasic(const char* arg)
   apr_base64_encode(out, arg, inLen);
   hdr = apr_psprintf(MainPool, "Authorization: Basic %s", out);
   addHeader(hdr);
+  */
 }
 
-int main(int ac, char const* const* av)
-{
-  int argc = ac;
-  char const* const* argv = av;
-  char const * const* env = NULL;
-  apr_getopt_t* opts;
-  apr_status_t s;
-  int curOption;
-  const char* curArg;
-
+int main(int argc, char* const* argv) {
   /* Arguments */
   int duration = DEFAULT_DURATION;
   int warmupTime = DEFAULT_WARMUP;
@@ -412,115 +357,121 @@ int main(int ac, char const* const* av)
   char* monitor2Host = NULL;
   unsigned int thinkTime = 0;
 
+  /* Globals */
   NumConnections = DEFAULT_NUM_CONNECTIONS;
   NumThreads = -1;
-  ShortOutput = FALSE;
+  ShortOutput = 0;
   RunName = "";
   KeepAlive = KEEP_ALIVE_ALWAYS;
 
-  IOArgs* ioArgs = NULL;
-#if HAVE_PTHREAD_CREATE
-  pthread_t* ioThreads;
-#else
-  apr_thread_t** ioThreads;
-#endif
-
-  apr_app_initialize(&argc, &argv, &env);
-  apr_pool_create(&MainPool, NULL);
-
-  apr_getopt_init(&opts, MainPool, argc, argv);
+  IOThread* threads = NULL;
+  int failed = 0;
+  int arg;
   do {
-    s = apr_getopt_long(opts, Options, &curOption, &curArg);
-    if (s == APR_SUCCESS) {
-      switch (curOption) {
+    arg = getopt_long(argc, argv, OPTIONS, Options, NULL);
+    switch (arg) {
       case 'c':
-	NumConnections = atoi(curArg);
-	break;
+        NumConnections = atoi(optarg);
+        break;
       case 'd':
-	duration = atoi(curArg);
-	break;
+        duration = atoi(optarg);
+        break;
       case 'f':
-	fileName = apr_pstrdup(MainPool, curArg);
-	break;
+        fileName = optarg;
+        break;
       case 'h':
-	doHelp = 1;
-	break;
+        doHelp = 1;
+        break;
       case 'k':
-	KeepAlive = atoi(curArg);
-	break;
+        KeepAlive = atoi(optarg);
+        break;
       case 't':
-	contentType = apr_pstrdup(MainPool, curArg);
-	break;
+        contentType = optarg;
+        break;
       case 'u':
-        processBasic(curArg);
+        processBasic(optarg);
         break;
       case 'v':
-	verbose = 1;
-	break;
+        verbose = 1;
+        break;
       case 'w':
-	warmupTime = atoi(curArg);
-	break;
+        warmupTime = atoi(optarg);
+        break;
       case 'x':
-	verb = apr_pstrdup(MainPool, curArg);
-	break;
+        verb = optarg;
+        break;
       case 'C':
-        sslCipher = apr_pstrdup(MainPool, curArg);
+        sslCipher = optarg;
         break;
       case 'H':
-        addHeader(apr_pstrdup(MainPool, curArg));
+        addHeader(optarg);
         break;
       case 'K':
-	NumThreads = atoi(curArg);
-	break;
+        NumThreads = atoi(optarg);
+        break;
       case 'M':
-	monitorHost = apr_pstrdup(MainPool, curArg);
-	break;
+        monitorHost = optarg;
+        break;
       case 'X':
-	monitor2Host = apr_pstrdup(MainPool, curArg);
-	break;
-      case '2':
-	monitor2Host = apr_pstrdup(MainPool, curArg);
-	break;
+        monitor2Host = optarg;
+        break;
       case 'N':
-	RunName = apr_pstrdup(MainPool, curArg);
-	break;
+        RunName = optarg;
+        break;
       case 'O':
-	processOAuth(apr_pstrdup(MainPool, curArg));
-	break;
+        processOAuth(optarg);
+        break;
       case 'S':
-	ShortOutput = TRUE;
-	break;
+        ShortOutput = 1;
+        break;
       case 'T':
-	PrintReportingHeader(stdout);
-	apr_terminate();
-	return 0;
-	break;
+        PrintReportingHeader(stdout);
+        return 0;
+        break;
       case 'W':
-        thinkTime = atoi(curArg);
+        thinkTime = atoi(optarg);
         break;
       case '1':
-	JustOnce = TRUE;
-	break;
+        JustOnce = 1;
+        break;
+      case '?':
+      case ':':
+        // Unknown. Error was printed.
+        failed = 1;
+        break;
+      case -1:
+        // Done!
+        break;
       default:
-	assert(1);
-	break;
-      }
+        assert(0);
+        break;
     }
-  } while (s == APR_SUCCESS);
+  } while (arg >= 0);
 
-  if ((s == APR_EOF) && (opts->ind == (argc - 1))) {
-    url = argv[opts->ind];
+  if (!failed && (optind == (argc - 1))) {
+    url = argv[optind];
+  } else {
+    // No URL
+    failed = 1;
   }
 
-  if ((s == APR_EOF) && !doHelp && (url != NULL)) {
+  if (failed) {
+    printUsage();
+    return 1;
+  } else if (doHelp) {
+    printUsage();
+    return 0;
+  }
+
+  if (url != NULL) {
     if (url[0] == '@') {
-      if (url_InitFile(url + 1, MainPool) != 0) {
-	fprintf(stderr, "Invalid URL file\n");
-	goto finished;
+      if (url_InitFile(url + 1) != 0) {
+        fprintf(stderr, "Invalid URL file\n");
+        goto finished;
       }
     } else {
-      if (url_InitOne(url, MainPool) != 0) {
-	goto finished;
+      if (url_InitOne(url) != 0) {
+        goto finished;
       }
     }
 
@@ -528,85 +479,80 @@ int main(int ac, char const* const* av)
       goto finished;
     }
 
-    Running = 1;
-
     if (NumThreads < 1) {
-      NumThreads = cpu_Count(MainPool);
+      NumThreads = cpu_Count();
     }
     if (NumThreads > NumConnections) {
       NumThreads = NumConnections;
     }
 
-    ioArgs = (IOArgs*)apr_palloc(MainPool, sizeof(IOArgs) * NumThreads);
-#if HAVE_PTHREAD_CREATE
-    ioThreads = (pthread_t*)apr_palloc(MainPool, sizeof(pthread_t) * NumThreads);
-#else
-    ioThreads = (apr_thread_t**)apr_palloc(MainPool, sizeof(apr_thread_t*) * NumThreads);
-#endif
+    Running = 1;
+
+    threads = (IOThread*)malloc(sizeof(IOThread) * NumThreads);
+
+    RecordInit(monitorHost, monitor2Host);
+
+    if (!JustOnce && (warmupTime > 0)) {
+      RecordStart(0);
+    } else {
+      RecordStart(1);
+    }
+
     for (int i = 0; i < NumThreads; i++) {
+      IOThread* t = &(threads[i]);
       int numConn = NumConnections / NumThreads;
       if (i < (NumConnections % NumThreads)) {
-	numConn++;
+        numConn++;
       }
-      
+
       if (fileName != NULL) {
-	if (readFile(fileName, &(ioArgs[i])) != 0) {
-	  return 3;
-	}
+        if (readFile(fileName, t) != 0) {
+          return 3;
+        }
       } else {
-	ioArgs[i].sendData = NULL;
-	ioArgs[i].sendDataSize = 0;
+        t->sendData = NULL;
+        t->sendDataLen = 0;
       }
 
       if (verb == NULL) {
-	if (fileName == NULL) {
-	  ioArgs[i].httpVerb = "GET";
-	} else {
-	  ioArgs[i].httpVerb = "POST";
-	} 
+        if (fileName == NULL) {
+          t->httpVerb = "GET";
+        } else {
+          t->httpVerb = "POST";
+        }
       } else {
-	ioArgs[i].httpVerb = verb;
+        t->httpVerb = verb;
       }
 
-      apr_pool_create(&(ioArgs[i].pool), MainPool);
-      ioArgs[i].keepRunning = JustOnce;
-      ioArgs[i].numConnections = numConn;
-      ioArgs[i].contentType = contentType;
-      ioArgs[i].sslCipher = sslCipher;
-      ioArgs[i].headers = Headers;
-      ioArgs[i].numHeaders = NumHeaders;
-      ioArgs[i].hostHeaderOverride = HostHeaderOverride;
-      ioArgs[i].delayQueue = pq_Create(ioArgs[i].pool);
-      ioArgs[i].verbose = verbose;
-      ioArgs[i].thinkTime = thinkTime;
-      ioArgs[i].latenciesCount = 0;
-      ioArgs[i].latenciesSize = DEFAULT_LATENCIES_SIZE;
-      ioArgs[i].latencies = 
-	(unsigned long*)malloc(sizeof(unsigned long) * DEFAULT_LATENCIES_SIZE);
-      ioArgs[i].readCount = ioArgs[i].writeCount = 0;
-      ioArgs[i].readBytes = ioArgs[i].writeBytes = 0;
+      t->index = i;
+      t->keepRunning = JustOnce;
+      t->numConnections = numConn;
+      t->verbose = verbose;
+      t->sslCipher = sslCipher;
+      t->headers = Headers;
+      t->numHeaders = NumHeaders;
+      t->hostHeaderOverride = HostHeaderOverride;
+      t->thinkTime = thinkTime;
 
+      /*
+      TODO write content-type header!
+      */
+
+      /* TODO SSL
       if (createSslContext(&(ioArgs[i]), (i == 0)) != 0) {
-          goto finished;
+        goto finished;
       }
+      */
 
-#if HAVE_PTHREAD_CREATE
-      pthread_create(&(ioThreads[i]), NULL, IOThreadFunc, &(ioArgs[i]));
-#else
-      apr_thread_create(&(ioThreads[i]), NULL, IOThreadFunc,
-			&(ioArgs[i]), MainPool);
-#endif
+      iothread_Start(t);
     }
 
-    RecordInit(monitorHost, monitor2Host);
     if (!JustOnce && (warmupTime > 0)) {
-      RecordStart(FALSE);
-      waitAndReport(warmupTime, TRUE);
+      waitAndReport(warmupTime, 1);
     }
 
-    RecordStart(TRUE);
     if (!JustOnce) {
-      waitAndReport(duration, FALSE);
+      waitAndReport(duration, 0);
     }
     RecordStop();
 
@@ -616,33 +562,17 @@ int main(int ac, char const* const* av)
        then if a thread is stuck it won't affect the results much. */
     /*apr_sleep(apr_time_from_sec(2));  */
     for (int i = 0; i < NumThreads; i++) {
-#if HAVE_PTHREAD_CREATE
-      void* result;
-      pthread_join(ioThreads[i], &result);
-      pthread_detach(ioThreads[i]);
-#else
-      apr_status_t err;
-      apr_thread_join(&err, ioThreads[i]);
-#endif
-      if (ioArgs[i].sslCtx != NULL) {
-	SSL_CTX_free(ioArgs[i].sslCtx);
-      }
+      iothread_Stop(&(threads[i]));
     }
 
   } else {
     printUsage();
-    apr_terminate();
     return 0;
   }
 
-  ConsolidateLatencies(ioArgs, NumThreads);
-  PrintResults(stdout);
+  PrintFullResults(stdout);
   EndReporting();
-  cleanup(ioArgs);
 
 finished:
-  apr_pool_destroy(MainPool);
-  apr_terminate();
-
   return 0;
 }

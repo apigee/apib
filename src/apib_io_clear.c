@@ -79,6 +79,7 @@ static void writeReady(struct ev_loop* loop, ev_io* w, int revents) {
   io_Verbose(c, "Tried to write %u bytes: result %i\n", len, wrote);
   if (wrote > 0) {
     c->writeBufPos += wrote;
+    c->t->writeBytes += wrote;
   } else if (wrote < 0) {
     if ((errno != EAGAIN) && (errno != EWOULDBLOCK)) {
       // Write error: return to caller and stop getting write events
@@ -117,6 +118,7 @@ static void readReady(struct ev_loop* loop, ev_io* w, int revents) {
   io_Verbose(c, "Tried to read %u bytes: result %i\n", len, readCount);
 
   if (readCount > 0) {
+    c->t->readBytes += readCount;
     // Parse the data we just read plus whatever was left from before
     const size_t parsedLen = readCount + c->readBufPos;
     const size_t parsed = http_parser_execute(&(c->parser), &HttpParserSettings,

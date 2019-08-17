@@ -25,6 +25,8 @@ limitations under the License.
 #include "ev.h"
 #include "src/apib_lines.h"
 #include "src/apib_rand.h"
+#include "src/apib_reporting.h"
+#include "src/apib_time.h"
 #include "src/apib_url.h"
 
 static int initialized = 0;
@@ -34,7 +36,7 @@ static void printVerbose(const char* format, va_list args) {
   vprintf(format, args);
 }
 
-void io_Verbose(ConnectionState* c, const char* format, ...) { 
+void io_Verbose(ConnectionState* c, const char* format, ...) {
   if (c->t->verbose) {
     va_list args;
     va_start(args, format);
@@ -43,7 +45,7 @@ void io_Verbose(ConnectionState* c, const char* format, ...) {
   }
 }
 
-void verbose(IOThread* t, const char* format, ...) { 
+void verbose(IOThread* t, const char* format, ...) {
   if (t->verbose) {
     va_list args;
     va_start(args, format);
@@ -82,10 +84,12 @@ void writeRequest(ConnectionState* c) {
 static void recycle(ConnectionState* c, int closeConn) {
   if (closeConn) {
     io_Close(c);
+    c->startTime = apib_GetTime();
     int err = io_Connect(c);
     // Should only fail if we can't create a new socket --
     // errors actually connecting will be handled during write.
     assert(err == 0);
+    RecordConnectionOpen();
   }
   writeRequest(c);
   io_SendWrite(c);
@@ -98,8 +102,10 @@ static int startConnect(ConnectionState* c) {
     assert(0);
   }
 
+  c->startTime = apib_GetTime();
   const int err = io_Connect(c);
   if (err == 0) {
+    RecordConnectionOpen();
     writeRequest(c);
     io_SendWrite(c);
   }
@@ -108,6 +114,7 @@ static int startConnect(ConnectionState* c) {
 
 void io_WriteDone(ConnectionState* c, int err) {
   if (err != 0) {
+    RecordSocketError();
     io_Verbose(c, "Error on write: %i\n", err);
     recycle(c, 1);
   } else {
@@ -127,15 +134,22 @@ void io_WriteDone(ConnectionState* c, int err) {
 }
 
 void io_ReadDone(ConnectionState* c, int err) {
-  if (!c->t->keepRunning) {
-    io_Verbose(c, "Stopping\n");
-    io_Close(c);
+  if (err != 0) {
+    io_Verbose(c, "Error on read: %i\n", err);
+    RecordSocketError();
+    if (c->t->keepRunning) {
+      recycle(c, 1);
+    } else {
+      io_Verbose(c, "Stopping\n");
+      io_Close(c);
+    }
     return;
   }
 
-  if (err != 0) {
-    io_Verbose(c, "Error on read: %i\n", err);
-    recycle(c, 1);
+  RecordResult(c->parser.status_code, apib_GetTime() - c->startTime);
+  if (!c->t->keepRunning) {
+    io_Verbose(c, "Stopping\n");
+    io_Close(c);
     return;
   }
 
@@ -194,6 +208,7 @@ static void* ioThread(void* a) {
 
   int ret = ev_run(t->loop, 0);
   verbose(t, "ev_run finished: %i\n", ret);
+  RecordByteCounts(t->writeBytes, t->readBytes);
 
 finish:
   verbose(t, "Cleaning up event loop %i\n", t->index);

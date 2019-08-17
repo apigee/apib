@@ -51,3 +51,13 @@ cc_library(
         "@libev",
     ],
 )
+
+cc_binary(
+    name = "apib",
+    srcs = [
+        "apib_main.c",
+    ],
+    deps = [
+        ":io",
+    ]
+)

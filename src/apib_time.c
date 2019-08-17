@@ -30,9 +30,7 @@ long long apib_GetTime() {
   return (((long long)tp.tv_sec) * NANOSECOND) + tp.tv_nsec;
 }
 
-double apib_Seconds(long long t) {
-  return ((double)t) / NANOSECOND_F;
-}
+double apib_Seconds(long long t) { return ((double)t) / NANOSECOND_F; }
 
 double apib_Milliseconds(long long t) {
   return ((double)t) / (NANOSECOND_F / MILLISECOND_F);

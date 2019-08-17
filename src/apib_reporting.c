@@ -15,15 +15,15 @@ limitations under the License.
 */
 
 #include <assert.h>
+#include <math.h>
+#include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <math.h>
-#include <pthread.h>
 
 #include "src/apib_cpu.h"
-#include "src/apib_time.h"
 #include "src/apib_reporting.h"
+#include "src/apib_time.h"
 
 #define NUM_CPU_SAMPLES 4
 #define NUM_INITIAL_LATENCIES 8192
@@ -31,8 +31,7 @@ limitations under the License.
 #define CPU_CMD "cpu\n"
 #define MEM_CMD "mem\n"
 
-typedef struct
-{
+typedef struct {
   size_t count;
   size_t size;
   double* samples;
@@ -79,9 +78,7 @@ static void initSamples(CPUSamples* s) {
   s->samples = (double*)malloc(sizeof(double) * NUM_CPU_SAMPLES);
 }
 
-static void freeSamples(CPUSamples* s) {
-  free(s->samples);
-}
+static void freeSamples(CPUSamples* s) { free(s->samples); }
 
 static void addSample(double sample, CPUSamples* s) {
   if (s->count >= s->size) {
@@ -110,8 +107,8 @@ static void connectMonitor(const char* hostName, apr_socket_t** sock) {
     return;
   }
 
-  s = apr_socket_create(sock, APR_INET, 
-			SOCK_STREAM, APR_PROTO_TCP, MainPool);
+  s = apr_socket_create(sock, APR_INET,
+                        SOCK_STREAM, APR_PROTO_TCP, MainPool);
   if (s != APR_SUCCESS) {
     return;
   }
@@ -207,8 +204,7 @@ void RecordInit(const char* monitorHost, const char* host2) {
   */
 }
 
-void RecordStart(int startReporting)
-{
+void RecordStart(int startReporting) {
   pthread_mutex_lock(&latch);
   /* When we warm up we want to zero these out before continuing */
   completedRequests = 0;
@@ -221,7 +217,7 @@ void RecordStart(int startReporting)
   totalBytesReceived = 0;
   latenciesCount = 0;
 
-  reporting = startReporting;  
+  reporting = startReporting;
   cpu_GetUsage(&cpuUsage);
   /*
   if (remoteMonitorHost != NULL) {
@@ -250,8 +246,7 @@ void RecordStart(int startReporting)
   pthread_mutex_unlock(&latch);
 }
 
-void RecordStop(void)
-{
+void RecordStop(void) {
   pthread_mutex_lock(&latch);
   clientMem = cpu_GetMemoryUsage();
   /*
@@ -280,8 +275,7 @@ void ReportIntervalResults(BenchmarkIntervalResults* r) {
   pthread_mutex_unlock(&latch);
 }
 
-void ReportInterval(FILE* out, int totalDuration, int warmup)
-{
+void ReportInterval(FILE* out, int totalDuration, int warmup) {
   double cpu = 0.0;
   double remoteCpu = 0.0;
   double remote2Cpu = 0.0;
@@ -303,21 +297,20 @@ void ReportInterval(FILE* out, int totalDuration, int warmup)
 
   BenchmarkIntervalResults r;
   ReportIntervalResults(&r);
-  
+
   char* warm = (warmup ? "Warming up: " : "");
 
   if (remoteCpu != 0.0) {
-    fprintf(out, "%s(%.3lf / %i) %.3lf %.0lf%% cpu %.0lf%% remote cpu\n",
-	    warm, r.elapsedTime, totalDuration, r.averageThroughput, 
-	    cpu * 100.0, remoteCpu * 100.0);
+    fprintf(out, "%s(%.3lf / %i) %.3lf %.0lf%% cpu %.0lf%% remote cpu\n", warm,
+            r.elapsedTime, totalDuration, r.averageThroughput, cpu * 100.0,
+            remoteCpu * 100.0);
   } else {
-    fprintf(out, "%s(%.3lf / %i) %.3lf %.0lf%% cpu\n",
-	    warm, r.elapsedTime, totalDuration, r.averageThroughput, cpu * 100.0);
+    fprintf(out, "%s(%.3lf / %i) %.3lf %.0lf%% cpu\n", warm, r.elapsedTime,
+            totalDuration, r.averageThroughput, cpu * 100.0);
   }
 }
 
-static int compareLLongs(const void* a1, const void* a2)
-{
+static int compareLLongs(const void* a1, const void* a2) {
   const long long* l1 = (const long long*)a1;
   const long long* l2 = (const long long*)a2;
 
@@ -329,8 +322,7 @@ static int compareLLongs(const void* a1, const void* a2)
   return 0;
 }
 
-static int compareDoubles(const void* a1, const void* a2)
-{
+static int compareDoubles(const void* a1, const void* a2) {
   const double* d1 = (const double*)a1;
   const double* d2 = (const double*)a2;
 
@@ -342,21 +334,18 @@ static int compareDoubles(const void* a1, const void* a2)
   return 0;
 }
 
-static long long getLatencyPercent(int percent)
-{
+static long long getLatencyPercent(int percent) {
   if (latenciesCount == 0) {
     return 0;
   }
   if (percent == 100) {
     return latencies[latenciesCount - 1];
   }
-  size_t index = 
-    (latenciesCount / 100.0) * percent;
+  size_t index = (latenciesCount / 100.0) * percent;
   return latencies[index];
 }
 
-static long long getAverageLatency(void)
-{
+static long long getAverageLatency(void) {
   if (latenciesCount == 0) {
     return 0;
   }
@@ -369,8 +358,7 @@ static long long getAverageLatency(void)
   return totalLatency / (long long)latenciesCount;
 }
 
-static double getLatencyStdDev(void)
-{
+static double getLatencyStdDev(void) {
   if (latenciesCount == 0) {
     return 0.0;
   }
@@ -380,12 +368,11 @@ static double getLatencyStdDev(void)
   for (unsigned int i = 0; i < latenciesCount; i++) {
     differences += pow(apib_Milliseconds(latencies[i]) - avg, 2.0);
   }
-  
+
   return sqrt(differences / (double)latenciesCount);
 }
 
-static double getAverageCpu(const CPUSamples* s)
-{
+static double getAverageCpu(const CPUSamples* s) {
   if (s->count == 0) {
     return 0.0;
   }
@@ -398,12 +385,11 @@ static double getAverageCpu(const CPUSamples* s)
   return total / s->count;
 }
 
-static double getMaxCpu(CPUSamples* s)
-{
+static double getMaxCpu(CPUSamples* s) {
   if (s->count == 0) {
     return 0.0;
   }
-   
+
   qsort(s->samples, s->count, sizeof(double), compareDoubles);
   return s->samples[s->count - 1];
 }
@@ -428,7 +414,8 @@ void ReportResults(BenchmarkResults* r) {
   }
   r->averageThroughput = (double)completedRequests / r->elapsedTime;
   r->averageSendBandwidth = (totalBytesSent * 8.0 / 1048576.0) / r->elapsedTime;
-  r->averageReceiveBandwidth = (totalBytesReceived * 8.0 / 1048576.0) / r->elapsedTime;
+  r->averageReceiveBandwidth =
+      (totalBytesReceived * 8.0 / 1048576.0) / r->elapsedTime;
 
   pthread_mutex_unlock(&latch);
 }
@@ -444,108 +431,96 @@ void PrintFullResults(FILE* out) {
   fprintf(out, "Connections opened:   %li\n", r.connectionsOpened);
   fprintf(out, "Socket errors:        %li\n", r.socketErrors);
   fprintf(out, "\n");
-  fprintf(out, "Throughput:           %.3lf requests/second\n", 
+  fprintf(out, "Throughput:           %.3lf requests/second\n",
           r.averageThroughput);
-  fprintf(out, "Average latency:      %.3lf milliseconds\n",
-	  r.averageLatency);
-  fprintf(out, "Minimum latency:      %.3lf milliseconds\n",
-	  r.latencies[0]);
-  fprintf(out, "Maximum latency:      %.3lf milliseconds\n",
-	  r.latencies[100]);
-  fprintf(out, "Latency std. dev:     %.3lf milliseconds\n",
-    r.latencyStdDev);
-  fprintf(out, "50%% latency:          %.3lf milliseconds\n",
-	  r.latencies[50]);
-  fprintf(out, "90%% latency:          %.3lf milliseconds\n",
-	  r.latencies[90]);
-  fprintf(out, "98%% latency:          %.3lf milliseconds\n",
-	  r.latencies[98]);
-  fprintf(out, "99%% latency:          %.3lf milliseconds\n",
-	  r.latencies[99]);
+  fprintf(out, "Average latency:      %.3lf milliseconds\n", r.averageLatency);
+  fprintf(out, "Minimum latency:      %.3lf milliseconds\n", r.latencies[0]);
+  fprintf(out, "Maximum latency:      %.3lf milliseconds\n", r.latencies[100]);
+  fprintf(out, "Latency std. dev:     %.3lf milliseconds\n", r.latencyStdDev);
+  fprintf(out, "50%% latency:          %.3lf milliseconds\n", r.latencies[50]);
+  fprintf(out, "90%% latency:          %.3lf milliseconds\n", r.latencies[90]);
+  fprintf(out, "98%% latency:          %.3lf milliseconds\n", r.latencies[98]);
+  fprintf(out, "99%% latency:          %.3lf milliseconds\n", r.latencies[99]);
   fprintf(out, "\n");
   /*
   if (clientSamples.count > 0) {
     fprintf(out, "Client CPU average:    %.0lf%%\n",
-	    getAverageCpu(&clientSamples) * 100.0);
+            getAverageCpu(&clientSamples) * 100.0);
     fprintf(out, "Client CPU max:        %.0lf%%\n",
-	    getMaxCpu(&clientSamples) * 100.0);
+            getMaxCpu(&clientSamples) * 100.0);
   }
   fprintf(out, "Client memory usage:    %.0lf%%\n",
           clientMem * 100.0);
   if (remoteSamples.count > 0) {
     fprintf(out, "Remote CPU average:    %.0lf%%\n",
-	    getAverageCpu(&remoteSamples) * 100.0);
+            getAverageCpu(&remoteSamples) * 100.0);
     fprintf(out, "Remote CPU max:        %.0lf%%\n",
-	    getMaxCpu(&remoteSamples) * 100.0);
+            getMaxCpu(&remoteSamples) * 100.0);
     fprintf(out, "Remote memory usage:   %.0lf%%\n",
             remoteMem * 100.0);
   }
   if (remote2Samples.count > 0) {
     fprintf(out, "Remote 2 CPU average:    %.0lf%%\n",
-	    getAverageCpu(&remote2Samples) * 100.0);
+            getAverageCpu(&remote2Samples) * 100.0);
     fprintf(out, "Remote 2 CPU max:        %.0lf%%\n",
-	    getMaxCpu(&remote2Samples) * 100.0);
+            getMaxCpu(&remote2Samples) * 100.0);
     fprintf(out, "Remote 2 memory usage:   %.0lf%%\n",
             remote2Mem * 100.0);
   }
   fprintf(out, "\n");
   */
   fprintf(out, "Total bytes sent:      %.2lf megabytes\n",
-	  r.totalBytesSent / 1048576.0);
+          r.totalBytesSent / 1048576.0);
   fprintf(out, "Total bytes received:  %.2lf megabytes\n",
-	  r.totalBytesReceived / 1048576.0);
+          r.totalBytesReceived / 1048576.0);
   fprintf(out, "Send bandwidth:        %.2lf megabits / second\n",
-	  r.averageSendBandwidth);
+          r.averageSendBandwidth);
   fprintf(out, "Receive bandwidth:     %.2lf megabits / second\n",
-	  r.averageReceiveBandwidth);
+          r.averageReceiveBandwidth);
 }
 
-void PrintShortResults(FILE* out, const char* runName, int threads, int connections) {
+void PrintShortResults(FILE* out, const char* runName, int threads,
+                       int connections) {
   BenchmarkResults r;
   ReportResults(&r);
 
   /* TODO CPU and client samples. */
   /*
-  name,throughput,avg. latency,threads,connections,duration,completed,successful,errors,sockets,min. latency,max. latency,50%,90%,98%,99%
+  name,throughput,avg.
+  latency,threads,connections,duration,completed,successful,errors,sockets,min.
+  latency,max. latency,50%,90%,98%,99%
    */
   fprintf(out,
-	  "%s,%.3lf,%.3lf,%i,%i,%.3lf,%li,%li,%li,%li,%.3lf,%.3lf,%.3lf,%.3lf,%.3lf,%.3lf,%.3lf,%.0lf,%.0lf,%.0lf,%.0lf,%.0lf,%.0lf,%.2lf,%.2lf\n",
-	  runName, r.averageThroughput,
-	  r.averageLatency,
-	  threads, connections, r.elapsedTime,
-	  r.completedRequests, r.successfulRequests,
-	  r.unsuccessfulRequests, r.connectionsOpened,
-    r.latencies[0], r.latencies[100],
-    r.latencies[50], r.latencies[90],
-    r.latencies[98], r.latencies[99],
-    r.latencyStdDev,
-    0.0, 0.0, 0.0,
-    0.0, 0.0, 0.0, 
-    /*
-	  getAverageCpu(&clientSamples) * 100.0,
-	  getAverageCpu(&remoteSamples) * 100.0,
-	  getAverageCpu(&remote2Samples) * 100.0,
-    clientMem * 100.0,
-    remoteMem * 100.0,
-    remote2Mem * 100.0,
-    */
-    r.averageSendBandwidth,
-    r.averageReceiveBandwidth);
+          "%s,%.3lf,%.3lf,%i,%i,%.3lf,%li,%li,%li,%li,%.3lf,%.3lf,%.3lf,%.3lf,%"
+          ".3lf,%.3lf,%.3lf,%.0lf,%.0lf,%.0lf,%.0lf,%.0lf,%.0lf,%.2lf,%.2lf\n",
+          runName, r.averageThroughput, r.averageLatency, threads, connections,
+          r.elapsedTime, r.completedRequests, r.successfulRequests,
+          r.unsuccessfulRequests, r.connectionsOpened, r.latencies[0],
+          r.latencies[100], r.latencies[50], r.latencies[90], r.latencies[98],
+          r.latencies[99], r.latencyStdDev, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+          /*
+                getAverageCpu(&clientSamples) * 100.0,
+                getAverageCpu(&remoteSamples) * 100.0,
+                getAverageCpu(&remote2Samples) * 100.0,
+          clientMem * 100.0,
+          remoteMem * 100.0,
+          remote2Mem * 100.0,
+          */
+          r.averageSendBandwidth, r.averageReceiveBandwidth);
 }
 
-void PrintReportingHeader(FILE* out)
-{
-  fprintf(out, "Name,Throughput,Avg. Latency,Threads,Connections,Duration," \
-          "Completed,Successful,Errors,Sockets," \
-          "Min. latency,Max. latency,50%% Latency,90%% Latency,"\
-          "98%% Latency,99%% Latency,Latency Std Dev,Avg Client CPU,"\
-          "Avg Server CPU,Avg Server 2 CPU,"\
-          "Client Mem Usage,Server Mem,Server 2 Mem,"\
-	  "Avg. Send Bandwidth,Avg. Recv. Bandwidth\n");
+void PrintReportingHeader(FILE* out) {
+  fprintf(out,
+          "Name,Throughput,Avg. Latency,Threads,Connections,Duration,"
+          "Completed,Successful,Errors,Sockets,"
+          "Min. latency,Max. latency,50%% Latency,90%% Latency,"
+          "98%% Latency,99%% Latency,Latency Std Dev,Avg Client CPU,"
+          "Avg Server CPU,Avg Server 2 CPU,"
+          "Client Mem Usage,Server Mem,Server 2 Mem,"
+          "Avg. Send Bandwidth,Avg. Recv. Bandwidth\n");
 }
 
-void EndReporting(void)
-{
+void EndReporting(void) {
   /*
   if (remoteCpuSocket != NULL) {
     apr_socket_close(remoteCpuSocket);

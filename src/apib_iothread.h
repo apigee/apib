@@ -51,7 +51,7 @@ typedef struct {
   long writeCount;
   long long readBytes;
   long long writeBytes;
-  
+
   // Internal stuff -- no need for anyone to set
   pthread_t thread;
   volatile int keepRunning;
@@ -79,6 +79,7 @@ typedef struct {
   size_t readBufPos;
   http_parser parser;
   int readDone;
+  long long startTime;
 } ConnectionState;
 
 // Start the thread. It's up to the caller to initialize everything

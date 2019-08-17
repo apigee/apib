@@ -14,17 +14,13 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-#include "src/apib_reporting.h"
 #include "gtest/gtest.h"
+#include "src/apib_reporting.h"
 
 class Reporting : public ::testing::Test {
-  protected:
-   Reporting() {
-     RecordInit(NULL, NULL);
-   }
-   ~Reporting() {
-     EndReporting();
-   }
+ protected:
+  Reporting() { RecordInit(NULL, NULL); }
+  ~Reporting() { EndReporting(); }
 };
 
 TEST_F(Reporting, ReportingZero) {
