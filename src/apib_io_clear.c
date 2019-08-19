@@ -76,14 +76,15 @@ static void writeReady(struct ev_loop* loop, ev_io* w, int revents) {
   assert(len > 0);
   const ssize_t wrote =
       write(c->fd, buf_Get(&(c->writeBuf)) + c->writeBufPos, len);
+  int writeErr = errno;
   io_Verbose(c, "Tried to write %u bytes: result %i\n", len, wrote);
   if (wrote > 0) {
     c->writeBufPos += wrote;
     c->t->writeBytes += wrote;
   } else if (wrote < 0) {
-    if ((errno != EAGAIN) && (errno != EWOULDBLOCK)) {
+    io_Verbose(c, "Write error: %i\n", writeErr);
+    if ((writeErr != EAGAIN) && (writeErr != EWOULDBLOCK)) {
       // Write error: return to caller and stop getting write events
-      io_Verbose(c, "Write error: %i\n", errno);
       ev_io_stop(c->t->loop, &(c->io));
       io_WriteDone(c, -1);
       return;

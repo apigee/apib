@@ -78,6 +78,7 @@ void writeRequest(ConnectionState* c) {
   if (c->t->sendDataLen > 0) {
     buf_AppendN(&(c->writeBuf), c->t->sendData, c->t->sendDataLen);
   }
+  io_Verbose(c, "Total send is %i bytes\n", buf_Length(&(c->writeBuf)));
   c->state = SENDING;
 }
 
@@ -236,6 +237,7 @@ void iothread_Start(IOThread* t) {
 }
 
 void iothread_Stop(IOThread* t) {
+  verbose(t, "Signalling to threads to stop running\n");
   t->keepRunning = 0;
   void* ret;
   pthread_join(t->thread, &ret);

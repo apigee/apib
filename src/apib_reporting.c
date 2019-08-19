@@ -149,6 +149,9 @@ static double getRemoteStat(const char* cmd, apr_socket_t** sock)
 */
 
 void RecordResult(int code, long long latency) {
+  if (!reporting) {
+    return;
+  }
   pthread_mutex_lock(&latch);
   completedRequests++;
   if ((code >= 200) && (code < 300)) {
@@ -167,12 +170,18 @@ void RecordResult(int code, long long latency) {
 }
 
 void RecordSocketError(void) {
+  if (!reporting) {
+    return;
+  }
   pthread_mutex_lock(&latch);
   socketErrors++;
   pthread_mutex_unlock(&latch);
 }
 
 void RecordConnectionOpen(void) {
+  if (!reporting) {
+    return;
+  }
   pthread_mutex_lock(&latch);
   connectionsOpened++;
   pthread_mutex_unlock(&latch);

@@ -471,6 +471,7 @@ int main(int argc, char* const* argv) {
       }
     } else {
       if (url_InitOne(url) != 0) {
+        fprintf(stderr, "Invalid url: \"%s\"\n", url);
         goto finished;
       }
     }
@@ -525,7 +526,7 @@ int main(int argc, char* const* argv) {
       }
 
       t->index = i;
-      t->keepRunning = JustOnce;
+      t->keepRunning = 1;
       t->numConnections = numConn;
       t->verbose = verbose;
       t->sslCipher = sslCipher;
@@ -544,18 +545,20 @@ int main(int argc, char* const* argv) {
       }
       */
 
+      printf("Starting thread %i with %i connections\n", i, numConn);
+
       iothread_Start(t);
     }
 
     if (!JustOnce && (warmupTime > 0)) {
       waitAndReport(warmupTime, 1);
     }
-
     if (!JustOnce) {
       waitAndReport(duration, 0);
     }
-    RecordStop();
+    printf("All I/O complete\n");
 
+    RecordStop();
     Running = 0;
 
     /* Sometimes threads don't terminate. Sleep for two seconds,
