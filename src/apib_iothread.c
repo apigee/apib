@@ -32,6 +32,8 @@ limitations under the License.
 static int initialized = 0;
 http_parser_settings HttpParserSettings;
 
+static void recycle(ConnectionState* c, int closeConn);
+
 static void printVerbose(const char* format, va_list args) {
   vprintf(format, args);
 }
@@ -73,6 +75,9 @@ void writeRequest(ConnectionState* c) {
     buf_Append(&(c->writeBuf), "Content-Type: text-plain\r\n");
     buf_Printf(&(c->writeBuf), "Content-Length: %lu\r\n", c->t->sendDataLen);
   }
+  if (c->t->noKeepAlive) {
+    buf_Append(&(c->writeBuf), "Connection: close\r\n");
+  }
   // TODO write other headers, including host override
   buf_Append(&(c->writeBuf), "\r\n");
   if (c->t->sendDataLen > 0) {
@@ -82,18 +87,47 @@ void writeRequest(ConnectionState* c) {
   c->state = SENDING;
 }
 
+static void connectAndSend(ConnectionState* c, int needsOpen) {
+  c->startTime = apib_GetTime();
+  if (needsOpen) {
+      int err = io_Connect(c);
+      // Should only fail if we can't create a new socket --
+      // errors actually connecting will be handled during write.
+      assert(err == 0);
+      RecordConnectionOpen();
+    }
+    writeRequest(c);
+    io_SendWrite(c);
+}
+
+static void thinkingDone(struct ev_loop* loop, ev_timer* t, int revents) {
+  assert(revents | EV_TIMER);
+  ConnectionState* c = (ConnectionState*)t->data;
+  io_Verbose(c, "Think time over\n");
+  connectAndSend(c, c->needsOpen);
+}
+
 static void recycle(ConnectionState* c, int closeConn) {
-  if (closeConn) {
-    io_Close(c);
-    c->startTime = apib_GetTime();
-    int err = io_Connect(c);
-    // Should only fail if we can't create a new socket --
-    // errors actually connecting will be handled during write.
-    assert(err == 0);
-    RecordConnectionOpen();
+  if (c->t->thinkTime > 0) {
+    if (closeConn || (c->t->noKeepAlive)) {
+      io_Close(c);
+      c->needsOpen = 1;
+    } else {
+      c->needsOpen = 0;
+    }
+    const double thinkTime = (double)(c->t->thinkTime) / 1000.0;
+    io_Verbose(c, "Thinking for %.4lf seconds\n", thinkTime);
+    ev_timer_init(&(c->thinkTimer), thinkingDone, thinkTime, 0);
+    c->thinkTimer.data = c;
+    ev_timer_start(c->t->loop, &(c->thinkTimer));
+  } else {
+    int needsOpen = 0;
+    if (closeConn || (c->t->noKeepAlive)) {
+      io_Close(c);
+      needsOpen = 1;
+    }
+    connectAndSend(c, needsOpen);
   }
-  writeRequest(c);
-  io_SendWrite(c);
 }
 
 static int startConnect(ConnectionState* c) {
@@ -102,15 +136,8 @@ static int startConnect(ConnectionState* c) {
     // TODO
     assert(0);
   }
-
-  c->startTime = apib_GetTime();
-  const int err = io_Connect(c);
-  if (err == 0) {
-    RecordConnectionOpen();
-    writeRequest(c);
-    io_SendWrite(c);
-  }
-  return err;
+  connectAndSend(c, 1);
+  return 0;
 }
 
 void io_WriteDone(ConnectionState* c, int err) {

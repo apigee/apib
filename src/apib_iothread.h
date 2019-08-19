@@ -42,6 +42,7 @@ typedef struct {
   unsigned int numHeaders;
   unsigned int thinkTime;
   int hostHeaderOverride;
+  int noKeepAlive;
 
   // Everything ABOVE must be initialized.
   long long* latencies;
@@ -72,6 +73,7 @@ typedef struct {
   int fd;
   State state;
   ev_io io;
+  ev_timer thinkTimer;
   URLInfo* url;
   StringBuf writeBuf;
   size_t writeBufPos;
@@ -79,6 +81,7 @@ typedef struct {
   size_t readBufPos;
   http_parser parser;
   int readDone;
+  int needsOpen;
   long long startTime;
 } ConnectionState;
 

@@ -21,20 +21,39 @@ limitations under the License.
 #include "src/apib_iothread.h"
 #include "src/apib_url.h"
 #include "src/apib_message.h"
+#include "src/apib_reporting.h"
 #include "test/test_server.h"
 
 #include "gtest/gtest.h"
 
 static int testServerPort;
+static TestServer* testServer;
 
 class IOTest : public ::testing::Test {
   protected:
-  IOTest() {}
+  IOTest() {
+    RecordInit(NULL, NULL);
+    RecordStart(1);
+    testserver_ResetStats(testServer);
+  }
   ~IOTest() {
     // The "url_" family of functions use static data, so reset every time.
     url_Reset();
+    EndReporting();
   } 
 };
+
+static void compareReporting() {
+  TestServerStats stats;
+  testserver_GetStats(testServer, &stats);
+  BenchmarkResults results;
+  ReportResults(&results);
+
+  EXPECT_EQ(results.successfulRequests, stats.successCount);
+  EXPECT_EQ(results.unsuccessfulRequests, stats.errorCount);
+  EXPECT_EQ(results.socketErrors, stats.socketErrorCount);
+  EXPECT_EQ(results.connectionsOpened, stats.connectionCount);
+}
 
 TEST_F(IOTest, OneThread) {
   char url[128];
@@ -48,9 +67,79 @@ TEST_F(IOTest, OneThread) {
   t.httpVerb = strdup("GET");
 
   iothread_Start(&t);
-  sleep(2);
+  sleep(1);
   iothread_Stop(&t);
+  RecordStop();
 
+  compareReporting();
+  free(t.httpVerb);
+}
+
+TEST_F(IOTest, OneThreadNoKeepAlive) {
+  char url[128];
+  sprintf(url, "http://localhost:%i/hello", testServerPort);
+  url_InitOne(url);
+
+  IOThread t;
+  memset(&t, 0, sizeof(IOThread));
+  t.numConnections = 1;
+  //t.verbose = 1;
+  t.httpVerb = strdup("GET");
+  t.noKeepAlive = 1;
+
+  iothread_Start(&t);
+  sleep(1);
+  iothread_Stop(&t);
+  RecordStop();
+
+  compareReporting();
+  BenchmarkResults results;
+  ReportResults(&results);
+  EXPECT_LT(1, results.connectionsOpened);
+  EXPECT_EQ(results.completedRequests, results.connectionsOpened);
+  free(t.httpVerb);
+}
+
+TEST_F(IOTest, OneThreadThinkTime) {
+  char url[128];
+  sprintf(url, "http://localhost:%i/hello", testServerPort);
+  url_InitOne(url);
+
+  IOThread t;
+  memset(&t, 0, sizeof(IOThread));
+  t.numConnections = 1;
+  //t.verbose = 1;
+  t.httpVerb = strdup("GET");
+  t.thinkTime = 100;
+
+  iothread_Start(&t);
+  sleep(1);
+  iothread_Stop(&t);
+  RecordStop();
+
+  compareReporting();
+  free(t.httpVerb);
+}
+
+TEST_F(IOTest, OneThreadThinkTimeNoKeepAlive) {
+  char url[128];
+  sprintf(url, "http://localhost:%i/hello", testServerPort);
+  url_InitOne(url);
+
+  IOThread t;
+  memset(&t, 0, sizeof(IOThread));
+  t.numConnections = 1;
+  //t.verbose = 1;
+  t.httpVerb = strdup("GET");
+  t.thinkTime = 100;
+  t.noKeepAlive = 1;
+
+  iothread_Start(&t);
+  sleep(1);
+  iothread_Stop(&t);
+  RecordStop();
+
+  compareReporting();
   free(t.httpVerb);
 }
 
@@ -66,9 +155,11 @@ TEST_F(IOTest, OneThreadLarge) {
   t.httpVerb = strdup("GET");
 
   iothread_Start(&t);
-  sleep(2);
+  sleep(1);
   iothread_Stop(&t);
+  RecordStop();
 
+  compareReporting();
   free(t.httpVerb);
 }
 
@@ -92,27 +183,30 @@ TEST_F(IOTest, OneThreadBigPost) {
   }
 
   iothread_Start(&t);
-  sleep(2);
+  sleep(1);
   iothread_Stop(&t);
+  RecordStop();
 
+  compareReporting();
   free(t.httpVerb);
 }
 
 int main(int argc, char** argv) {
   ::testing::InitGoogleTest(&argc, argv);
 
-  TestServer svr;
-  int err = testserver_Start(&svr, 0);
+  testServer = (TestServer*)malloc(sizeof(TestServer));
+  int err = testserver_Start(testServer, 0);
   if (err != 0) {
     fprintf(stderr, "Can't start test server: %i\n", err);
     return 2;
   }
-  testServerPort = testserver_GetPort(&svr);
+  testServerPort = testserver_GetPort(testServer);
 
   int r = RUN_ALL_TESTS();
 
-  testserver_Stop(&svr);
+  testserver_Stop(testServer);
   // testserver_Join(&svr);
+  free(testServer);
 
   return r;
 }

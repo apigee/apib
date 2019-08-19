@@ -23,8 +23,23 @@ limitations under the License.
 extern "C" {
 #endif
 
+#define OP_HELLO 0
+#define OP_ECHO 1
+#define OP_DATA 2
+#define NUM_OPS 3
+
+typedef struct {
+  long connectionCount;
+  long socketErrorCount;
+  long errorCount;
+  long successCount;
+  long successes[NUM_OPS];
+} TestServerStats;
+
 typedef struct {
   int listenfd;
+  TestServerStats stats;
+  pthread_mutex_t statsLock;
   pthread_t acceptThread;
 } TestServer;
 
@@ -37,6 +52,13 @@ extern int testserver_Start(TestServer* s, int port);
 Get the port it's listening on.
 */
 extern int testserver_GetPort(TestServer* s);
+
+/*
+Return statistics about operation.
+*/
+extern void testserver_GetStats(TestServer* s, TestServerStats* stats);
+
+extern void testserver_ResetStats(TestServer* s);
 
 /*
 Stop listening.

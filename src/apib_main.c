@@ -34,23 +34,23 @@ limitations under the License.
 #define KEEP_ALIVE_NEVER 0
 
 /* Globals */
-volatile int Running;
-int ShortOutput;
-char* RunName;
-int NumConnections;
-int NumThreads;
-int JustOnce = 0;
-int KeepAlive;
+static volatile int Running;
+static int ShortOutput;
+static char* RunName;
+static int NumConnections;
+static int NumThreads;
+static int JustOnce = 0;
+static int KeepAlive;
 
-char** Headers = NULL;
-unsigned int HeadersSize = 0;
-unsigned int NumHeaders = 0;
-int HostHeaderOverride = 0;
+static char** Headers = NULL;
+static unsigned int HeadersSize = 0;
+static unsigned int NumHeaders = 0;
+static int HostHeaderOverride = 0;
 
-char* OAuthCK = NULL;
-char* OAuthCS = NULL;
-char* OAuthAT = NULL;
-char* OAuthAS = NULL;
+static char* OAuthCK = NULL;
+static char* OAuthCS = NULL;
+static char* OAuthAT = NULL;
+static char* OAuthAS = NULL;
 
 #define OPTIONS "c:d:f:hk:t:u:vw:x:C:H:O:K:M:X:N:ST1W:"
 
@@ -534,6 +534,7 @@ int main(int argc, char* const* argv) {
       t->numHeaders = NumHeaders;
       t->hostHeaderOverride = HostHeaderOverride;
       t->thinkTime = thinkTime;
+      t->noKeepAlive = (KeepAlive != KEEP_ALIVE_ALWAYS);
 
       /*
       TODO write content-type header!
