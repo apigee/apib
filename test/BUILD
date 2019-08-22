@@ -21,6 +21,30 @@ cc_binary(
     ],
 )
 
+cc_library(
+    name = "keygen_lib",
+    srcs = [
+        "test_keygen.c",
+    ],
+    hdrs = [
+        "test_keygen.h",
+    ],
+    linkopts = [
+        "-lssl",
+        "-lcrypto"
+    ]
+)
+
+cc_binary(
+    name = "keygen",
+    srcs = [
+        "test_keygen_main.c",
+    ],
+    deps = [
+        ":keygen_lib"
+    ],
+)
+
 cc_test(
     name = "priorityq",
     srcs = ["priorityq_test.cc"],
@@ -90,15 +114,13 @@ cc_test(
     ]
 )
 
-cc_binary(
-    name = "keygen",
-    srcs = [
-        "test_keygen.c",
-        "test_keygen_main.c",
-        "test_keygen.h",
-    ],
-    linkopts = [
-        "-lssl",
-        "-lcrypto"
+cc_test(
+    name = "tlstest",
+    srcs = ["tls_test.cc"],
+    deps = [
+        ":keygen_lib",
+        ":testserver_lib",
+        "//src:io",
+        "@gtest",
     ]
 )

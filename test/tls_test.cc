@@ -1,0 +1,126 @@
+/*
+Copyright 2019 Google LLC
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    https://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
+#include <assert.h>
+#include <stdio.h>
+#include <stdlib.h>
+
+#include "src/apib_iothread.h"
+#include "src/apib_url.h"
+#include "src/apib_message.h"
+#include "src/apib_reporting.h"
+#include "gtest/gtest.h"
+#include "test/test_keygen.h"
+#include "test/test_server.h"
+
+static char KeyPath[512];
+static char CertPath[512];
+static int testServerPort;
+static TestServer* testServer;
+
+class IOTest : public ::testing::Test {
+  protected:
+  IOTest() {
+    RecordInit(NULL, NULL);
+    RecordStart(1);
+    testserver_ResetStats(testServer);
+  }
+  ~IOTest() {
+    // The "url_" family of functions use static data, so reset every time.
+    url_Reset();
+    EndReporting();
+  } 
+};
+
+static void compareReporting() {
+  TestServerStats stats;
+  testserver_GetStats(testServer, &stats);
+  BenchmarkResults results;
+  ReportResults(&results);
+
+  EXPECT_EQ(results.successfulRequests, stats.successCount);
+  EXPECT_EQ(results.unsuccessfulRequests, stats.errorCount);
+  EXPECT_EQ(results.socketErrors, stats.socketErrorCount);
+  EXPECT_EQ(results.connectionsOpened, stats.connectionCount);
+}
+
+TEST_F(IOTest, BasicTLS) {
+  char url[128];
+  sprintf(url, "https://localhost:%i/hello", testServerPort);
+  url_InitOne(url);
+
+  IOThread t;
+  memset(&t, 0, sizeof(IOThread));
+  t.numConnections = 1;
+  //t.verbose = 1;
+  t.httpVerb = strdup("GET");
+
+  iothread_Start(&t);
+  sleep(1);
+  iothread_Stop(&t);
+  RecordStop();
+
+  compareReporting();
+  free(t.httpVerb);
+}
+
+int main(int argc, char** argv) {
+  ::testing::InitGoogleTest(&argc, argv);
+
+  char* keyDir = getenv("TEST_TMPDIR");
+  if (keyDir == NULL) {
+    keyDir = getenv("TEMPDIR");
+  }
+  if (keyDir == NULL) {
+    keyDir = strdup("/tmp");
+  }
+
+  sprintf(KeyPath, "%s/key.pem", keyDir);
+  sprintf(CertPath, "%s/cert.pem", keyDir);
+  printf("Key:  %s\n", KeyPath);
+  printf("Cert: %s\n", CertPath);
+
+  RSA* key = keygen_MakeRSAPrivateKey(2048);
+  assert(key != NULL);
+  X509* cert = keygen_MakeServerCertificate(key, 1, 1);
+  assert(cert != NULL);
+  int err = keygen_SignCertificate(key, cert);
+  assert(err == 0);
+  err = keygen_WriteRSAPrivateKey(key, KeyPath);
+  assert(err == 0);
+  err = keygen_WriteX509Certificate(cert, CertPath);
+  assert(err == 0);
+  RSA_free(key);
+  X509_free(cert);
+
+  testServer = (TestServer*)malloc(sizeof(TestServer));
+  memset(testServer, 0, sizeof(TestServer));
+
+  err = testserver_Start(testServer, 0, KeyPath, CertPath);
+  if (err != 0) {
+    fprintf(stderr, "Can't start test server: %i\n", err);
+    return 2;
+  }
+  testServerPort = testserver_GetPort(testServer);
+
+  int r = RUN_ALL_TESTS();
+
+  testserver_Stop(testServer);
+  // testserver_Join(&svr);
+  free(testServer);
+
+  return r;
+}

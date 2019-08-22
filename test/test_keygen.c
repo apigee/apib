@@ -17,12 +17,15 @@ limitations under the License.
 #include "test/test_keygen.h"
 
 #include <assert.h>
+#include <netinet/in.h>
+#include <openssl/asn1t.h>
 #include <openssl/bn.h>
 #include <openssl/err.h>
 #include <openssl/evp.h>
 #include <openssl/pem.h>
 #include <openssl/rsa.h>
 #include <openssl/x509.h>
+#include <openssl/x509v3.h>
 #include <stdio.h>
 
 #define DAY (60 * 60 * 24)
@@ -50,8 +53,8 @@ RSA* keygen_MakeRSAPrivateKey(int bits) {
 }
 
 X509* keygen_MakeServerCertificate(RSA* key, int serial, int days) {
-  EVP_PKEY* public = EVP_PKEY_new();
-  int err = EVP_PKEY_set1_RSA(public, key);
+  EVP_PKEY* pkey = EVP_PKEY_new();
+  int err = EVP_PKEY_set1_RSA(pkey, key);
   assert(err == 1);
 
   X509* cert = X509_new();
@@ -84,23 +87,45 @@ X509* keygen_MakeServerCertificate(RSA* key, int serial, int days) {
   err = X509_set_issuer_name(cert, subject);
   assert(err == 1);
 
-  err = X509_set_pubkey(cert, public);
+  err = X509_set_pubkey(cert, pkey);
   assert(err == 1);
-  EVP_PKEY_free(public);
+  EVP_PKEY_free(pkey);
 
-  // X509_set_issuer_name
-  // extensions... which ones!
+  // This sets subject alt names to be "127.0.0.1" and "localhost".
+  // Will make tests work as long as they used those hosts.
+  // Judicious GitHub and Stack Overflow searching was required
+  // to figure out these undocumented APIs!
+  GENERAL_NAMES* altNames = GENERAL_NAMES_new();
+
+  in_addr_t loopback = htonl(INADDR_LOOPBACK);
+  ASN1_OCTET_STRING* localIp = ASN1_OCTET_STRING_new();
+  ASN1_OCTET_STRING_set(localIp, (unsigned char*)&loopback, 4);
+  GENERAL_NAME* ip = GENERAL_NAME_new();
+  GENERAL_NAME_set0_value(ip, GEN_IPADD, localIp);
+  sk_GENERAL_NAME_push(altNames, ip);
+
+  ASN1_IA5STRING* localhost = ASN1_IA5STRING_new();
+  ASN1_STRING_set(localhost, "localhost", -1);
+  GENERAL_NAME* host = GENERAL_NAME_new();
+  GENERAL_NAME_set0_value(host, GEN_DNS, localhost);
+  sk_GENERAL_NAME_push(altNames, host);
+
+  err = X509_add1_ext_i2d(cert, NID_subject_alt_name, altNames, 0, 0);
+  assert(err == 1);
+
+  // This frees the whole mess above.
+  GENERAL_NAMES_free(altNames);
 
   return cert;
 }
 
 int keygen_SignCertificate(RSA* key, X509* cert) {
-    EVP_PKEY* public = EVP_PKEY_new();
-    int err = EVP_PKEY_set1_RSA(public, key);
+    EVP_PKEY* pkey = EVP_PKEY_new();
+    int err = EVP_PKEY_set1_RSA(pkey, key);
     assert(err == 1);
 
-    err = X509_sign(cert, public, EVP_sha256());
-    EVP_PKEY_free(public);
+    err = X509_sign(cert, pkey, EVP_sha256());
+    EVP_PKEY_free(pkey);
     if (err == 0) {
       printError("Error signing certificate");
       return -1;

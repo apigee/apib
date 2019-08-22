@@ -99,7 +99,7 @@ extern void io_Verbose(ConnectionState* c, const char* format, ...);
 extern void io_WriteDone(ConnectionState* c, int err);
 extern void io_ReadDone(ConnectionState* c, int err);
 
-// Operations on non-blocking plain sockets
+// Operations on non-blocking plain sockets:
 
 // Connect in a non-blocking way, and return non-zero on error.
 extern int io_Connect(ConnectionState* c);
