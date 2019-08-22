@@ -20,15 +20,24 @@ limitations under the License.
 #include "test/test_server.h"
 
 int main(int argc, char** argv) {
-  if (argc != 2) {
-    fprintf(stderr, "Usage: testserver <port>\n");
+  if ((argc < 2) || (argc > 4)) {
+    fprintf(stderr, "Usage: testserver <port> [<key file> <cert file>]\n");
     return 1;
   }
 
   int port = atoi(argv[1]);
+  char* keyFile;
+  char* certFile;
+
+  if (argc > 2) {
+    keyFile = argv[2];
+  }
+  if (argc > 3) {
+    certFile = argv[3];
+  }
 
   TestServer svr;
-  int err = testserver_Start(&svr, port);
+  int err = testserver_Start(&svr, port, keyFile, certFile);
   if (err != 0) {
     return 2;
   }

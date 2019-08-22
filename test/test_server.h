@@ -17,6 +17,7 @@ limitations under the License.
 #ifndef APIB_TEST_SERVER_H
 #define APIB_TEST_SERVER_H
 
+#include <openssl/ssl.h>
 #include <pthread.h>
 
 #ifdef __cplusplus
@@ -41,12 +42,14 @@ typedef struct {
   TestServerStats stats;
   pthread_mutex_t statsLock;
   pthread_t acceptThread;
+  SSL_CTX* sslCtx;
 } TestServer;
 
 /*
 Start a simple and dumb thread-per-socket HTTP server on a thread.
 */
-extern int testserver_Start(TestServer* s, int port);
+extern int testserver_Start(TestServer* s, int port, const char* keyFile,
+                            const char* certFile);
 
 /*
 Get the port it's listening on.

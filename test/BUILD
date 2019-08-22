@@ -2,7 +2,11 @@ cc_library(
     name = "testserver_lib",
     srcs = ["test_server.c"],
     hdrs = ["test_server.h"],
-    linkopts = ["-lpthread"],
+    linkopts = [
+        "-lssl",
+        "-lcrypto",
+        "-lpthread"
+    ],
     deps = [
         "//src:common",
         "@httpparser",

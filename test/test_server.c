@@ -25,6 +25,8 @@ limitations under the License.
 #include <stdlib.h>
 #include <string.h>
 #include <strings.h>
+#include <openssl/ssl.h>
+#include <openssl/err.h>
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <unistd.h>
@@ -54,6 +56,7 @@ typedef struct {
   char* nextHeader;
   int shouldClose;
   http_parser parser;
+  SSL* ssl;
 } RequestInfo;
 
 static char* makeData(const int len) {
@@ -62,6 +65,12 @@ static char* makeData(const int len) {
     b[i] = '0' + (i % 10);
   }
   return b;
+}
+
+static void printSslError(const char* msg) {
+  char buf[256];
+  ERR_error_string_n(ERR_get_error(), buf, 256);
+  fprintf(stderr, "%s: %s\n", msg, buf);
 }
 
 static void success(RequestInfo* i, int op) {
@@ -78,7 +87,14 @@ static void failure(RequestInfo* i) {
   pthread_mutex_unlock(&(i->server->statsLock));
 }
 
-static void sendText(int fd, int code, const char* codestr, const char* msg) {
+static int doWrite(RequestInfo* i, const void* buf, size_t len) {
+  if (i->ssl == NULL) {
+    return write(i->fd, buf, len);
+  }
+  return SSL_write(i->ssl, buf, len);
+}
+
+static void sendText(RequestInfo* i, int code, const char* codestr, const char* msg) {
   StringBuf buf;
 
   buf_New(&buf, 0);
@@ -89,11 +105,11 @@ static void sendText(int fd, int code, const char* codestr, const char* msg) {
   buf_Append(&buf, "\r\n");
   buf_Append(&buf, msg);
 
-  write(fd, buf_Get(&buf), buf_Length(&buf));
+  doWrite(i, buf_Get(&buf), buf_Length(&buf));
   buf_Free(&buf);
 }
 
-static void sendData(int fd, char* data, size_t len) {
+static void sendData(RequestInfo* i, char* data, size_t len) {
   StringBuf buf;
 
   buf_New(&buf, 0);
@@ -103,10 +119,10 @@ static void sendData(int fd, char* data, size_t len) {
   buf_Printf(&buf, "Content-Length: %i\r\n", len);
   buf_Append(&buf, "\r\n");
 
-  write(fd, buf_Get(&buf), buf_Length(&buf));
+  doWrite(i, buf_Get(&buf), buf_Length(&buf));
   buf_Free(&buf);
 
-  write(fd, data, len);
+  doWrite(i, data, len);
 }
 
 // Called by http_parser to collect the request body
@@ -195,10 +211,10 @@ static int parsedHeaderValue(http_parser* p, const char* buf, size_t len) {
 static void handleRequest(RequestInfo* i) {
   if (!strcmp("/hello", i->path)) {
     if (i->parser.method == HTTP_GET) {
-      sendText(i->fd, 200, "OK", "Hello, World!\n");
+      sendText(i, 200, "OK", "Hello, World!\n");
       success(i, OP_HELLO);
     } else {
-      sendText(i->fd, 405, "BAD METHOD", "Wrong method");
+      sendText(i, 405, "BAD METHOD", "Wrong method");
       failure(i);
     }
 
@@ -216,24 +232,24 @@ static void handleRequest(RequestInfo* i) {
         }
       }
       char* data = makeData(size);
-      sendData(i->fd, data, size);
+      sendData(i, data, size);
       free(data);
       success(i, OP_DATA);
     } else {
-      sendText(i->fd, 405, "BAD METHOD", "Wrong method");
+      sendText(i, 405, "BAD METHOD", "Wrong method");
       failure(i);
     }
 
   } else if (!strcmp("/echo", i->path)) {
     if (i->parser.method == HTTP_POST) {
-      sendData(i->fd, i->body, i->bodyLen);
+      sendData(i, i->body, i->bodyLen);
       success(i, OP_ECHO);
     } else {
-      sendText(i->fd, 405, "BAD METHOD", "Wrong method");
+      sendText(i, 405, "BAD METHOD", "Wrong method");
       failure(i);
     }
   } else {
-    sendText(i->fd, 404, "NOT FOUND", "Not found");
+    sendText(i, 404, "NOT FOUND", "Not found");
     failure(i);
   }
 }
@@ -244,9 +260,19 @@ static ssize_t httpTransaction(RequestInfo* i, char* buf, ssize_t bufPos) {
   i->parser.data = i;
 
   do {
-    const ssize_t readCount = read(i->fd, buf + bufPos, READ_BUF - bufPos);
+    int readCount;
+    if (i->ssl == NULL) {
+      readCount = read(i->fd, buf + bufPos, READ_BUF - bufPos);
+    } else {
+      readCount = SSL_read(i->ssl, buf + bufPos, READ_BUF - bufPos);
+    }
+
     if (readCount < 0) {
-      perror("Error on read from socket");
+      if (i->ssl == NULL) {
+        perror("Error on read from socket");
+      } else {
+        printSslError("Error on socket read");
+      }
       pthread_mutex_lock(&(i->server->statsLock));
       i->server->stats.socketErrorCount++;
       pthread_mutex_unlock(&(i->server->statsLock));
@@ -287,6 +313,16 @@ static void* requestThread(void* a) {
   char* buf = (char*)malloc(READ_BUF);
   ssize_t bufPos = 0;
 
+  if (i->server->sslCtx != NULL) {
+    i->ssl = SSL_new(i->server->sslCtx);
+    int err = SSL_set_fd(i->ssl, i->fd);
+    if (err != 1) {
+      printSslError("Can't connect to SSL FD");
+      goto finish;
+    }
+    SSL_set_accept_state(i->ssl);
+  }
+
   pthread_mutex_lock(&(i->server->statsLock));
   i->server->stats.connectionCount++;
   pthread_mutex_unlock(&(i->server->statsLock));
@@ -312,8 +348,12 @@ static void* requestThread(void* a) {
     }
   } while (bufPos >= 0);
 
+finish:
   close(i->fd);
   free(buf);
+  if (i->ssl != NULL) {
+    SSL_free(i->ssl);
+  }
   free(i);
   return NULL;
 }
@@ -340,7 +380,26 @@ static void* acceptThread(void* a) {
   }
 }
 
-int testserver_Start(TestServer* s, int port) {
+static int initializeSSL(TestServer* s, const char* keyFile, const char* certFile) {
+  s->sslCtx = SSL_CTX_new(TLS_server_method());
+
+  int err = SSL_CTX_use_certificate_chain_file(s->sslCtx, certFile);
+  if (err != 1) {
+    printSslError("Can't load certificate file");
+    return -1;
+  }
+
+  err = SSL_CTX_use_PrivateKey_file(s->sslCtx, keyFile, SSL_FILETYPE_PEM);
+  if (err != 1) {
+    printSslError("Can't load key file");
+    return -2;
+  }
+
+  return 0;
+}
+
+int testserver_Start(TestServer* s, int port, const char* keyFile,
+                            const char* certFile) {
   int err = regcomp(&sizeParameter, SIZE_PARAMETER_REGEX, REG_EXTENDED);
   assert(err == 0);
 
@@ -353,6 +412,13 @@ int testserver_Start(TestServer* s, int port) {
 
   memset(s, 0, sizeof(TestServer));
   pthread_mutex_init(&(s->statsLock), NULL);
+
+  if ((keyFile != NULL) && (certFile != NULL)) {
+    if (initializeSSL(s, keyFile, certFile) != 0) {
+      return -1;
+    }
+  }
+
   s->listenfd = socket(AF_INET, SOCK_STREAM, 0);
   if (s->listenfd < 0) {
     perror("Cant' create socket");
@@ -413,4 +479,7 @@ void testserver_Join(TestServer* s) {
   void* ret;
   pthread_join(s->acceptThread, &ret);
   pthread_detach(s->acceptThread);
+  if (s->sslCtx != NULL) {
+    SSL_CTX_free(s->sslCtx);
+  }
 }

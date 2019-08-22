@@ -195,7 +195,7 @@ int main(int argc, char** argv) {
   ::testing::InitGoogleTest(&argc, argv);
 
   testServer = (TestServer*)malloc(sizeof(TestServer));
-  int err = testserver_Start(testServer, 0);
+  int err = testserver_Start(testServer, 0, NULL, NULL);
   if (err != 0) {
     fprintf(stderr, "Can't start test server: %i\n", err);
     return 2;
