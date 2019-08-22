@@ -85,3 +85,16 @@ cc_test(
         "@gtest",
     ]
 )
+
+cc_binary(
+    name = "keygen",
+    srcs = [
+        "test_keygen.c",
+        "test_keygen_main.c",
+        "test_keygen.h",
+    ],
+    linkopts = [
+        "-lssl",
+        "-lcrypto"
+    ]
+)
