@@ -17,6 +17,7 @@ limitations under the License.
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <openssl/ssl.h>
 
 #include "src/apib_iothread.h"
 #include "src/apib_url.h"
@@ -31,14 +32,14 @@ static char CertPath[512];
 static int testServerPort;
 static TestServer* testServer;
 
-class IOTest : public ::testing::Test {
+class TLSTest : public ::testing::Test {
   protected:
-  IOTest() {
+  TLSTest() {
     RecordInit(NULL, NULL);
     RecordStart(1);
     testserver_ResetStats(testServer);
   }
-  ~IOTest() {
+  ~TLSTest() {
     // The "url_" family of functions use static data, so reset every time.
     url_Reset();
     EndReporting();
@@ -51,13 +52,17 @@ static void compareReporting() {
   BenchmarkResults results;
   ReportResults(&results);
 
+  EXPECT_LT(0, results.successfulRequests);
+  EXPECT_EQ(0, results.unsuccessfulRequests);
+  EXPECT_EQ(0, results.socketErrors);
+
   EXPECT_EQ(results.successfulRequests, stats.successCount);
   EXPECT_EQ(results.unsuccessfulRequests, stats.errorCount);
   EXPECT_EQ(results.socketErrors, stats.socketErrorCount);
   EXPECT_EQ(results.connectionsOpened, stats.connectionCount);
 }
 
-TEST_F(IOTest, BasicTLS) {
+TEST_F(TLSTest, Basic) {
   char url[128];
   sprintf(url, "https://localhost:%i/hello", testServerPort);
   url_InitOne(url);
@@ -67,6 +72,7 @@ TEST_F(IOTest, BasicTLS) {
   t.numConnections = 1;
   //t.verbose = 1;
   t.httpVerb = strdup("GET");
+  t.sslCtx = SSL_CTX_new(TLS_client_method());
 
   iothread_Start(&t);
   sleep(1);
@@ -75,7 +81,106 @@ TEST_F(IOTest, BasicTLS) {
 
   compareReporting();
   free(t.httpVerb);
+  SSL_CTX_free(t.sslCtx);
 }
+
+TEST_F(TLSTest, NoKeepAlive) {
+  char url[128];
+  sprintf(url, "https://localhost:%i/hello", testServerPort);
+  url_InitOne(url);
+
+  IOThread t;
+  memset(&t, 0, sizeof(IOThread));
+  t.numConnections = 1;
+  //t.verbose = 1;
+  t.noKeepAlive = 1;
+  t.httpVerb = strdup("GET");
+  t.sslCtx = SSL_CTX_new(TLS_client_method());
+
+  iothread_Start(&t);
+  sleep(1);
+  iothread_Stop(&t);
+  RecordStop();
+
+  compareReporting();
+  free(t.httpVerb);
+  SSL_CTX_free(t.sslCtx);
+}
+
+TEST_F(TLSTest, Larger) {
+  char url[128];
+  sprintf(url, "https://localhost:%i/data?size=8000", testServerPort);
+  url_InitOne(url);
+
+  IOThread t;
+  memset(&t, 0, sizeof(IOThread));
+  t.numConnections = 1;
+  //t.verbose = 1;
+  t.httpVerb = strdup("GET");
+  t.sslCtx = SSL_CTX_new(TLS_client_method());
+
+  iothread_Start(&t);
+  sleep(1);
+  iothread_Stop(&t);
+  RecordStop();
+
+  compareReporting();
+  free(t.httpVerb);
+  SSL_CTX_free(t.sslCtx);
+}
+
+TEST_F(TLSTest, VerifyPeerFailing) {
+  char url[128];
+  sprintf(url, "https://localhost:%i/hello", testServerPort);
+  url_InitOne(url);
+
+  IOThread t;
+  memset(&t, 0, sizeof(IOThread));
+  t.numConnections = 1;
+  //t.verbose = 1;
+  t.httpVerb = strdup("GET");
+  t.sslCtx = SSL_CTX_new(TLS_client_method());
+  SSL_CTX_set_verify(t.sslCtx, SSL_VERIFY_PEER, NULL);
+
+  iothread_Start(&t);
+  sleep(1);
+  iothread_Stop(&t);
+  RecordStop();
+
+  BenchmarkResults results;
+  ReportResults(&results);
+  EXPECT_EQ(0, results.successfulRequests);
+  EXPECT_LT(0, results.socketErrors);
+
+  free(t.httpVerb);
+  SSL_CTX_free(t.sslCtx);
+}
+
+TEST_F(TLSTest, VerifyPeerSuccess) {
+  char url[128];
+  sprintf(url, "https://localhost:%i/hello", testServerPort);
+  url_InitOne(url);
+
+  IOThread t;
+  memset(&t, 0, sizeof(IOThread));
+  t.numConnections = 1;
+  t.verbose = 1;
+  t.httpVerb = strdup("GET");
+  t.sslCtx = SSL_CTX_new(TLS_client_method());
+  SSL_CTX_set_verify(t.sslCtx, SSL_VERIFY_PEER, NULL);
+  ASSERT_EQ(1, SSL_CTX_use_certificate_chain_file(t.sslCtx, CertPath));
+
+  iothread_Start(&t);
+  sleep(1);
+  iothread_Stop(&t);
+  RecordStop();
+  
+  compareReporting();
+  free(t.httpVerb);
+  SSL_CTX_free(t.sslCtx);
+}
+
+// TODO ciphers?
 
 int main(int argc, char** argv) {
   ::testing::InitGoogleTest(&argc, argv);

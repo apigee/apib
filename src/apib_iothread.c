@@ -84,59 +84,58 @@ void writeRequest(ConnectionState* c) {
     buf_AppendN(&(c->writeBuf), c->t->sendData, c->t->sendDataLen);
   }
   io_Verbose(c, "Total send is %i bytes\n", buf_Length(&(c->writeBuf)));
-  c->state = SENDING;
 }
 
-static void connectAndSend(ConnectionState* c, int needsOpen) {
+static void connectAndSend(ConnectionState* c) {
   c->startTime = apib_GetTime();
-  if (needsOpen) {
-      int err = io_Connect(c);
-      // Should only fail if we can't create a new socket --
-      // errors actually connecting will be handled during write.
-      assert(err == 0);
-      RecordConnectionOpen();
-    }
-    writeRequest(c);
-    io_SendWrite(c);
+  if (c->needsOpen) {
+    int err = io_Connect(c);
+    // Should only fail if we can't create a new socket --
+    // errors actually connecting will be handled during write.
+    assert(err == 0);
+    RecordConnectionOpen();
+  }
+  writeRequest(c);
+  io_SendWrite(c);
 }
 
 static void thinkingDone(struct ev_loop* loop, ev_timer* t, int revents) {
   assert(revents | EV_TIMER);
   ConnectionState* c = (ConnectionState*)t->data;
   io_Verbose(c, "Think time over\n");
-  connectAndSend(c, c->needsOpen);
+  connectAndSend(c);
 }
 
 static void recycle(ConnectionState* c, int closeConn) {
-  if (c->t->thinkTime > 0) {
-    if (closeConn || (c->t->noKeepAlive)) {
-      io_Close(c);
-      c->needsOpen = 1;
-    } else {
-      c->needsOpen = 0;
-    }
+  if (closeConn || (c->t->noKeepAlive)) {
+    io_Close(c);
+    c->needsOpen = 1;
+  } else {
+    c->needsOpen = 0;
+  }
+
+  if (!c->t->keepRunning) {
+    io_Verbose(c, "Closing connection\n");
+    io_Close(c);
+  } else if (c->t->thinkTime > 0) {
     const double thinkTime = (double)(c->t->thinkTime) / 1000.0;
     io_Verbose(c, "Thinking for %.4lf seconds\n", thinkTime);
     ev_timer_init(&(c->thinkTimer), thinkingDone, thinkTime, 0);
     c->thinkTimer.data = c;
     ev_timer_start(c->t->loop, &(c->thinkTimer));
   } else {
-    int needsOpen = 0;
-    if (closeConn || (c->t->noKeepAlive)) {
-      io_Close(c);
-      needsOpen = 1;
-    }
-    connectAndSend(c, needsOpen);
+    connectAndSend(c);
   }
 }
 
 static int startConnect(ConnectionState* c) {
   c->url = url_GetNext(c->t->rand);
-  if (c->url->isSsl) {
-    // TODO
-    assert(0);
+  if (c->url->isSsl && (c->t->sslCtx == NULL)) {
+    fprintf(stderr, "SSL is not available\n");
+    return -1;
   }
-  connectAndSend(c, 1);
+  c->needsOpen = 1;
+  connectAndSend(c);
   return 0;
 }
 
@@ -153,10 +152,6 @@ void io_WriteDone(ConnectionState* c, int err) {
     c->readDone = 0;
     http_parser_init(&(c->parser), HTTP_RESPONSE);
     c->parser.data = c;
-    if (c->url->isSsl) {
-      // TODO
-      assert(0);
-    }
     io_SendRead(c);
   }
 }
@@ -165,12 +160,7 @@ void io_ReadDone(ConnectionState* c, int err) {
   if (err != 0) {
     io_Verbose(c, "Error on read: %i\n", err);
     RecordSocketError();
-    if (c->t->keepRunning) {
-      recycle(c, 1);
-    } else {
-      io_Verbose(c, "Stopping\n");
-      io_Close(c);
-    }
+    recycle(c, 1);
     return;
   }
 
@@ -198,17 +188,15 @@ void io_ReadDone(ConnectionState* c, int err) {
 
 static void* ioThread(void* a) {
   IOThread* t = (IOThread*)a;
-  // TODO increment all these while running
-  t->latenciesSize = 1024;
-  t->latenciesCount = 0;
-  t->latencies = (long long*)malloc(sizeof(long long) * 1024);
+  assert(t->numConnections > 0);
+  assert(t->httpVerb != NULL);
   t->readCount = 0;
   t->writeCount = 0;
   t->readBytes = 0;
   t->writeBytes = 0;
 
   ConnectionState* conns =
-      (ConnectionState*)malloc(sizeof(ConnectionState) * t->numConnections);
+      (ConnectionState*)calloc(t->numConnections, sizeof(ConnectionState));
   t->rand = apib_InitRand();
   verbose(t, "Starting new event loop %i for %i connection\n", t->index,
           t->numConnections);
@@ -220,7 +208,6 @@ static void* ioThread(void* a) {
     // First-time initialization of new connection
     ConnectionState* s = &(conns[i]);
     s->t = t;
-    s->state = IDLE;
     conns[i].url = NULL;
     buf_New(&(conns[i].writeBuf), WRITE_BUF_SIZE);
     s->writeBufPos = 0;
@@ -246,7 +233,6 @@ finish:
     free(s->readBuf);
   }
   free(conns);
-  free(t->latencies);
   apib_FreeRand(t->rand);
   ev_loop_destroy(t->loop);
   return NULL;

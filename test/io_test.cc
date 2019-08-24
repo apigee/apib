@@ -49,6 +49,10 @@ static void compareReporting() {
   BenchmarkResults results;
   ReportResults(&results);
 
+  EXPECT_LT(0, results.successfulRequests);
+  EXPECT_EQ(0, results.unsuccessfulRequests);
+  EXPECT_EQ(0, results.socketErrors);
+
   EXPECT_EQ(results.successfulRequests, stats.successCount);
   EXPECT_EQ(results.unsuccessfulRequests, stats.errorCount);
   EXPECT_EQ(results.socketErrors, stats.socketErrorCount);
@@ -151,6 +155,26 @@ TEST_F(IOTest, OneThreadLarge) {
   IOThread t;
   memset(&t, 0, sizeof(IOThread));
   t.numConnections = 1;
+  //t.verbose = 1;
+  t.httpVerb = strdup("GET");
+
+  iothread_Start(&t);
+  sleep(1);
+  iothread_Stop(&t);
+  RecordStop();
+
+  compareReporting();
+  free(t.httpVerb);
+}
+
+TEST_F(IOTest, MoreConnections) {
+  char url[128];
+  sprintf(url, "http://localhost:%i/hello", testServerPort);
+  url_InitOne(url);
+
+  IOThread t;
+  memset(&t, 0, sizeof(IOThread));
+  t.numConnections = 10;
   //t.verbose = 1;
   t.httpVerb = strdup("GET");
 

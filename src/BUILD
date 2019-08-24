@@ -36,13 +36,16 @@ cc_library(
 cc_library(
     name = "io",
     srcs = [
-        "apib_io_clear.c",
+        "apib_io_basic.c",
+        "apib_io_socket.c",
         "apib_iothread.c", 
     ],
     hdrs = [
         "apib_iothread.h",
     ],
     linkopts = [
+        "-lssl",
+        "-lcrypto",
         "-lpthread",
     ],
     deps = [

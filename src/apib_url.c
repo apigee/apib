@@ -250,9 +250,11 @@ void url_Reset() {
     for (int i = 0; i < urlCount; i++) {
       free(urls[i].path);
       free(urls[i].addresses);
+      free(urls[i].addressLengths);
     }
     urlCount = urlSize = 0;
     free(urls);
+    regfree(&urlExpression);
     initialized = 0;
   }
 }

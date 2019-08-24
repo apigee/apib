@@ -17,6 +17,7 @@ limitations under the License.
 #ifndef APIB_IOTHREAD_H
 #define APIB_IOTHREAD_H
 
+#include <openssl/ssl.h>
 #include <pthread.h>
 
 #include "ev.h"
@@ -37,7 +38,7 @@ typedef struct {
   char* sslCipher;
   char* sendData;
   size_t sendDataLen;
-  // SSL_CTX*        sslCtx;
+  SSL_CTX* sslCtx;
   char** headers;
   unsigned int numHeaders;
   unsigned int thinkTime;
@@ -45,9 +46,6 @@ typedef struct {
   int noKeepAlive;
 
   // Everything ABOVE must be initialized.
-  long long* latencies;
-  size_t latenciesSize;
-  size_t latenciesCount;
   long readCount;
   long writeCount;
   long long readBytes;
@@ -63,15 +61,14 @@ typedef struct {
 #define READ_BUF_SIZE 1024
 #define WRITE_BUF_SIZE 128
 
-typedef enum { IDLE, CONNECTED, SENDING, RECEIVING } State;
-
 extern http_parser_settings HttpParserSettings;
 
 // This is an internal structure used per connection.
 typedef struct {
   IOThread* t;
   int fd;
-  State state;
+  SSL* ssl;
+  int backwardsIo;
   ev_io io;
   ev_timer thinkTimer;
   URLInfo* url;
@@ -99,7 +96,7 @@ extern void io_Verbose(ConnectionState* c, const char* format, ...);
 extern void io_WriteDone(ConnectionState* c, int err);
 extern void io_ReadDone(ConnectionState* c, int err);
 
-// Operations on non-blocking plain sockets:
+// High-level operations:
 
 // Connect in a non-blocking way, and return non-zero on error.
 extern int io_Connect(ConnectionState* c);
@@ -110,9 +107,13 @@ extern void io_SendWrite(ConnectionState* c);
 // Read the whole HTTP response and call "io_ReadDone" when done.
 extern void io_SendRead(ConnectionState* c);
 
+// Do what it says on the tin, and return immediately.
 extern void io_Close(ConnectionState* c);
 
-// TODO operations on non-blocking SSL sockets
+// Lower-level operations
+typedef enum { OK, NEED_READ, NEED_WRITE, FEOF, TLS_ERROR, SOCKET_ERROR } IOStatus;
+extern IOStatus io_Write(ConnectionState* c, const void* buf, size_t count, size_t* written);
+extern IOStatus io_Read(ConnectionState* c, void* buf, size_t count, size_t* readed);
 
 #ifdef __cplusplus
 }
