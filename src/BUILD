@@ -31,6 +31,9 @@ cc_library(
         "apib_time.h",
         "apib_url.h",
     ],
+    deps = [
+        "@httpparser",
+    ],
 )
 
 cc_library(

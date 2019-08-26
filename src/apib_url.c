@@ -19,33 +19,22 @@ limitations under the License.
 #include <arpa/inet.h>
 #include <assert.h>
 #include <netdb.h>
-#include <regex.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/socket.h>
 #include <sys/types.h>
 
+#include "http_parser.h"
 #include "src/apib_lines.h"
 
 #define URL_BUF_LEN 8192
 #define INITIAL_URLS 16
 
-#define URL_REGEXP "^(https?):\\/\\/([a-zA-Z0-9\\-\\.]+)(:([0-9]+))?(\\/.*)?$"
-// Number of "()"s in the expression above, plus 1
-#define URL_REGEXP_MATCHES 6
-
 static unsigned int urlCount = 0;
 static unsigned int urlSize = 0;
 static URLInfo* urls;
 static int initialized = 0;
-
-static regex_t urlExpression;
-
-static void initializeExpression() {
-  const int e = regcomp(&urlExpression, URL_REGEXP, REG_EXTENDED);
-  assert(e == 0);
-}
 
 static int initHost(const char* hostname, URLInfo* u) {
   struct addrinfo hints;
@@ -66,11 +55,12 @@ static int initHost(const char* hostname, URLInfo* u) {
   struct addrinfo* a = results;
   int c = 0;
   while (a != NULL) {
-    c++; 
+    c++;
     a = a->ai_next;
   }
 
-  u->addresses = (struct sockaddr_storage*)malloc(sizeof(struct sockaddr_storage) * c);
+  u->addresses =
+      (struct sockaddr_storage*)malloc(sizeof(struct sockaddr_storage) * c);
   u->addressLengths = (size_t*)malloc(sizeof(size_t) * c);
   u->addressCount = c;
 
@@ -89,52 +79,86 @@ static int initHost(const char* hostname, URLInfo* u) {
   return 0;
 }
 
-static char* getRegexPart(const char* urlstr, const regmatch_t* matches,
-                          const int ix) {
-  const regmatch_t* match = &(matches[ix]);
-  if (match->rm_so >= 0) {
-    assert(match->rm_eo >= match->rm_so);
-    return strndup(urlstr + match->rm_so, match->rm_eo - match->rm_so);
-  }
-  return NULL;
+static int compareUrlPart(const struct http_parser_url* pu, const char* urlstr,
+                          const char* str, int part) {
+  return strncmp(urlstr + pu->field_data[part].off, str,
+                 pu->field_data[part].len);
+}
+
+static char* copyUrlPart(const struct http_parser_url* pu, const char* urlstr,
+                         int part) {
+  return strndup(urlstr + pu->field_data[part].off, pu->field_data[part].len);
+}
+
+static void appendUrlPart(const struct http_parser_url* pu, const char* urlstr,
+                          int part, StringBuf* buf) {
+  buf_AppendN(buf, urlstr + pu->field_data[part].off, pu->field_data[part].len);
 }
 
 static int initUrl(const char* urlstr, URLInfo* u) {
-  regmatch_t matches[URL_REGEXP_MATCHES];
-  const int match =
-      regexec(&urlExpression, urlstr, URL_REGEXP_MATCHES, matches, 0);
-  if (match) {
-    char errBuf[128];
-    regerror(match, &urlExpression, errBuf, 128);
-    fprintf(stderr, "Error matching URL: %s\n", errBuf);
+  struct http_parser_url pu;
+
+  http_parser_url_init(&pu);
+  const int err = http_parser_parse_url(urlstr, strlen(urlstr), 0, &pu);
+  if (err != 0) {
+    fprintf(stderr, "Invalid URL: \"%s\"\n", urlstr);
     return -1;
   }
 
-  // Match 1 is either "http" or "https". Just count characters.
-  u->isSsl = ((matches[1].rm_eo - matches[1].rm_so) == 5);
+  if (!(pu.field_set & (1 << UF_SCHEMA)) || !(pu.field_set & (1 << UF_HOST))) {
+    fprintf(stderr, "Error matching URL: %s\n", urlstr);
+    return -2;
+  }
 
-  // Match 2 is the "hostname"
-  char* hoststr = getRegexPart(urlstr, matches, 2);
+  if (!compareUrlPart(&pu, urlstr, "http", UF_SCHEMA)) {
+    u->isSsl = 0;
+  } else if (!compareUrlPart(&pu, urlstr, "https", UF_SCHEMA)) {
+    u->isSsl = 1;
+  } else {
+    fprintf(stderr, "Invalid URL scheme: \"%s\"\n", urlstr);
+    return -3;
+  }
+
+  char* hoststr = copyUrlPart(&pu, urlstr, UF_HOST);
   assert(hoststr != NULL);
 
-  // Match 4 is the port number, if any
-  char* portstr = getRegexPart(urlstr, matches, 4);
-  if (portstr != NULL) {
-    u->port = atoi(portstr);
-    free(portstr);
+  if (pu.field_set & (1 << UF_PORT)) {
+    u->port = pu.port;
   } else if (u->isSsl) {
     u->port = 443;
   } else {
     u->port = 80;
   }
 
-  // Match 5 is the path, if any
-  char* path = getRegexPart(urlstr, matches, 5);
-  if (path != NULL) {
-    u->path = path;
+  StringBuf pathBuf;
+  buf_New(&pathBuf, 0);
+
+  if (pu.field_set & (1 << UF_PATH)) {
+    appendUrlPart(&pu, urlstr, UF_PATH, &pathBuf);
   } else {
-    // strdup here because "Reset" will actually call "free"
-    u->path = strdup("/");
+    buf_Append(&pathBuf, "/");
+  }
+
+  if (pu.field_set & (1 << UF_QUERY)) {
+    buf_Append(&pathBuf, "?");
+    appendUrlPart(&pu, urlstr, UF_QUERY, &pathBuf);
+  }
+
+  if (pu.field_set & (1 << UF_FRAGMENT)) {
+    buf_Append(&pathBuf, "#");
+    appendUrlPart(&pu, urlstr, UF_FRAGMENT, &pathBuf);
+  }
+
+  // Copy the final buffer...
+  // No need to free what was previously allocated by "buf_New"!
+  u->path = buf_Get(&pathBuf);
+
+  // Calculate the host header properly
+  if (((u->isSsl) && (u->port == 443)) || ((!u->isSsl) && (u->port == 80))) {
+    u->hostHeader = strdup(hoststr);
+  } else {
+    u->hostHeader = malloc(strlen(hoststr) + 20);
+    sprintf(u->hostHeader, "%s:%i", hoststr, u->port);
   }
 
   // Now look up the host and add the port...
@@ -151,7 +175,6 @@ static int initUrl(const char* urlstr, URLInfo* u) {
 
 int url_InitOne(const char* urlStr) {
   assert(!initialized);
-  initializeExpression();
 
   urlCount = urlSize = 1;
   urls = (URLInfo*)malloc(sizeof(URLInfo));
@@ -178,12 +201,12 @@ int url_IsSameServer(const URLInfo* u1, const URLInfo* u2, int index) {
   if (u1->addressLengths[ix] != u2->addressLengths[ix]) {
     return -1;
   }
-  return !memcmp(&(u1->addresses[ix]), &(u2->addresses[ix]), u1->addressLengths[ix]);
+  return !memcmp(&(u1->addresses[ix]), &(u2->addresses[ix]),
+                 u1->addressLengths[ix]);
 }
 
 int url_InitFile(const char* fileName) {
   assert(!initialized);
-  initializeExpression();
 
   FILE* file;
   char buf[URL_BUF_LEN];
@@ -249,12 +272,12 @@ void url_Reset() {
   if (initialized) {
     for (int i = 0; i < urlCount; i++) {
       free(urls[i].path);
+      free(urls[i].hostHeader);
       free(urls[i].addresses);
       free(urls[i].addressLengths);
     }
     urlCount = urlSize = 0;
     free(urls);
-    regfree(&urlExpression);
     initialized = 0;
   }
 }

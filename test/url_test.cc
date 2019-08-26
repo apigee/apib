@@ -30,6 +30,7 @@ TEST(URL, ParseGood1) {
   EXPECT_EQ(0, u1->isSsl);
   EXPECT_EQ(1234, u1->port);
   EXPECT_STREQ("/bar?baz=yes", u1->path);
+  EXPECT_STREQ("foo.com:1234", u1->hostHeader);
   struct sockaddr_in* a = (struct sockaddr_in*)url_GetAddress(u1, 0, NULL);
   EXPECT_EQ(1234, ntohs(a->sin_port));
   url_Reset();
@@ -38,7 +39,16 @@ TEST(URL, ParseGood1) {
   const URLInfo* u1a = url_GetNext(nullptr);
   EXPECT_EQ(0, u1a->isSsl);
   EXPECT_EQ(80, u1a->port);
+  EXPECT_STREQ("foo.com", u1a->hostHeader);
   EXPECT_STREQ("/bar?baz=yes", u1a->path);
+  url_Reset();
+
+  ASSERT_EQ(0, url_InitOne("http://foo.com:80/bar?baz=yes"));
+  const URLInfo* u1a1 = url_GetNext(nullptr);
+  EXPECT_EQ(0, u1a1->isSsl);
+  EXPECT_EQ(80, u1a1->port);
+  EXPECT_STREQ("foo.com", u1a1->hostHeader);
+  EXPECT_STREQ("/bar?baz=yes", u1a1->path);
   url_Reset();
 
   ASSERT_EQ(0, url_InitOne("http://foo.com/"));
@@ -73,7 +83,16 @@ TEST(URL, ParseGood1) {
   const URLInfo* u2a = url_GetNext(nullptr);
   EXPECT_EQ(1, u2a->isSsl);
   EXPECT_EQ(443, u2a->port);
+  EXPECT_STREQ("foo.com", u2a->hostHeader);
   EXPECT_STREQ("/bar?baz=yes", u2a->path);
+  url_Reset();
+
+  ASSERT_EQ(0, url_InitOne("https://foo.com:443/bar?baz=yes"));
+  const URLInfo* u2b = url_GetNext(nullptr);
+  EXPECT_EQ(1, u2b->isSsl);
+  EXPECT_EQ(443, u2b->port);
+  EXPECT_STREQ("foo.com", u2b->hostHeader);
+  EXPECT_STREQ("/bar?baz=yes", u2b->path);
   url_Reset();
 }
 

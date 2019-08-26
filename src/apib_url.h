@@ -41,6 +41,7 @@ typedef struct {
   unsigned int port;
   int isSsl;
   char* path;
+  char* hostHeader;
 } URLInfo;
 
 /*

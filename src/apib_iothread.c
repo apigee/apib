@@ -71,15 +71,24 @@ void writeRequest(ConnectionState* c) {
   buf_Append(&(c->writeBuf), c->url->path);
   buf_Append(&(c->writeBuf), " HTTP/1.1\r\n");
   buf_Append(&(c->writeBuf), "User-Agent: apib\r\n");
+  if (!c->t->hostHeaderOverride) {
+    buf_Append(&(c->writeBuf), "Host: ");
+    buf_Append(&(c->writeBuf), c->url->hostHeader);
+    buf_Append(&(c->writeBuf), "\r\n");
+  }
   if (c->t->sendDataLen > 0) {
-    buf_Append(&(c->writeBuf), "Content-Type: text-plain\r\n");
+    buf_Append(&(c->writeBuf), "Content-Type: text/plain\r\n");
     buf_Printf(&(c->writeBuf), "Content-Length: %lu\r\n", c->t->sendDataLen);
   }
   if (c->t->noKeepAlive) {
     buf_Append(&(c->writeBuf), "Connection: close\r\n");
   }
-  // TODO write other headers, including host override
-  // and Host header!
+  for (int i = 0; i < c->t->numHeaders; i++) {
+    buf_Append(&(c->writeBuf), c->t->headers[i]);
+    buf_Append(&(c->writeBuf), "\r\n");
+  }
+  io_Verbose(c, "%s\n", buf_Get(&c->writeBuf));
+
   buf_Append(&(c->writeBuf), "\r\n");
   if (c->t->sendDataLen > 0) {
     buf_AppendN(&(c->writeBuf), c->t->sendData, c->t->sendDataLen);
