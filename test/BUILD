@@ -2,13 +2,9 @@ cc_library(
     name = "testserver_lib",
     srcs = ["test_server.c"],
     hdrs = ["test_server.h"],
-    linkopts = [
-        "-lssl",
-        "-lcrypto",
-        "-lpthread"
-    ],
     deps = [
         "//src:common",
+        "@boringssl//:ssl",
         "@httpparser",
     ],
 )
@@ -29,9 +25,8 @@ cc_library(
     hdrs = [
         "test_keygen.h",
     ],
-    linkopts = [
-        "-lssl",
-        "-lcrypto"
+    deps = [
+        "@boringssl//:ssl",
     ]
 )
 

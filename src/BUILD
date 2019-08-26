@@ -44,12 +44,11 @@ cc_library(
         "apib_iothread.h",
     ],
     linkopts = [
-        "-lssl",
-        "-lcrypto",
         "-lpthread",
     ],
     deps = [
         ":common",
+        "@boringssl//:ssl",
         "@httpparser",
         "@libev",
     ],

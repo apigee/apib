@@ -2,6 +2,11 @@ load(
     "@bazel_tools//tools/build_defs/repo:http.bzl",
     "http_archive",
 )
+load(
+    "@bazel_tools//tools/build_defs/repo:git.bzl",
+    "git_repository",
+)
+
 
 http_archive(
     name = "gtest",
@@ -24,4 +29,10 @@ http_archive(
     sha256 = "5199500e352584852c95c13423edc5f0cb329297c81dd69c3c8f52a75496da08",
     strip_prefix = "http-parser-2.9.2",
     urls = ["https://github.com/nodejs/http-parser/archive/v2.9.2.tar.gz"],
+)
+
+git_repository(
+    name = "boringssl",
+    commit = "68ddf9a84c7ffc0dea3337cb994213b093c7d6ef",
+    remote = "https://boringssl.googlesource.com/boringssl",
 )
