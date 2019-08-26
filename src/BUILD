@@ -61,5 +61,6 @@ cc_binary(
     ],
     deps = [
         ":io",
+        "//third_party:base64",
     ]
 )

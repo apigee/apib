@@ -79,6 +79,7 @@ void writeRequest(ConnectionState* c) {
     buf_Append(&(c->writeBuf), "Connection: close\r\n");
   }
   // TODO write other headers, including host override
+  // and Host header!
   buf_Append(&(c->writeBuf), "\r\n");
   if (c->t->sendDataLen > 0) {
     buf_AppendN(&(c->writeBuf), c->t->sendData, c->t->sendDataLen);

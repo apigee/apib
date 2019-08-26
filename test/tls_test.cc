@@ -62,6 +62,12 @@ static void compareReporting() {
   EXPECT_EQ(results.connectionsOpened, stats.connectionCount);
 }
 
+static SSL_CTX* setUpTLS() {
+  SSL_CTX* ctx = SSL_CTX_new(TLS_client_method());
+  SSL_CTX_set_mode(ctx, SSL_MODE_ENABLE_PARTIAL_WRITE);
+  return ctx;
+}
+
 TEST_F(TLSTest, Basic) {
   char url[128];
   sprintf(url, "https://localhost:%i/hello", testServerPort);
@@ -72,7 +78,7 @@ TEST_F(TLSTest, Basic) {
   t.numConnections = 1;
   //t.verbose = 1;
   t.httpVerb = strdup("GET");
-  t.sslCtx = SSL_CTX_new(TLS_client_method());
+  t.sslCtx = setUpTLS();
 
   iothread_Start(&t);
   sleep(1);
@@ -95,7 +101,7 @@ TEST_F(TLSTest, NoKeepAlive) {
   //t.verbose = 1;
   t.noKeepAlive = 1;
   t.httpVerb = strdup("GET");
-  t.sslCtx = SSL_CTX_new(TLS_client_method());
+  t.sslCtx = setUpTLS();
 
   iothread_Start(&t);
   sleep(1);
@@ -117,7 +123,7 @@ TEST_F(TLSTest, Larger) {
   t.numConnections = 1;
   //t.verbose = 1;
   t.httpVerb = strdup("GET");
-  t.sslCtx = SSL_CTX_new(TLS_client_method());
+  t.sslCtx = setUpTLS();
 
   iothread_Start(&t);
   sleep(1);
@@ -139,7 +145,7 @@ TEST_F(TLSTest, VerifyPeerFailing) {
   t.numConnections = 1;
   //t.verbose = 1;
   t.httpVerb = strdup("GET");
-  t.sslCtx = SSL_CTX_new(TLS_client_method());
+  t.sslCtx = setUpTLS();
   SSL_CTX_set_verify(t.sslCtx, SSL_VERIFY_PEER, NULL);
 
   iothread_Start(&t);
@@ -164,17 +170,17 @@ TEST_F(TLSTest, VerifyPeerSuccess) {
   IOThread t;
   memset(&t, 0, sizeof(IOThread));
   t.numConnections = 1;
-  t.verbose = 1;
+  //t.verbose = 1;
   t.httpVerb = strdup("GET");
-  t.sslCtx = SSL_CTX_new(TLS_client_method());
+  t.sslCtx = setUpTLS();
   SSL_CTX_set_verify(t.sslCtx, SSL_VERIFY_PEER, NULL);
-  ASSERT_EQ(1, SSL_CTX_use_certificate_chain_file(t.sslCtx, CertPath));
+  ASSERT_EQ(1, SSL_CTX_load_verify_locations(t.sslCtx, CertPath, NULL));
 
   iothread_Start(&t);
   sleep(1);
   iothread_Stop(&t);
   RecordStop();
-  
+
   compareReporting();
   free(t.httpVerb);
   SSL_CTX_free(t.sslCtx);

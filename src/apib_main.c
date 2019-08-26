@@ -24,6 +24,8 @@ limitations under the License.
 #include <sys/time.h>
 #include <unistd.h>
 
+#include "third_party/base64.h"
+
 #include "src/apib_cpu.h"
 #include "src/apib_iothread.h"
 #include "src/apib_reporting.h"
@@ -36,21 +38,21 @@ limitations under the License.
 /* Globals */
 static volatile int Running;
 static int ShortOutput;
-static char* RunName;
+static char *RunName;
 static int NumConnections;
 static int NumThreads;
 static int JustOnce = 0;
 static int KeepAlive;
 
-static char** Headers = NULL;
+static char **Headers = NULL;
 static unsigned int HeadersSize = 0;
 static unsigned int NumHeaders = 0;
 static int HostHeaderOverride = 0;
 
-static char* OAuthCK = NULL;
-static char* OAuthCS = NULL;
-static char* OAuthAT = NULL;
-static char* OAuthAS = NULL;
+static char *OAuthCK = NULL;
+static char *OAuthCS = NULL;
+static char *OAuthAT = NULL;
+static char *OAuthAS = NULL;
 
 #define OPTIONS "c:d:f:hk:t:u:vw:x:C:H:O:K:M:X:N:ST1W:"
 
@@ -83,35 +85,31 @@ static const struct option Options[] = {
   "-d --duration           Test duration in seconds\n"                         \
   "-f --input-file         File name to send on PUT and POST requests\n"       \
   "-h --help               Display this message\n"                             \
-  "-k --keep-alive         Keep-alive duration -- 0 to disable, non-zero for " \
-  "timeout\n"                                                                  \
+  "-k --keep-alive         Keep-alive duration:\n"                             \
+  "      0 to disable, non-zero for timeout\n"                                 \
   "-t --content-type       Value of the Content-Type header\n"                 \
-  "-u --username-password  Credentials for HTTP Basic authentication in "      \
-  "username:password format\n"                                                 \
+  "-u --username-password  Credentials for HTTP Basic authentication\n"        \
+  "       in username:password format\n"                                       \
   "-v --verbose            Verbose output\n"                                   \
   "-w --warmup             Warm-up duration, in seconds (default 0)\n"         \
   "-x --method             HTTP request method (default GET)\n"                \
   "-C --cipherlist         Cipher list offered to server for HTTPS\n"          \
   "-H --header             HTTP header line in Name: Value format\n"           \
-  "-K --iothreads          Number of I/O threads to spawn, default == number " \
-  "of CPU cores\n"                                                             \
+  "-K --iothreads          Number of I/O threads to spawn\n"                   \
+  "       default == number of CPU cores\n"                                    \
   "-N --name               Name to put in CSV output to identify test run\n"   \
-  "-O --oauth              OAuth 1.0 signature, in format "                    \
-  "consumerkey:secret:token:secret\n"                                          \
+  "-O --oauth              OAuth 1.0 signature\n"                              \
+  "       in format consumerkey:secret:token:secret\n"                         \
   "-S --csv-output         Output all test results in a single CSV line\n"     \
   "-T --header-line        Do not run, but output a single CSV header line\n"  \
-  "-W --think-time         Think time to wait in between requests, in "        \
-  "milliseconds\n"                                                             \
-  "-M --monitor            Host name and port number of host running "         \
-  "apibmon\n"                                                                  \
-  "-X --monitor2           Second host name and port number of host running "  \
-  "apibmon\n"                                                                  \
+  "-W --think-time         Think time to wait in between requests\n"           \
+  "        in milliseconds\n"                                                  \
+  "-M --monitor            Host name and port number of apibmon\n"             \
+  "-X --monitor2           Second host name and port number of apibmon\n"      \
   "\n"                                                                         \
-  "The last argument may be an http or https URL, or an \"@\" symbol "         \
-  "followed\n"                                                                 \
-  "by a file name. If a file name, then apib will read the file as a list "    \
-  "of\n"                                                                       \
-  "URLs, one per line, and randoml Test each one.\n"                           \
+  "The last argument may be an http or https URL, or an \"@\" symbol\n"        \
+  "followed by a file name. If a file name, then apib will read the file\n"    \
+  "as a list of URLs, one per line, and randomly test each one.\n"             \
   "\n"                                                                         \
   "  if -S is used then output is CSV-separated on one line:\n"                \
   "  name,throughput,avg. "                                                    \
@@ -150,73 +148,15 @@ static int setProcessLimits(int numConnections) {
     }
   } else {
     fprintf(stderr,
-            "Current hard file descriptor limit is %llu: it is too low. Try "
+            "Current hard file descriptor limit is %lu: it is too low. Try "
             "sudo.\n",
             limits.rlim_max);
     return -1;
   }
 }
 
-#if 0
-#if HAVE_PTHREAD_RWLOCK_INIT
-static void sslLock(int mode, int n, const char* f, int l) {
-  if (mode & CRYPTO_LOCK) {
-    if (mode & CRYPTO_READ) {
-      pthread_rwlock_rdlock(&(sslLocks[n]));
-    } else if (mode & CRYPTO_WRITE) {
-      pthread_rwlock_wrlock(&(sslLocks[n]));
-    }
-  } else {
-    pthread_rwlock_unlock(&(sslLocks[n]));
-  }
-}
-
-static unsigned long sslThreadId(void) {
-#if HAVE_PTHREAD_CREATE
-  return (unsigned long)pthread_self();
-#else
-  return apr_os_thread_current();
-#endif
-}
-
-static void initSSLLocks(void) {
-  sslLocks = (pthread_rwlock_t*)apr_pcalloc(
-      MainPool, sizeof(pthread_rwlock_t) * CRYPTO_num_locks());
-  for (int i = 0; i < CRYPTO_num_locks(); i++) {
-    pthread_rwlock_init(&(sslLocks[i]), NULL);
-  }
-  CRYPTO_set_id_callback(sslThreadId);
-  CRYPTO_set_locking_callback(sslLock);
-}
-
-#else
-static void sslLock(int mode, int n, const char* f, int l) {
-  if (mode & CRYPTO_LOCK) {
-    if (mode & CRYPTO_READ) {
-      apr_thread_rwlock_rdlock(sslLocks[n]);
-    } else if (mode & CRYPTO_WRITE) {
-      apr_thread_rwlock_wrlock(sslLocks[n]);
-    }
-  } else {
-    apr_thread_rwlock_unlock(sslLocks[n]);
-  }
-}
-
-static unsigned long sslThreadId(void) { return apr_os_thread_current(); }
-
-static void initSSLLocks(void) {
-  sslLocks = (apr_thread_rwlock_t**)apr_palloc(
-      MainPool, sizeof(apr_thread_rwlock_t*) * CRYPTO_num_locks());
-  for (int i = 0; i < CRYPTO_num_locks(); i++) {
-    apr_thread_rwlock_create(&(sslLocks[i]), MainPool);
-  }
-  CRYPTO_set_id_callback(sslThreadId);
-  CRYPTO_set_locking_callback(sslLock);
-}
-#endif
-
-static void sslInfoCallback(const SSL* ssl, int where, int ret) {
-  const char* op;
+static void sslInfoCallback(const SSL *ssl, int where, int ret) {
+  const char *op;
 
   if (where & SSL_CB_READ) {
     op = "READ";
@@ -232,31 +172,25 @@ static void sslInfoCallback(const SSL* ssl, int where, int ret) {
   printf("  ssl: op = %s ret = %i %s\n", op, ret, SSL_state_string_long(ssl));
 }
 
-static int createSslContext(IOArgs* args, int isFirst) {
-  if (isFirst) {
-    SSL_load_error_strings();
-    SSL_library_init();
-    initSSLLocks();
-  }
-  args->sslCtx = SSL_CTX_new(SSLv23_client_method());
-  SSL_CTX_set_options(args->sslCtx, SSL_OP_ALL);
-  SSL_CTX_set_mode(args->sslCtx, SSL_MODE_ENABLE_PARTIAL_WRITE);
-  if (args->verbose) {
-    SSL_CTX_set_info_callback(args->sslCtx, sslInfoCallback);
+static int createSslContext(IOThread *t) {
+  t->sslCtx = SSL_CTX_new(TLS_client_method());
+  SSL_CTX_set_options(t->sslCtx, SSL_OP_ALL);
+  SSL_CTX_set_mode(t->sslCtx, SSL_MODE_ENABLE_PARTIAL_WRITE);
+  if (t->verbose) {
+    SSL_CTX_set_info_callback(t->sslCtx, sslInfoCallback);
   }
 
-  if (args->sslCipher) {
-    int res = SSL_CTX_set_cipher_list(args->sslCtx, args->sslCipher);
+  if (t->sslCipher) {
+    int res = SSL_CTX_set_cipher_list(t->sslCtx, t->sslCipher);
     if (res != 1) {
-      fprintf(stderr, "Set Cipher list to %s failed\n", args->sslCipher);
+      fprintf(stderr, "Set Cipher list to %s failed\n", t->sslCipher);
       return -1;
     }
   }
   return 0;
 }
-#endif
 
-static int readFile(const char* name, IOThread* t) {
+static int readFile(const char *name, IOThread *t) {
   int fd = open(name, O_RDONLY);
   if (fd < 0) {
     perror("Can't open input file");
@@ -272,7 +206,7 @@ static int readFile(const char* name, IOThread* t) {
   }
 
   t->sendDataLen = s.st_size;
-  t->sendData = (char*)malloc(s.st_size);
+  t->sendData = (char *)malloc(s.st_size);
   ssize_t rc = read(fd, t->sendData, s.st_size);
   if (rc != s.st_size) {
     perror("Unable to read input file");
@@ -300,8 +234,8 @@ static void waitAndReport(int duration, int warmup) {
   }
 }
 
-static void processOAuth(char* arg) {
-  char* last;
+static void processOAuth(char *arg) {
+  char *last;
 
   OAuthCK = strtok_r(arg, ":", &last);
   OAuthCS = strtok_r(NULL, ":", &last);
@@ -309,52 +243,52 @@ static void processOAuth(char* arg) {
   OAuthAS = strtok_r(NULL, ":", &last);
 }
 
-static void addHeader(char* val) {
+static void addHeader(char *val) {
   if (Headers == NULL) {
-    Headers = (char**)malloc(sizeof(char*));
+    Headers = (char **)malloc(sizeof(char *));
     HeadersSize = 1;
   } else if (NumHeaders == HeadersSize) {
     HeadersSize *= 2;
-    Headers = (char**)realloc(Headers, sizeof(char*) * HeadersSize);
+    Headers = (char **)realloc(Headers, sizeof(char *) * HeadersSize);
   }
   Headers[NumHeaders] = strdup(val);
   NumHeaders++;
 
-  char* tokLast;
-  char* tok;
+  char *tokLast;
+  char *tok;
   tok = strtok_r(val, ":", &tokLast);
   if ((tok != NULL) && !strcmp("Host", tok)) {
     HostHeaderOverride = 1;
   }
 }
 
-static void processBasic(const char* arg) {
-  assert(0);
-  /* TODO: Need a base64 implementation
-  int inLen = strlen(arg);
-  int outLen = apr_base64_encode_len(inLen);
-  char* out = apr_palloc(MainPool, outLen);
-  char* hdr;
+static void processBasic(const char *arg) {
+  const size_t inLen = strlen(arg);
+  const int encLen = Base64encode_len(inLen);
+  char* b64 = (char*)malloc(encLen + 1);
+  const int realEncLen = Base64encode(b64, arg, inLen);
+  assert(realEncLen == encLen);
 
-  apr_base64_encode(out, arg, inLen);
-  hdr = apr_psprintf(MainPool, "Authorization: Basic %s", out);
+  char* hdr = malloc(encLen + 21);
+  sprintf(hdr, "Authorization: Basic %s", b64);
+  printf("%s\n", hdr);
+  free(b64);
   addHeader(hdr);
-  */
 }
 
-int main(int argc, char* const* argv) {
+int main(int argc, char *const *argv) {
   /* Arguments */
   int duration = DEFAULT_DURATION;
   int warmupTime = DEFAULT_WARMUP;
   int doHelp = 0;
   int verbose = 0;
-  char* verb = NULL;
-  char* fileName = NULL;
-  char* contentType = NULL;
-  char* sslCipher = NULL;
-  const char* url = NULL;
-  char* monitorHost = NULL;
-  char* monitor2Host = NULL;
+  char *verb = NULL;
+  char *fileName = NULL;
+  char *contentType = NULL;
+  char *sslCipher = NULL;
+  const char *url = NULL;
+  char *monitorHost = NULL;
+  char *monitor2Host = NULL;
   unsigned int thinkTime = 0;
 
   /* Globals */
@@ -364,7 +298,7 @@ int main(int argc, char* const* argv) {
   RunName = "";
   KeepAlive = KEEP_ALIVE_ALWAYS;
 
-  IOThread* threads = NULL;
+  IOThread *threads = NULL;
   int failed = 0;
   int arg;
   do {
@@ -489,7 +423,7 @@ int main(int argc, char* const* argv) {
 
     Running = 1;
 
-    threads = (IOThread*)malloc(sizeof(IOThread) * NumThreads);
+    threads = (IOThread *)malloc(sizeof(IOThread) * NumThreads);
 
     RecordInit(monitorHost, monitor2Host);
 
@@ -500,7 +434,7 @@ int main(int argc, char* const* argv) {
     }
 
     for (int i = 0; i < NumThreads; i++) {
-      IOThread* t = &(threads[i]);
+      IOThread *t = &(threads[i]);
       int numConn = NumConnections / NumThreads;
       if (i < (NumConnections % NumThreads)) {
         numConn++;
@@ -540,13 +474,9 @@ int main(int argc, char* const* argv) {
       TODO write content-type header!
       */
 
-      /* TODO SSL
-      if (createSslContext(&(ioArgs[i]), (i == 0)) != 0) {
+      if (createSslContext(&(t[i])) != 0) {
         goto finished;
       }
-      */
-
-      printf("Starting thread %i with %i connections\n", i, numConn);
 
       iothread_Start(t);
     }
@@ -568,7 +498,6 @@ int main(int argc, char* const* argv) {
     for (int i = 0; i < NumThreads; i++) {
       iothread_Stop(&(threads[i]));
     }
-
   } else {
     printUsage();
     return 0;
