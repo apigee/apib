@@ -19,14 +19,14 @@ limitations under the License.
 #include <arpa/inet.h>
 #include <assert.h>
 #include <netinet/in.h>
+#include <openssl/err.h>
+#include <openssl/ssl.h>
 #include <pthread.h>
 #include <regex.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <strings.h>
-#include <openssl/ssl.h>
-#include <openssl/err.h>
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <unistd.h>
@@ -55,6 +55,7 @@ typedef struct {
   size_t bodyLen;
   char* nextHeader;
   int shouldClose;
+  int notAuthorized;
   http_parser parser;
   SSL* ssl;
 } RequestInfo;
@@ -94,7 +95,8 @@ static int doWrite(RequestInfo* i, const void* buf, size_t len) {
   return SSL_write(i->ssl, buf, len);
 }
 
-static void sendText(RequestInfo* i, int code, const char* codestr, const char* msg) {
+static void sendText(RequestInfo* i, int code, const char* codestr,
+                     const char* msg) {
   StringBuf buf;
 
   buf_New(&buf, 0);
@@ -203,12 +205,21 @@ static int parsedHeaderValue(http_parser* p, const char* buf, size_t len) {
   if (!strcasecmp("Connection", i->nextHeader) &&
       !strncasecmp("close", buf, len)) {
     i->shouldClose = 1;
+  } else if (!strcasecmp("Authorization", i->nextHeader) &&
+             strncmp("Basic dGVzdDp2ZXJ5dmVyeXNlY3JldAo=", buf, len)) {
+    // Checked for the authorization "test:veryverysecret"
+    i->notAuthorized = 1;
   }
   free(i->nextHeader);
   return 0;
 }
 
 static void handleRequest(RequestInfo* i) {
+  if (i->notAuthorized) {
+    sendText(i, 401, "Not authorized", "Wrong password!\n");
+    return;
+  }
+
   if (!strcmp("/hello", i->path)) {
     if (i->parser.method == HTTP_GET) {
       sendText(i, 200, "OK", "Hello, World!\n");
@@ -380,7 +391,8 @@ static void* acceptThread(void* a) {
   }
 }
 
-static int initializeSSL(TestServer* s, const char* keyFile, const char* certFile) {
+static int initializeSSL(TestServer* s, const char* keyFile,
+                         const char* certFile) {
   s->sslCtx = SSL_CTX_new(TLS_server_method());
 
   int err = SSL_CTX_use_certificate_chain_file(s->sslCtx, certFile);
@@ -399,7 +411,7 @@ static int initializeSSL(TestServer* s, const char* keyFile, const char* certFil
 }
 
 int testserver_Start(TestServer* s, int port, const char* keyFile,
-                            const char* certFile) {
+                     const char* certFile) {
   int err = regcomp(&sizeParameter, SIZE_PARAMETER_REGEX, REG_EXTENDED);
   assert(err == 0);
 

@@ -116,23 +116,24 @@ static void thinkingDone(struct ev_loop* loop, ev_timer* t, int revents) {
   connectAndSend(c);
 }
 
+static void addThinkTime(ConnectionState* c) {
+  const double thinkTime = (double)(c->t->thinkTime) / 1000.0;
+  io_Verbose(c, "Thinking for %.4lf seconds\n", thinkTime);
+  ev_timer_init(&(c->thinkTimer), thinkingDone, thinkTime, 0);
+  c->thinkTimer.data = c;
+  ev_timer_start(c->t->loop, &(c->thinkTimer));
+}
+
 static void recycle(ConnectionState* c, int closeConn) {
-  if (closeConn || (c->t->noKeepAlive)) {
-    io_Close(c);
+  if (closeConn || c->t->noKeepAlive || !c->t->keepRunning) {
     c->needsOpen = 1;
-  } else {
-    c->needsOpen = 0;
+    io_Close(c);
+    return;
   }
 
-  if (!c->t->keepRunning) {
-    io_Verbose(c, "Closing connection\n");
-    io_Close(c);
-  } else if (c->t->thinkTime > 0) {
-    const double thinkTime = (double)(c->t->thinkTime) / 1000.0;
-    io_Verbose(c, "Thinking for %.4lf seconds\n", thinkTime);
-    ev_timer_init(&(c->thinkTimer), thinkingDone, thinkTime, 0);
-    c->thinkTimer.data = c;
-    ev_timer_start(c->t->loop, &(c->thinkTimer));
+  c->needsOpen = 0;
+  if (c->t->thinkTime > 0) {
+    addThinkTime(c);
   } else {
     connectAndSend(c);
   }
@@ -140,13 +141,22 @@ static void recycle(ConnectionState* c, int closeConn) {
 
 static int startConnect(ConnectionState* c) {
   c->url = url_GetNext(c->t->rand);
-  if (c->url->isSsl && (c->t->sslCtx == NULL)) {
-    fprintf(stderr, "SSL is not available\n");
-    return -1;
-  }
   c->needsOpen = 1;
   connectAndSend(c);
   return 0;
+}
+
+void io_CloseDone(ConnectionState* c) {
+  if (!c->t->keepRunning) {
+    io_Verbose(c, "Connection closed and done\n");
+    return;
+  }
+
+  if (c->t->thinkTime > 0) {
+    addThinkTime(c);
+  } else {
+    connectAndSend(c);
+  }
 }
 
 void io_WriteDone(ConnectionState* c, int err) {
@@ -175,12 +185,6 @@ void io_ReadDone(ConnectionState* c, int err) {
   }
 
   RecordResult(c->parser.status_code, apib_GetTime() - c->startTime);
-  if (!c->t->keepRunning) {
-    io_Verbose(c, "Stopping\n");
-    io_Close(c);
-    return;
-  }
-
   if (!http_should_keep_alive(&(c->parser))) {
     io_Verbose(c, "Server does not want keep-alive\n");
     recycle(c, 1);

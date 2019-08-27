@@ -49,6 +49,7 @@ IOStatus io_Write(ConnectionState* c, const void* buf, size_t count,
   }
 
   const int s = SSL_write(c->ssl, buf, count);
+  io_Verbose(c, "SSL write(%u) returned %i\n", count, s);
   if (s > 0) {
     *written = s;
     return OK;
@@ -87,13 +88,17 @@ IOStatus io_Read(ConnectionState* c, void* buf, size_t count, size_t* readed) {
   }
 
   const int s = SSL_read(c->ssl, buf, count);
+  io_Verbose(c, "SSL read(%u) returned %i\n", count, s);
   if (s > 0) {
     *readed = s;
     return OK;
   }
 
   *readed = 0;
+  int sentShutdown = (SSL_get_shutdown(c->ssl) & SSL_SENT_SHUTDOWN);
+
   const int sslErr = SSL_get_error(c->ssl, s);
+  io_Verbose(c, "SSL read = %i, error = %i\n", s, sslErr);
   switch (sslErr) {
     case SSL_ERROR_WANT_READ:
       return NEED_READ;
@@ -101,8 +106,53 @@ IOStatus io_Read(ConnectionState* c, void* buf, size_t count, size_t* readed) {
       return NEED_WRITE;
     case SSL_ERROR_ZERO_RETURN:
       return FEOF;
+    case SSL_ERROR_SYSCALL:
+      // After a shutdown, SSL docs say that we get this. Ignore it.
+      if (sentShutdown) {
+        return FEOF;
+      }
+      printSslError("Error on read", sslErr);
+      return TLS_ERROR;
     default:
       printSslError("TLS read error", sslErr);
       return TLS_ERROR;
+  }
+}
+
+IOStatus io_CloseConnection(ConnectionState* c) {
+  if (c->ssl == NULL) {
+    const int err = close(c->fd);
+    io_Verbose(c, "Close returned %i\n", err);
+    return (err == 0 ? OK : SOCKET_ERROR);
+  }
+
+  const int s = SSL_shutdown(c->ssl);
+  io_Verbose(c, "SSL_shutdown returned %i\n", s);
+  if (s == 1) {
+    return OK;
+  }
+  if (s == 0) {
+    // Docs say that we must call SSL_read here.
+    size_t readed;
+    return io_Read(c, NULL, 0, &readed);
+  }
+
+  const int sslErr = SSL_get_error(c->ssl, s);
+  switch (sslErr) {
+    case SSL_ERROR_WANT_READ:
+      return NEED_READ;
+    case SSL_ERROR_WANT_WRITE:
+      return NEED_WRITE;
+    default:
+      printSslError("TLS shutdown error", sslErr);
+      return TLS_ERROR;
+  }
+}
+
+void io_FreeConnection(ConnectionState* c) {
+  if (c->ssl != NULL) {
+    SSL_free(c->ssl);
+    c->ssl = NULL;
+    close(c->fd);
   }
 }

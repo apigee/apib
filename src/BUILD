@@ -52,6 +52,7 @@ cc_library(
     deps = [
         ":common",
         "@boringssl//:ssl",
+        "@boringssl//:crypto",
         "@httpparser",
         "@libev",
     ],

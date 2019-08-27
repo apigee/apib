@@ -215,6 +215,31 @@ TEST_F(IOTest, OneThreadBigPost) {
   free(t.httpVerb);
 }
 
+TEST_F(IOTest, OneThreadHeaders) {
+  char url[128];
+  sprintf(url, "http://localhost:%i/hello", testServerPort);
+  url_InitOne(url);
+
+  IOThread t;
+  memset(&t, 0, sizeof(IOThread));
+  t.numConnections = 1;
+  //t.verbose = 1;
+  t.httpVerb = strdup("GET");
+  t.numHeaders = 1;
+  t.headers = (char**)malloc(sizeof(char*));
+  t.headers[0] = strdup("Authorization: Basic dGVzdDp2ZXJ5dmVyeXNlY3JldAo=");
+
+  iothread_Start(&t);
+  sleep(1);
+  iothread_Stop(&t);
+  RecordStop();
+
+  compareReporting();
+  free(t.httpVerb);
+  free(t.headers[0]);
+  free(t.headers);
+}
+
 int main(int argc, char** argv) {
   ::testing::InitGoogleTest(&argc, argv);
 

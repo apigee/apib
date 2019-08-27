@@ -81,24 +81,84 @@ int io_Connect(ConnectionState* c) {
       printSslError("Can't initialize SSL connection");
       return -2;
     }
+    sslErr = SSL_set_tlsext_host_name(c->ssl, c->url->hostName);
+    if (sslErr != 1) {
+      printSslError("Can't set host name on SSL connection");
+      return -3;
+    }
     SSL_set_connect_state(c->ssl);
   }
   return err;
 }
 
-void io_Close(ConnectionState* c) {
-  if (c->ssl != NULL) {
-    int sslErr = SSL_shutdown(c->ssl);
-    io_Verbose(c, "SSL_shutdown returned %i\n", sslErr);
-    if (sslErr < 0) {
-      printSslError("SSL shutdown error");
-    }
-    // For now, do this regardless of status
-    SSL_free(c->ssl);
-    c->ssl = NULL;
+static void completeShutdown(struct ev_loop* loop, ev_io* w, int revents) {
+  // We only get here for TLS. We already sent a shutdown message,
+  // so really all we have to do is read with empty buffers.
+  ConnectionState* c = (ConnectionState*)(w->data);
+  io_Verbose(c, "I/O ready on shutdown path: %i\n", revents);
+
+  size_t readed;
+  const IOStatus s = io_Read(c, NULL, 0, &readed);
+
+  switch (s) {
+    case OK:
+    case FEOF:
+    case SOCKET_ERROR:
+    case TLS_ERROR:
+      io_Verbose(c, "Close complete\n");
+      ev_io_stop(c->t->loop, &(c->io));
+      io_FreeConnection(c);
+      io_CloseDone(c);
+      break;
+    case NEED_READ:
+      io_Verbose(c, "Close needs read\n");
+      if (c->backwardsIo) {
+        ev_io_stop(c->t->loop, &(c->io));
+        ev_io_set(&(c->io), c->fd, EV_READ);
+        c->backwardsIo = 0;
+        ev_io_start(c->t->loop, &(c->io));
+      }
+      break;
+    case NEED_WRITE:
+      io_Verbose(c, "Close needs write\n");
+      if (!c->backwardsIo) {
+        ev_io_stop(c->t->loop, &(c->io));
+        ev_io_set(&(c->io), c->fd, EV_WRITE);
+        c->backwardsIo = 1;
+        ev_io_start(c->t->loop, &(c->io));
+      }
+      break;
   }
-  io_Verbose(c, "Closing connection %i\n", c->fd);
-  close(c->fd);
+}
+
+void io_Close(ConnectionState* c) {
+  const IOStatus s = io_CloseConnection(c);
+  switch (s) {
+    case OK:
+    case FEOF:
+    case SOCKET_ERROR:
+    case TLS_ERROR:
+      io_Verbose(c, "Close complete\n");
+      io_FreeConnection(c);
+      io_CloseDone(c);
+      break;
+    case NEED_READ:
+      io_Verbose(c, "Close needs read\n");
+      ev_init(&(c->io), completeShutdown);
+      ev_io_set(&(c->io), c->fd, EV_READ);
+      c->backwardsIo = 0;
+      c->io.data = c;
+      ev_io_start(c->t->loop, &(c->io));
+      break;
+    case NEED_WRITE:
+      io_Verbose(c, "Close needs write\n");
+      ev_init(&(c->io), completeShutdown);
+      ev_io_set(&(c->io), c->fd, EV_WRITE);
+      c->backwardsIo = 1;
+      c->io.data = c;
+      ev_io_start(c->t->loop, &(c->io));
+      break;
+  }
 }
 
 // Called by libev whenever the socket is ready for writing.
@@ -107,6 +167,7 @@ void io_Close(ConnectionState* c) {
 // 1 means keep on writing
 static int singleWrite(ConnectionState* c, struct ev_loop* loop, ev_io* w,
                        int revents) {
+  io_Verbose(c, "I/O ready on write path: %i\n", revents);
   const size_t len = buf_Length(&(c->writeBuf)) - c->writeBufPos;
   assert(len > 0);
 
@@ -177,6 +238,7 @@ void io_SendWrite(ConnectionState* c) {
 
 static int singleRead(ConnectionState* c, struct ev_loop* loop, ev_io* w,
                       int revents) {
+  io_Verbose(c, "I/O ready on read path: %i\n", revents);
   const size_t len = READ_BUF_SIZE - c->readBufPos;
   assert(len > 0);
 
@@ -189,6 +251,12 @@ static int singleRead(ConnectionState* c, struct ev_loop* loop, ev_io* w,
     c->t->readBytes += readCount;
     // Parse the data we just read plus whatever was left from before
     const size_t parsedLen = readCount + c->readBufPos;
+
+    if (c->t->verbose) {
+      fwrite(c->readBuf, parsedLen, 1, stdout);
+      printf("\n");
+    }
+
     const size_t parsed = http_parser_execute(&(c->parser), &HttpParserSettings,
                                               c->readBuf, parsedLen);
     io_Verbose(c, "Parsed %u\n", parsed);
@@ -268,7 +336,8 @@ static int singleRead(ConnectionState* c, struct ev_loop* loop, ev_io* w,
 static void readReady(struct ev_loop* loop, ev_io* w, int revents) {
   ConnectionState* c = (ConnectionState*)w->data;
   for (int keepReading = 1; keepReading > 0;
-    keepReading = singleRead(c, loop, w, revents));
+       keepReading = singleRead(c, loop, w, revents))
+    ;
 }
 
 // Set up libev to asynchronously read to readBuf

@@ -95,6 +95,7 @@ extern void iothread_Stop(IOThread* t);
 extern void io_Verbose(ConnectionState* c, const char* format, ...);
 extern void io_WriteDone(ConnectionState* c, int err);
 extern void io_ReadDone(ConnectionState* c, int err);
+extern void io_CloseDone(ConnectionState* c);
 
 // High-level operations:
 
@@ -114,6 +115,8 @@ extern void io_Close(ConnectionState* c);
 typedef enum { OK, NEED_READ, NEED_WRITE, FEOF, TLS_ERROR, SOCKET_ERROR } IOStatus;
 extern IOStatus io_Write(ConnectionState* c, const void* buf, size_t count, size_t* written);
 extern IOStatus io_Read(ConnectionState* c, void* buf, size_t count, size_t* readed);
+extern IOStatus io_CloseConnection(ConnectionState* c);
+extern void io_FreeConnection(ConnectionState* c);
 
 #ifdef __cplusplus
 }

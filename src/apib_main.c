@@ -24,12 +24,11 @@ limitations under the License.
 #include <sys/time.h>
 #include <unistd.h>
 
-#include "third_party/base64.h"
-
 #include "src/apib_cpu.h"
 #include "src/apib_iothread.h"
 #include "src/apib_reporting.h"
 #include "src/apib_url.h"
+#include "third_party/base64.h"
 
 #define DEFAULT_CONTENT_TYPE "application/octet-stream"
 #define KEEP_ALIVE_ALWAYS -1
@@ -156,26 +155,18 @@ static int setProcessLimits(int numConnections) {
 }
 
 static void sslInfoCallback(const SSL *ssl, int where, int ret) {
-  const char *op;
-
-  if (where & SSL_CB_READ) {
-    op = "READ";
-  } else if (where & SSL_CB_WRITE) {
-    op = "WRITE";
-  } else if (where & SSL_CB_HANDSHAKE_START) {
-    op = "HANDSHAKE_START";
-  } else if (where & SSL_CB_HANDSHAKE_DONE) {
-    op = "HANDSHAKE_DONE";
-  } else {
-    op = "default";
+  printf("OpenSSL: %s\n", SSL_state_string_long(ssl));
+  if (ret == SSL_CB_ALERT) {
+    printf("  alert: %s\n", SSL_alert_desc_string_long(ret));
+  } else if (ret == 0) {
+    printf("  Error occurred\n");
   }
-  printf("  ssl: op = %s ret = %i %s\n", op, ret, SSL_state_string_long(ssl));
 }
 
 static int createSslContext(IOThread *t) {
   t->sslCtx = SSL_CTX_new(TLS_client_method());
-  SSL_CTX_set_options(t->sslCtx, SSL_OP_ALL);
   SSL_CTX_set_mode(t->sslCtx, SSL_MODE_ENABLE_PARTIAL_WRITE);
+  SSL_CTX_set_default_verify_paths(t->sslCtx);
   if (t->verbose) {
     SSL_CTX_set_info_callback(t->sslCtx, sslInfoCallback);
   }
@@ -265,11 +256,11 @@ static void addHeader(char *val) {
 static void processBasic(const char *arg) {
   const size_t inLen = strlen(arg);
   const int encLen = Base64encode_len(inLen);
-  char* b64 = (char*)malloc(encLen + 1);
+  char *b64 = (char *)malloc(encLen + 1);
   const int realEncLen = Base64encode(b64, arg, inLen);
   assert(realEncLen == encLen);
 
-  char* hdr = malloc(encLen + 21);
+  char *hdr = malloc(encLen + 21);
   sprintf(hdr, "Authorization: Basic %s", b64);
   printf("%s\n", hdr);
   free(b64);
@@ -474,7 +465,7 @@ int main(int argc, char *const *argv) {
       TODO write content-type header!
       */
 
-      if (createSslContext(&(t[i])) != 0) {
+      if (createSslContext(t) != 0) {
         goto finished;
       }
 

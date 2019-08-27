@@ -31,6 +31,7 @@ TEST(URL, ParseGood1) {
   EXPECT_EQ(1234, u1->port);
   EXPECT_STREQ("/bar?baz=yes", u1->path);
   EXPECT_STREQ("foo.com:1234", u1->hostHeader);
+  EXPECT_STREQ("foo.com", u1->hostName);
   struct sockaddr_in* a = (struct sockaddr_in*)url_GetAddress(u1, 0, NULL);
   EXPECT_EQ(1234, ntohs(a->sin_port));
   url_Reset();
@@ -62,6 +63,7 @@ TEST(URL, ParseGood1) {
   const URLInfo* u1c = url_GetNext(nullptr);
   EXPECT_EQ(0, u1c->isSsl);
   EXPECT_EQ(1000, u1c->port);
+  EXPECT_STREQ("foo.com", u1c->hostName);
   EXPECT_STREQ("/", u1c->path);
   url_Reset();
 
@@ -92,6 +94,7 @@ TEST(URL, ParseGood1) {
   EXPECT_EQ(1, u2b->isSsl);
   EXPECT_EQ(443, u2b->port);
   EXPECT_STREQ("foo.com", u2b->hostHeader);
+  EXPECT_STREQ("foo.com", u2b->hostName);
   EXPECT_STREQ("/bar?baz=yes", u2b->path);
   url_Reset();
 }

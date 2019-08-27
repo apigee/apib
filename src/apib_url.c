@@ -119,8 +119,7 @@ static int initUrl(const char* urlstr, URLInfo* u) {
     return -3;
   }
 
-  char* hoststr = copyUrlPart(&pu, urlstr, UF_HOST);
-  assert(hoststr != NULL);
+  u->hostName = copyUrlPart(&pu, urlstr, UF_HOST);
 
   if (pu.field_set & (1 << UF_PORT)) {
     u->port = pu.port;
@@ -155,15 +154,14 @@ static int initUrl(const char* urlstr, URLInfo* u) {
 
   // Calculate the host header properly
   if (((u->isSsl) && (u->port == 443)) || ((!u->isSsl) && (u->port == 80))) {
-    u->hostHeader = strdup(hoststr);
+    u->hostHeader = strdup(u->hostName);
   } else {
-    u->hostHeader = malloc(strlen(hoststr) + 20);
-    sprintf(u->hostHeader, "%s:%i", hoststr, u->port);
+    u->hostHeader = malloc(strlen(u->hostName) + 20);
+    sprintf(u->hostHeader, "%s:%i", u->hostName, u->port);
   }
 
   // Now look up the host and add the port...
-  const int hosterr = initHost(hoststr, u);
-  free(hoststr);
+  const int hosterr = initHost(u->hostName, u);
   if (hosterr) {
     // No addresses, which is OK now
     u->addresses = NULL;
@@ -273,6 +271,7 @@ void url_Reset() {
     for (int i = 0; i < urlCount; i++) {
       free(urls[i].path);
       free(urls[i].hostHeader);
+      free(urls[i].hostName);
       free(urls[i].addresses);
       free(urls[i].addressLengths);
     }

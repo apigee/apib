@@ -415,8 +415,9 @@ void ReportResults(BenchmarkResults* r) {
   r->totalBytesSent = totalBytesSent;
   r->totalBytesReceived = totalBytesReceived;
 
-  r->elapsedTime = apib_Seconds(stopTime - startTime);
-  r->averageLatency = r->elapsedTime / (double)completedRequests;
+  const long long rawElapsed = stopTime - startTime;
+  r->elapsedTime = apib_Seconds(rawElapsed);
+  r->averageLatency = apib_Milliseconds(getAverageLatency());
   r->latencyStdDev = getLatencyStdDev();
   for (int i = 0; i < 101; i++) {
     r->latencies[i] = apib_Milliseconds(getLatencyPercent(i));
