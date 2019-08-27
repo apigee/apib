@@ -116,7 +116,7 @@ extern void buf_Free(StringBuf* b);
 // Append the specified null-terminated string,
 // expanding the buffer as necessary
 extern void buf_Append(StringBuf* b, const char* s);
-
+extern void buf_AppendChar(StringBuf* b, char c);
 extern void buf_AppendN(StringBuf* b, const char* s, size_t len);
 
 // buf_Append but supporting sprintf-like stuff

@@ -251,6 +251,13 @@ void buf_Append(StringBuf* b, const char* s) {
   buf_AppendN(b, s, len);
 }
 
+void buf_AppendChar(StringBuf* b, char c) {
+  ensureSpace(b, 1);
+  b->buf[b->pos] = c;
+  b->pos++;
+  b->buf[b->pos] = 0;
+}
+
 void buf_AppendN(StringBuf* b, const char* s, size_t len) {
   ensureSpace(b, len);
   memcpy(b->buf + b->pos, s, len);

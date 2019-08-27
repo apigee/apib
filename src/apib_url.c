@@ -134,13 +134,18 @@ static int initUrl(const char* urlstr, URLInfo* u) {
 
   if (pu.field_set & (1 << UF_PATH)) {
     appendUrlPart(&pu, urlstr, UF_PATH, &pathBuf);
+    u->pathOnly = copyUrlPart(&pu, urlstr, UF_PATH);
   } else {
     buf_Append(&pathBuf, "/");
+    u->pathOnly = strdup("/");
   }
 
   if (pu.field_set & (1 << UF_QUERY)) {
     buf_Append(&pathBuf, "?");
     appendUrlPart(&pu, urlstr, UF_QUERY, &pathBuf);
+    u->query = copyUrlPart(&pu, urlstr, UF_QUERY);
+  } else {
+    u->query = NULL;
   }
 
   if (pu.field_set & (1 << UF_FRAGMENT)) {
@@ -270,6 +275,8 @@ void url_Reset() {
   if (initialized) {
     for (int i = 0; i < urlCount; i++) {
       free(urls[i].path);
+      free(urls[i].pathOnly);
+      free(urls[i].query);
       free(urls[i].hostHeader);
       free(urls[i].hostName);
       free(urls[i].addresses);

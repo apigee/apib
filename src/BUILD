@@ -40,17 +40,20 @@ cc_library(
     name = "io",
     srcs = [
         "apib_io_basic.c",
+        "apib_oauth.c",
         "apib_io_socket.c",
         "apib_iothread.c", 
     ],
     hdrs = [
         "apib_iothread.h",
+        "apib_oauth.h",
     ],
     linkopts = [
         "-lpthread",
     ],
     deps = [
         ":common",
+        "//third_party:base64",
         "@boringssl//:ssl",
         "@boringssl//:crypto",
         "@httpparser",

@@ -219,6 +219,8 @@ TEST(Lines, StringBufAppend) {
   // Something more than 10 bytes long
   buf_Append(&b, "01234567890123456789012345");
   EXPECT_STREQ("OneTwoTwoTwoTwoTwo01234567890123456789012345", buf_Get(&b));
+  buf_AppendChar(&b, 'x');
+  EXPECT_STREQ("OneTwoTwoTwoTwoTwo01234567890123456789012345x", buf_Get(&b));
   buf_Free(&b);
 }
 

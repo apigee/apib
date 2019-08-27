@@ -100,6 +100,16 @@ cc_test(
 )
 
 cc_test(
+    name = "oauth",
+    srcs = ["oauth_test.cc"],
+    deps = [
+        "//src:io",
+        "@gtest",
+        "@gtest//:gtest_main",
+    ]
+)
+
+cc_test(
     name = "iotest",
     srcs = ["io_test.cc"],
     deps = [

@@ -1,45 +1,37 @@
 /*
-   Copyright 2013 Apigee Corp.
+Copyright 2019 Google LLC
 
-   Licensed under the Apache License, Version 2.0 (the "License");
-   you may not use this file except in compliance with the License.
-   You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-       http://www.apache.org/licenses/LICENSE-2.0
+    https://www.apache.org/licenses/LICENSE-2.0
 
-   Unless required by applicable law or agreed to in writing, software
-   distributed under the License is distributed on an "AS IS" BASIS,
-   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-   See the License for the specific language governing permissions and
-   limitations under the License.
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 */
 
-#include <ctype.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
 #include <assert.h>
-
-#include <apr_base64.h>
-#include <apr_lib.h>
-#include <apr_strings.h>
-#include <apr_random.h>
-#include <apr_time.h>
-
+#include <ctype.h>
 #include <openssl/bio.h>
 #include <openssl/hmac.h>
 #include <openssl/sha.h>
+#include <math.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
-#include <apib_common.h>
+#include "src/apib_oauth.h"
+#include "src/apib_lines.h"
+#include "src/apib_rand.h"
+#include "src/apib_time.h"
+#include "src/apib_url.h"
+#include "third_party/base64.h"
 
-#define MAX_NUM_SIZE 128
-
-typedef struct {
-  char* buf;
-  size_t len;
-  size_t size;
-  apr_pool_t* pool;
-} Buf;
+#define MAX_NUM_SIZE 256
 
 typedef struct {
   char* name;
@@ -50,83 +42,54 @@ typedef struct {
   Param* params;
   size_t len;
   size_t size;
-  apr_pool_t* pool;
 } Params;
 
-static void allocBuf(Buf* b, size_t size, apr_pool_t* pool)
-{
-  b->buf = (char*)apr_palloc(pool, size);
-  b->len = 0;
-  b->size = size;
-  b->pool = pool;
-  b->buf[0] = 0;
-}
-
-static void allocParams(Params* p, size_t size, apr_pool_t* pool)
-{
+static void allocParams(Params* p, size_t size) {
   p->len = 0;
   p->size = size;
-  p->params = (Param*)apr_palloc(pool, sizeof(Param) * p->size);
-  p->pool = pool;
+  p->params = (Param*)malloc(sizeof(Param) * p->size);
 }
 
-static void appendStr(Buf* b, const char* str)
-{
-  size_t strLen = strlen(str);
-
-  if ((b->len + strLen + 1) > b->size) {
-    char* oldBuf = b->buf;
-    if (strLen > b->size) {
-      b->size += (strLen + 1);
-    } else {
-      b->size *= 2;
+static void freeParams(Params* p) {
+  for (size_t i = 0; i < p->len; i++) {
+    Param* pp = &(p->params[i]);
+    if (pp->name != NULL) {
+      free(pp->name);
     }
-    b->buf = apr_palloc(b->pool, b->size);
-    memcpy(b->buf, oldBuf, b->len);
+    if (pp->val != NULL) {
+      free(pp->val);
+    }
   }
-  memcpy(b->buf + b->len, str, strLen + 1);
-  b->len += strLen;
-}
-
-static void appendChar(Buf* b, char ch)
-{
-  if ((b->len + 2) > b->size) {
-    char* oldBuf = b->buf;
-    b->size *= 2;
-    b->buf = apr_palloc(b->pool, b->size);
-    memcpy(b->buf, oldBuf, b->len);
-  }
-  b->buf[b->len] = ch;
-  b->buf[b->len + 1] = 0;
-  b->len++;
+  free(p->params);
 }
 
 /* Encode a string as described by the OAuth 1.0a spec, specifically
  * RFC5849. */
-static void appendEncoded(Buf* b, const char* str)
-{
+static void appendEncoded(StringBuf* b, const char* str) {
   size_t p = 0;
-  char buf[8];
-
   while (str[p] != 0) {
-    if (apr_isalnum(str[p]) ||
-	(str[p] == '-') || (str[p] == '.') ||
-	(str[p] == '_') || (str[p] == '~')) {
-      appendChar(b, str[p]);
-      
+    if (isalnum(str[p]) || (str[p] == '-') || (str[p] == '.') ||
+        (str[p] == '_') || (str[p] == '~')) {
+      buf_AppendChar(b, str[p]);
+
     } else {
-      sprintf(buf, "%%%02X", str[p]);
-      appendStr(b, buf);
+      buf_Printf(b, "%%%02X", str[p]);
     }
     p++;
   }
 }
 
+static char* reEncode(const char* str) {
+  StringBuf b;
+  buf_New(&b, strlen(str));
+  appendEncoded(&b, str);
+  return buf_Get(&b);
+}
+
 /*
  * Decode a string as described by the HTML spec and as commonly implemented. */
-static char* decode(const char* str, apr_pool_t* pool)
-{
-  char* ret = apr_palloc(pool, strlen(str) + 1);
+static char* decode(const char* str) {
+  char* ret =  malloc(strlen(str) + 1);
   size_t ip = 0;
   size_t op = 0;
   char buf[4];
@@ -139,8 +102,8 @@ static char* decode(const char* str, apr_pool_t* pool)
       buf[1] = str[ip + 2];
       buf[2] = 0;
       if ((buf[0] == 0) || (buf[1] == 0)) {
-	/* Bad input. */
-	break;
+        /* Bad input. */
+        break;
       }
       ip += 2;
       ret[op] = (char)strtol(buf, 0, 16);
@@ -155,55 +118,48 @@ static char* decode(const char* str, apr_pool_t* pool)
   return ret;
 }
 
-static void ensureParamsSize(Params* params)
-{
+static void ensureParamsSize(Params* params) {
   if (params->len >= params->size) {
-    Param* old = params->params;
-
     params->size *= 2;
-    params->params = 
-      (Param*)apr_palloc(params->pool, sizeof(Param) * params->size);
-    memcpy(params->params, old, sizeof(Param) * params->len);
+    params->params = (Param*)realloc(params->params, sizeof(Param) * params->size);
   }
 }
 
-static void readParams(Params* params, char* str, size_t len)
-{
+static void readParams(Params* params, char* str, size_t len) {
   char* tok;
   char* last;
 
-  tok = apr_strtok(str, "&", &last);
+  tok = strtok_r(str, "&", &last);
   while (tok != NULL) {
-    char* param = apr_pstrdup(params->pool, tok);
+    char* param = tok;
     char* tok2;
     char* last2;
 
     ensureParamsSize(params);
-    tok2 = apr_strtok(param, "=", &last2);
-    params->params[params->len].name = tok2;
-    tok2 = apr_strtok(NULL, "&", &last2);
+    tok2 = strtok_r(param, "=", &last2);
+    params->params[params->len].name = decode(tok2);
+    tok2 = strtok_r(NULL, "=", &last2);
     if (tok2 == NULL) {
       params->params[params->len].val = NULL;
     } else {
-      params->params[params->len].val = decode(tok2, params->pool);
+      params->params[params->len].val = decode(tok2);
     }
-    
+
     params->len++;
-      
-    tok = apr_strtok(NULL, "&", &last);
+
+    tok = strtok_r(NULL, "&", &last);
   }
 }
 
-static void addParam(Params* params, char* name, char* val)
-{
+
+static void addParam(Params* params, const char* name, const char* val) {
   ensureParamsSize(params);
-  params->params[params->len].name = name;
-  params->params[params->len].val = val;
+  params->params[params->len].name = strdup(name);
+  params->params[params->len].val = strdup(val);
   params->len++;
 }
 
-static int compareParam(const void* v1, const void* v2) 
-{
+static int compareParam(const void* v1, const void* v2) {
   const Param* p1 = (const Param*)v1;
   const Param* p2 = (const Param*)v2;
 
@@ -214,188 +170,179 @@ static int compareParam(const void* v1, const void* v2)
     }
     if ((p1->val == NULL) && (p2->val != NULL)) {
       return -1;
-    } 
+    }
     if ((p1->val != NULL) && (p2->val == NULL)) {
       /* Yes I know I could have eliminated one == there! */
       return 1;
-    } 
+    }
     return strcmp(p1->val, p2->val);
   }
-  return c;  
+  return c;
 }
 
-static char* generateHmac(const char* base,
-			  const char* consumerSecret,
-			  const char* tokenSecret,
-			  apr_pool_t* pool)
-{
-  Buf keyBuf;
-  unsigned char* hmac = apr_palloc(pool, EVP_MAX_MD_SIZE);
-  unsigned int hmacLen;
-  char* ret;
-  
-  allocBuf(&keyBuf, 64, pool);
-  appendEncoded(&keyBuf, consumerSecret);
-  appendChar(&keyBuf, '&');
-  if (tokenSecret != NULL) {
-    appendEncoded(&keyBuf, tokenSecret);
+char* oauth_generateHmac(const char* base, const OAuthInfo* oauth) {
+  StringBuf keyBuf;
+
+  buf_New(&keyBuf, 0);
+  appendEncoded(&keyBuf, oauth->consumerSecret);
+  buf_AppendChar(&keyBuf, '&');
+  if (oauth->tokenSecret != NULL) {
+    appendEncoded(&keyBuf, oauth->tokenSecret);
   }
 
-#ifdef HAVE_EVP_SHA1  
-  HMAC(EVP_sha1(), keyBuf.buf, keyBuf.len, (const unsigned char*)base, 
-       strlen(base), hmac, &hmacLen);
-#else
-  fprintf(stderr, "No SHA1 support on this platform\n");
-  abort();
-#endif
+  char hmac[EVP_MAX_MD_SIZE];
+  unsigned int hmacLen;
+  HMAC(EVP_sha1(), buf_Get(&keyBuf), buf_Length(&keyBuf), 
+       (unsigned char*)base, strlen(base), (unsigned char*)hmac, &hmacLen);
 
-  ret = apr_palloc(pool, apr_base64_encode_len(hmacLen));
-  apr_base64_encode_binary(ret, hmac, hmacLen);
+  char* ret = malloc(Base64encode_len(hmacLen));
+  Base64encode(ret, hmac, hmacLen);
 
+  buf_Free(&keyBuf);
   return ret;
 }
 
-static char* makeRandom(apr_pool_t* pool)
-{
-  unsigned long p1;
-  unsigned long p2;
-
-  apr_generate_random_bytes((unsigned char*)&p1, sizeof(long));
-  apr_generate_random_bytes((unsigned char*)&p2, sizeof(long));
-  return apr_psprintf(pool, "%lx%lx", p1, p2);
+static void makeNonce(RandState rand, char* buf, size_t len) {
+  long r1 = apib_Rand(rand);
+  long r2 = apib_Rand(rand);
+  const int err = snprintf(buf, len, "%lx%lx", r1, r2);
+  assert(err < len);
 }
 
-static void buildBaseString(Buf* buf,
-			    Params* params,
-			    const apr_uri_t* url,
-			    const char* method,
-			    const char* sendData,
-			    unsigned int sendDataSize,
-			    const char* consumerToken,
-			    const char* accessToken,
-			    apr_pool_t* pool)
-{
-  Buf paramBuf;
-  char* num;
-  char* nonce;
-  long long timestamp;
+char* oauth_buildBaseString(RandState rand, const URLInfo* url,
+                            const char* method, 
+                            long timestamp, const char* nonce,
+                            const char* sendData,
+                            size_t sendDataSize, const OAuthInfo* oauth) {
 
-  timestamp = apr_time_sec(apr_time_now());
+  StringBuf buf;  
+  Params params;                          
 
-  appendStr(buf, method);
-  appendChar(buf, '&');
+  buf_New(&buf, 0);
+  allocParams(&params, 8);
+
+  buf_Append(&buf, method);
+  buf_AppendChar(&buf, '&');
 
   /* Encoded and normalized URL */
-  appendEncoded(buf, url->scheme);
-  appendEncoded(buf, "://");
-  appendEncoded(buf, url->hostname);
-  if (!(((url->port == 80) && !strcmp(url->scheme, "http")) ||
-	((url->port == 443) && !strcmp(url->scheme, "https")) ||
-	((url->port_str == NULL)))) {
-    appendEncoded(buf, ":");
-    appendEncoded(buf, url->port_str);
-  }
-  if (url->path != NULL) {
-    appendEncoded(buf, url->path);
-  }
+  appendEncoded(&buf, (url->isSsl ? "https" : "http"));
+  appendEncoded(&buf, "://");
+  appendEncoded(&buf, url->hostHeader);
+  appendEncoded(&buf, url->pathOnly);
 
-  /* Parse query params */
+  /* Parse query */
   if (url->query != NULL) {
-    readParams(params, apr_pstrdup(pool, url->query), strlen(url->query));
+    char* tmpQuery = strdup(url->query);
+    readParams(&params, tmpQuery, strlen(tmpQuery));
+    free(tmpQuery);
   }
 
   /* Parse form body */
   if (sendData != NULL) {
-    readParams(params, apr_pstrdup(pool, sendData), sendDataSize);
+    char* tmpSend = strndup(sendData, sendDataSize);
+    readParams(&params, tmpSend, sendDataSize);
+    free(tmpSend);
   }
 
   /* Add additional OAuth params */
-  if (consumerToken != NULL) {
-    addParam(params, "oauth_consumer_key", apr_pstrdup(pool, consumerToken));
+  if (oauth->consumerKey != NULL) {
+    addParam(&params, "oauth_consumer_key", oauth->consumerKey);
   }
-  if (accessToken != NULL) {
-    addParam(params, "oauth_token", apr_pstrdup(pool, accessToken));
+  if (oauth->accessToken != NULL) {
+    addParam(&params, "oauth_token", oauth->accessToken);
   }
-  addParam(params, "oauth_version", "1.0");
-  addParam(params, "oauth_signature_method", "HMAC-SHA1");
-  num = apr_palloc(pool, MAX_NUM_SIZE);
-  snprintf(num, MAX_NUM_SIZE, "%lli", timestamp);
-  num[MAX_NUM_SIZE - 1] = '\0';
-  addParam(params, "oauth_timestamp", num);
-  nonce = makeRandom(pool);
-  addParam(params, "oauth_nonce", nonce);
+  addParam(&params, "oauth_signature_method", "HMAC-SHA1");
+  addParam(&params, "oauth_nonce", nonce);
 
-  /* Normalize and output params */
-  qsort(params->params, params->len, sizeof(Param), compareParam);
+  char ts[MAX_NUM_SIZE];
+  const int err = snprintf(ts, MAX_NUM_SIZE, "%li", timestamp);
+  assert(err < MAX_NUM_SIZE);
+  addParam(&params, "oauth_timestamp", ts);
 
-  allocBuf(&paramBuf, 64, pool);
-  for (unsigned int inc = 0; inc < params->len; inc++) {
-    if (inc > 0) {
-      appendChar(&paramBuf, '&');
+  /* Re-encode each string! */
+  for (unsigned int inc = 0; inc < params.len; inc++) {
+    Param* p = &(params.params[inc]);
+    char* reName = reEncode(p->name);
+    free(p->name);
+    p->name = reName;
+    char* reVal;
+    if (p->val != NULL) {
+      reVal = reEncode(p->val);
+      free(p->val);
+      p->val = reVal;
+    } else {
+      reVal = "";
     }
-    appendEncoded(&paramBuf, params->params[inc].name);
-    appendChar(&paramBuf, '=');
-    if (params->params[inc].val != NULL) {
-      appendEncoded(&paramBuf, params->params[inc].val);
+  }
+
+  /* Sort by name, then by value */
+  qsort(params.params, params.len, sizeof(Param), compareParam);
+
+  StringBuf paramBuf;
+  buf_New(&paramBuf, 0);
+  for (unsigned int inc = 0; inc < params.len; inc++) {
+    if (inc > 0) {
+      buf_AppendChar(&paramBuf, '&');
+    }
+    buf_Append(&paramBuf, params.params[inc].name);
+    buf_AppendChar(&paramBuf, '=');
+    if (params.params[inc].val != NULL) {
+      buf_Append(&paramBuf, params.params[inc].val);
     }
   }
 
   /* Attach them, which encodes them again */
-  appendChar(buf, '&');
-  appendEncoded(buf, paramBuf.buf);
+  buf_AppendChar(&buf, '&');
+  appendEncoded(&buf, buf_Get(&paramBuf));
+  buf_Free(&paramBuf);
+
+  freeParams(&params);
+  
+  return buf_Get(&buf);
 }
 
-char* oauth_MakeQueryString(const apr_uri_t* url,
-			    const char* method,
-			    const char* sendData,
-			    unsigned int sendDataSize,
-			    const char* consumerToken,
-			    const char* consumerSecret,
-			    const char* accessToken,
-			    const char* tokenSecret,
-			    apr_pool_t* pool)
-{
-  Buf buf;
-  Params params;
-  int didOne;
+char* oauth_MakeQueryString(RandState rand, const URLInfo* url, const char* method,
+                            const char* sendData, unsigned int sendDataSize,
+                            const OAuthInfo* oauth) {
 
-  allocBuf(&buf, 64, pool);
-  allocParams(&params, 8, pool);
+  long timestamp = (long)floor(apib_Seconds(apib_GetTime()));
+  char nonce[MAX_NUM_SIZE];
+  makeNonce(rand, nonce, MAX_NUM_SIZE);
 
-  buildBaseString(&buf, &params, url, method, sendData, sendDataSize,
-		  consumerToken, accessToken, pool);
-  addParam(&params, "oauth_signature", 
-	   generateHmac(buf.buf, consumerSecret, tokenSecret, pool));
+  char* baseString = oauth_buildBaseString(rand, url, method, timestamp, nonce, sendData, sendDataSize, oauth);
+  char* hmac = oauth_generateHmac(baseString, oauth);
 
   /* Now generate the final query string */
-  buf.len = 0;
-  didOne = 0;
-  for (unsigned int inc = 0; inc < params.len; inc++) {
-    if (didOne) {
-      appendChar(&buf, '&');
-    } else {
-      didOne = 1;
-    }
-    appendEncoded(&buf, params.params[inc].name);
-    appendChar(&buf, '=');
-    if (params.params[inc].val != NULL) {
-      appendEncoded(&buf, params.params[inc].val);
-    }
+  StringBuf buf;
+  buf_New(&buf, 0);
+
+  buf_Append(&buf, "oauth_consumer_key=");
+  appendEncoded(&buf, oauth->consumerKey);
+  if (oauth->accessToken != NULL) {
+    buf_Append(&buf, "&oauth_token=");
+    appendEncoded(&buf, oauth->accessToken);
   }
-  
-  return buf.buf; 
+  buf_Append(&buf, "&oauth_signature_method=HMAC-SHA1");
+  buf_Append(&buf, "&oauth_signature=");
+  appendEncoded(&buf, hmac);
+  buf_Printf(&buf, "&oauth_timestamp=%li", timestamp);
+  buf_Append(&buf, "&oauth_nonce=");
+  buf_Append(&buf, nonce);
+
+  free(baseString);
+  free(hmac);
+
+  // Caller frees the final buffer
+  return buf_Get(&buf);
 }
 
-char* oauth_MakeAuthorization(const apr_uri_t* url,
-			      const char* method,
-			      const char* sendData,
-			      unsigned int sendDataSize,
-			      const char* consumerToken,
-			      const char* consumerSecret,
-			      const char* accessToken,
-			      const char* tokenSecret,
-			      apr_pool_t* pool)
-{
+/*
+char* oauth_MakeAuthorization(const apr_uri_t* url, const char* method,
+                              const char* sendData, unsigned int sendDataSize,
+                              const char* consumerToken,
+                              const char* consumerSecret,
+                              const char* accessToken, const char* tokenSecret,
+                              apr_pool_t* pool) {
   Buf buf;
   Params params;
   int didOne;
@@ -404,30 +351,31 @@ char* oauth_MakeAuthorization(const apr_uri_t* url,
   allocParams(&params, 8, pool);
 
   buildBaseString(&buf, &params, url, method, sendData, sendDataSize,
-		  consumerToken, accessToken, pool);
-  addParam(&params, "oauth_signature", 
-	   generateHmac(buf.buf, consumerSecret, tokenSecret, pool));
+                  consumerToken, accessToken, pool);
+  addParam(&params, "oauth_signature",
+           generateHmac(buf.buf, consumerSecret, tokenSecret, pool));
 
-  /* Now generate the final header */
+  // Now generate the final header
   buf.len = 0;
   appendStr(&buf, "OAuth ");
   didOne = 0;
   for (unsigned int inc = 0; inc < params.len; inc++) {
     if (!strncmp(params.params[inc].name, "oauth_", 6)) {
       if (didOne) {
-	appendChar(&buf, ',');
+        appendChar(&buf, ',');
       } else {
-	didOne = 1;
+        didOne = 1;
       }
       appendEncoded(&buf, params.params[inc].name);
       appendChar(&buf, '=');
       if (params.params[inc].val != NULL) {
-	appendChar(&buf, '"');
-	appendEncoded(&buf, params.params[inc].val);
-	appendChar(&buf, '"');
+        appendChar(&buf, '"');
+        appendEncoded(&buf, params.params[inc].val);
+        appendChar(&buf, '"');
       }
     }
   }
-  
-  return buf.buf; 
+
+  return buf.buf;
 }
+*/

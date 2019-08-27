@@ -32,6 +32,8 @@ TEST(URL, ParseGood1) {
   EXPECT_STREQ("/bar?baz=yes", u1->path);
   EXPECT_STREQ("foo.com:1234", u1->hostHeader);
   EXPECT_STREQ("foo.com", u1->hostName);
+  EXPECT_STREQ("/bar", u1->pathOnly);
+  EXPECT_STREQ("baz=yes", u1->query);
   struct sockaddr_in* a = (struct sockaddr_in*)url_GetAddress(u1, 0, NULL);
   EXPECT_EQ(1234, ntohs(a->sin_port));
   url_Reset();
@@ -57,6 +59,8 @@ TEST(URL, ParseGood1) {
   EXPECT_EQ(0, u1b->isSsl);
   EXPECT_EQ(80, u1b->port);
   EXPECT_STREQ("/", u1b->path);
+  EXPECT_STREQ("/", u1b->pathOnly);
+  EXPECT_EQ(NULL, u1b->query);
   url_Reset();
 
   ASSERT_EQ(0, url_InitOne("http://foo.com:1000"));
@@ -79,6 +83,8 @@ TEST(URL, ParseGood1) {
   EXPECT_EQ(1, u2->isSsl);
   EXPECT_EQ(1234, u2->port);
   EXPECT_STREQ("/bar/baz", u2->path);
+  EXPECT_STREQ("/bar/baz", u2->pathOnly);
+  EXPECT_EQ(NULL, u2->query);
   url_Reset();
 
   ASSERT_EQ(0, url_InitOne("https://foo.com/bar?baz=yes"));
@@ -96,6 +102,29 @@ TEST(URL, ParseGood1) {
   EXPECT_STREQ("foo.com", u2b->hostHeader);
   EXPECT_STREQ("foo.com", u2b->hostName);
   EXPECT_STREQ("/bar?baz=yes", u2b->path);
+  url_Reset();
+
+  // From RFC5849
+  ASSERT_EQ(0, url_InitOne("http://example.com/r%20v/X?id=123"));
+  const URLInfo* r1 = url_GetNext(nullptr);
+  EXPECT_EQ(0, r1->isSsl);
+  EXPECT_EQ(80, r1->port);
+  EXPECT_STREQ("example.com", r1->hostHeader);
+  EXPECT_STREQ("example.com", r1->hostName);
+  EXPECT_STREQ("/r%20v/X?id=123", r1->path);
+  EXPECT_STREQ("/r%20v/X", r1->pathOnly);
+  EXPECT_STREQ("id=123", r1->query);
+  url_Reset();
+
+  ASSERT_EQ(0, url_InitOne("http://example.net:8080/?q=1"));
+  const URLInfo* r2 = url_GetNext(nullptr);
+  EXPECT_EQ(0, r2->isSsl);
+  EXPECT_EQ(8080, r2->port);
+  EXPECT_STREQ("example.net:8080", r1->hostHeader);
+  EXPECT_STREQ("example.net", r1->hostName);
+  EXPECT_STREQ("/?q=1", r1->path);
+  EXPECT_STREQ("/", r1->pathOnly);
+  EXPECT_STREQ("q=1", r1->query);
   url_Reset();
 }
 
