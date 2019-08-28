@@ -10,7 +10,6 @@ config_setting(
 cc_library(
     name = "common",
     srcs = [
-        "apib_cpu_generic.c",
         "apib_lines.c",
         "apib_message.c",
         "apib_priorityq.c",
@@ -18,8 +17,14 @@ cc_library(
         "apib_time.c",
         "apib_url.c",
     ] + select({
-        "apple": ["apib_rand.c"],
-        "//conditions:default": ["apib_rand_48.c"],
+        "apple": [
+            "apib_cpu_generic.c",
+            "apib_rand.c",
+        ],
+        "//conditions:default": [
+            "apib_cpu_proc.c",
+            "apib_rand_48.c",
+        ],
     }),
     hdrs = [
         "apib_cpu.h",

@@ -41,9 +41,9 @@ extern int cpu_Init();
 extern void cpu_GetUsage(CPUUsage* usage);
 
 /* Get CPU usage data for the interval since we last called this method.
-   Result is a ratio (between 0 and 1.0) of CPU used by user + nice + system. 
+   Result is a ratio (between 0 and 1.0) of CPU used by user + nice + system.
    Usage is across all CPUs (we counted the CPUs before).
-   "usage" must be initialized by cpu_GetUsage the first time. 
+   "usage" must be initialized by cpu_GetUsage the first time.
    Each call after that to cpu_GetInterval copies the current usage to
    "usage". */
 extern double cpu_GetInterval(CPUUsage* usage);

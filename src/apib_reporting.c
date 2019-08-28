@@ -14,6 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+#include "src/apib_reporting.h"
+
 #include <assert.h>
 #include <math.h>
 #include <pthread.h>
@@ -22,7 +24,6 @@ limitations under the License.
 #include <string.h>
 
 #include "src/apib_cpu.h"
-#include "src/apib_reporting.h"
 #include "src/apib_time.h"
 
 #define NUM_CPU_SAMPLES 4
@@ -289,8 +290,8 @@ void ReportInterval(FILE* out, int totalDuration, int warmup) {
   double remoteCpu = 0.0;
   double remote2Cpu = 0.0;
 
-  /*
   if (!warmup) {
+    /*
     if (remoteCpuSocket != NULL) {
       remoteCpu = getRemoteStat(CPU_CMD, &remoteCpuSocket);
       addSample(remoteCpu, &remoteSamples);
@@ -299,10 +300,10 @@ void ReportInterval(FILE* out, int totalDuration, int warmup) {
       remote2Cpu = getRemoteStat(CPU_CMD, &remote2CpuSocket);
       addSample(remote2Cpu, &remote2Samples);
     }
+    */
     cpu = cpu_GetInterval(&cpuUsage);
     addSample(cpu, &clientSamples);
   }
-  */
 
   BenchmarkIntervalResults r;
   ReportIntervalResults(&r);
@@ -452,33 +453,29 @@ void PrintFullResults(FILE* out) {
   fprintf(out, "98%% latency:          %.3lf milliseconds\n", r.latencies[98]);
   fprintf(out, "99%% latency:          %.3lf milliseconds\n", r.latencies[99]);
   fprintf(out, "\n");
-  /*
   if (clientSamples.count > 0) {
     fprintf(out, "Client CPU average:    %.0lf%%\n",
             getAverageCpu(&clientSamples) * 100.0);
     fprintf(out, "Client CPU max:        %.0lf%%\n",
             getMaxCpu(&clientSamples) * 100.0);
   }
-  fprintf(out, "Client memory usage:    %.0lf%%\n",
-          clientMem * 100.0);
+  fprintf(out, "Client memory usage:    %.0lf%%\n", clientMem * 100.0);
   if (remoteSamples.count > 0) {
     fprintf(out, "Remote CPU average:    %.0lf%%\n",
             getAverageCpu(&remoteSamples) * 100.0);
     fprintf(out, "Remote CPU max:        %.0lf%%\n",
             getMaxCpu(&remoteSamples) * 100.0);
-    fprintf(out, "Remote memory usage:   %.0lf%%\n",
-            remoteMem * 100.0);
+    fprintf(out, "Remote memory usage:   %.0lf%%\n", remoteMem * 100.0);
   }
   if (remote2Samples.count > 0) {
     fprintf(out, "Remote 2 CPU average:    %.0lf%%\n",
             getAverageCpu(&remote2Samples) * 100.0);
     fprintf(out, "Remote 2 CPU max:        %.0lf%%\n",
             getMaxCpu(&remote2Samples) * 100.0);
-    fprintf(out, "Remote 2 memory usage:   %.0lf%%\n",
-            remote2Mem * 100.0);
+    fprintf(out, "Remote 2 memory usage:   %.0lf%%\n", remote2Mem * 100.0);
   }
   fprintf(out, "\n");
-  */
+
   fprintf(out, "Total bytes sent:      %.2lf megabytes\n",
           r.totalBytesSent / 1048576.0);
   fprintf(out, "Total bytes received:  %.2lf megabytes\n",
@@ -507,16 +504,12 @@ void PrintShortResults(FILE* out, const char* runName, int threads,
           r.elapsedTime, r.completedRequests, r.successfulRequests,
           r.unsuccessfulRequests, r.connectionsOpened, r.latencies[0],
           r.latencies[100], r.latencies[50], r.latencies[90], r.latencies[98],
-          r.latencies[99], r.latencyStdDev, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
-          /*
-                getAverageCpu(&clientSamples) * 100.0,
-                getAverageCpu(&remoteSamples) * 100.0,
-                getAverageCpu(&remote2Samples) * 100.0,
-          clientMem * 100.0,
-          remoteMem * 100.0,
-          remote2Mem * 100.0,
-          */
-          r.averageSendBandwidth, r.averageReceiveBandwidth);
+          r.latencies[99], r.latencyStdDev,
+          getAverageCpu(&clientSamples) * 100.0,
+          getAverageCpu(&remoteSamples) * 100.0,
+          getAverageCpu(&remote2Samples) * 100.0, clientMem * 100.0,
+          remoteMem * 100.0, remote2Mem * 100.0, r.averageSendBandwidth,
+          r.averageReceiveBandwidth);
 }
 
 void PrintReportingHeader(FILE* out) {

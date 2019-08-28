@@ -14,17 +14,18 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+#include "src/apib_oauth.h"
+
 #include <assert.h>
 #include <ctype.h>
+#include <math.h>
 #include <openssl/bio.h>
 #include <openssl/hmac.h>
 #include <openssl/sha.h>
-#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-#include "src/apib_oauth.h"
 #include "src/apib_lines.h"
 #include "src/apib_rand.h"
 #include "src/apib_time.h"
@@ -89,7 +90,7 @@ static char* reEncode(const char* str) {
 /*
  * Decode a string as described by the HTML spec and as commonly implemented. */
 static char* decode(const char* str) {
-  char* ret =  malloc(strlen(str) + 1);
+  char* ret = malloc(strlen(str) + 1);
   size_t ip = 0;
   size_t op = 0;
   char buf[4];
@@ -121,7 +122,8 @@ static char* decode(const char* str) {
 static void ensureParamsSize(Params* params) {
   if (params->len >= params->size) {
     params->size *= 2;
-    params->params = (Param*)realloc(params->params, sizeof(Param) * params->size);
+    params->params =
+        (Param*)realloc(params->params, sizeof(Param) * params->size);
   }
 }
 
@@ -150,7 +152,6 @@ static void readParams(Params* params, char* str, size_t len) {
     tok = strtok_r(NULL, "&", &last);
   }
 }
-
 
 static void addParam(Params* params, const char* name, const char* val) {
   ensureParamsSize(params);
@@ -192,8 +193,8 @@ char* oauth_generateHmac(const char* base, const OAuthInfo* oauth) {
 
   char hmac[EVP_MAX_MD_SIZE];
   unsigned int hmacLen;
-  HMAC(EVP_sha1(), buf_Get(&keyBuf), buf_Length(&keyBuf), 
-       (unsigned char*)base, strlen(base), (unsigned char*)hmac, &hmacLen);
+  HMAC(EVP_sha1(), buf_Get(&keyBuf), buf_Length(&keyBuf), (unsigned char*)base,
+       strlen(base), (unsigned char*)hmac, &hmacLen);
 
   char* ret = malloc(Base64encode_len(hmacLen));
   Base64encode(ret, hmac, hmacLen);
@@ -210,13 +211,11 @@ static void makeNonce(RandState rand, char* buf, size_t len) {
 }
 
 char* oauth_buildBaseString(RandState rand, const URLInfo* url,
-                            const char* method, 
-                            long timestamp, const char* nonce,
-                            const char* sendData,
+                            const char* method, long timestamp,
+                            const char* nonce, const char* sendData,
                             size_t sendDataSize, const OAuthInfo* oauth) {
-
-  StringBuf buf;  
-  Params params;                          
+  StringBuf buf;
+  Params params;
 
   buf_New(&buf, 0);
   allocParams(&params, 8);
@@ -297,19 +296,19 @@ char* oauth_buildBaseString(RandState rand, const URLInfo* url,
   buf_Free(&paramBuf);
 
   freeParams(&params);
-  
+
   return buf_Get(&buf);
 }
 
-char* oauth_MakeQueryString(RandState rand, const URLInfo* url, const char* method,
-                            const char* sendData, unsigned int sendDataSize,
-                            const OAuthInfo* oauth) {
-
+char* oauth_MakeQueryString(RandState rand, const URLInfo* url,
+                            const char* method, const char* sendData,
+                            unsigned int sendDataSize, const OAuthInfo* oauth) {
   long timestamp = (long)floor(apib_Seconds(apib_GetTime()));
   char nonce[MAX_NUM_SIZE];
   makeNonce(rand, nonce, MAX_NUM_SIZE);
 
-  char* baseString = oauth_buildBaseString(rand, url, method, timestamp, nonce, sendData, sendDataSize, oauth);
+  char* baseString = oauth_buildBaseString(rand, url, method, timestamp, nonce,
+                                           sendData, sendDataSize, oauth);
   char* hmac = oauth_generateHmac(baseString, oauth);
 
   /* Now generate the final query string */

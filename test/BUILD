@@ -90,6 +90,15 @@ cc_test(
 )
 
 cc_test(
+    name = "cpu",
+    srcs = ["cpu_test.cc"],
+    deps = [
+        "//src:common",
+        "@gtest",
+    ]
+)
+
+cc_test(
     name = "reporting",
     srcs = ["reporting_test.cc"],
     deps = [
