@@ -16,7 +16,9 @@ limitations under the License.
 
 #include <assert.h>
 #include <stdlib.h>
-#include <sys/random.h>
+#include <sys/types.h>
+#include <time.h>
+#include <unistd.h>
 
 #include "apib_rand.h"
 
@@ -25,13 +27,11 @@ typedef struct {
 } UnixRand;
 
 RandState apib_InitRand() {
-  // First, use /dev/urandom -- which is hardware-supported and
-  // "random enough" for tests -- to get a seed. This is better
-  // than using the time of day or something...
+  // Very simple random seeding. Fine since we are not using
+  // these for generating security keys.
   unsigned short seed[3];
-  size_t desiredSeedLen = sizeof(unsigned short) * 3;
-  size_t seedLen = getrandom(&seed, desiredSeedLen, 0);
-  assert(seedLen == desiredSeedLen);
+  time((time_t*)&seed);
+  seed[2] = getpid();
 
   UnixRand* r = (UnixRand*)malloc(sizeof(UnixRand));
   seed48_r(seed, &(r->data));

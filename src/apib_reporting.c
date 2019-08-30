@@ -491,7 +491,6 @@ void PrintShortResults(FILE* out, const char* runName, int threads,
   BenchmarkResults r;
   ReportResults(&r);
 
-  /* TODO CPU and client samples. */
   /*
   name,throughput,avg.
   latency,threads,connections,duration,completed,successful,errors,sockets,min.

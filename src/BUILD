@@ -36,6 +36,9 @@ cc_library(
         "apib_time.h",
         "apib_url.h",
     ],
+    copts = [
+        "-std=gnu99",
+    ],
     deps = [
         "@httpparser",
     ],
@@ -45,9 +48,9 @@ cc_library(
     name = "io",
     srcs = [
         "apib_io_basic.c",
-        "apib_oauth.c",
         "apib_io_socket.c",
-        "apib_iothread.c", 
+        "apib_iothread.c",
+        "apib_oauth.c",
     ],
     hdrs = [
         "apib_iothread.h",
@@ -59,8 +62,8 @@ cc_library(
     deps = [
         ":common",
         "//third_party:base64",
-        "@boringssl//:ssl",
         "@boringssl//:crypto",
+        "@boringssl//:ssl",
         "@httpparser",
         "@libev",
     ],
@@ -74,5 +77,5 @@ cc_binary(
     deps = [
         ":io",
         "//third_party:base64",
-    ]
+    ],
 )

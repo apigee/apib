@@ -4,9 +4,9 @@ load(
 )
 load(
     "@bazel_tools//tools/build_defs/repo:git.bzl",
-    "git_repository", "new_git_repository"
+    "git_repository",
+    "new_git_repository",
 )
-
 
 http_archive(
     name = "gtest",
@@ -33,6 +33,7 @@ http_archive(
 
 git_repository(
     name = "boringssl",
-    commit = "68ddf9a84c7ffc0dea3337cb994213b093c7d6ef",
+    commit = "e0c35d6c06fd800de1092f0b4d4326570ca2617a",
     remote = "https://boringssl.googlesource.com/boringssl",
+    shallow_since = "1566966435 +0000",
 )

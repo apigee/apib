@@ -7,6 +7,9 @@ cc_library(
         "@boringssl//:ssl",
         "@httpparser",
     ],
+    copts = [
+        "-std=gnu99",
+    ],
 )
 
 cc_binary(
