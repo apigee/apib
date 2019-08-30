@@ -1,129 +1,191 @@
 /*
-   Copyright 2013 Apigee Corp.
+Copyright 2019 Google LLC
 
-   Licensed under the Apache License, Version 2.0 (the "License");
-   you may not use this file except in compliance with the License.
-   You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-       http://www.apache.org/licenses/LICENSE-2.0
+    https://www.apache.org/licenses/LICENSE-2.0
 
-   Unless required by applicable law or agreed to in writing, software
-   distributed under the License is distributed on an "AS IS" BASIS,
-   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-   See the License for the specific language governing permissions and
-   limitations under the License.
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 */
 
 /*
  * This is a program that returns CPU information over the network.
  */
- 
-#include <config.h>
 
+#include "src/apib_mon.h"
+
+#include <arpa/inet.h>
+#include <assert.h>
+#include <netinet/in.h>
+#include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <unistd.h>
 #include <string.h>
+#include <sys/socket.h>
+#include <sys/types.h>
+#include <unistd.h>
 
-#include <apr_file_io.h>
-#include <apr_general.h>
-#include <apr_network_io.h>
-#include <apr_pools.h>
-#include <apr_strings.h>
-#include <apr_thread_proc.h>
-
-#include <apib_common.h>
-
-#if HAVE_PTHREAD_H
-#include <pthread.h>
-#endif
+#include "src/apib_cpu.h"
+#include "src/apib_lines.h"
 
 #define LISTEN_BACKLOG 8
 #define READ_BUF_LEN 128
 #define PROC_BUF_LEN 512
-
-static apr_pool_t* MainPool;
+#define LOCALHOST "127.0.0.1"
 
 typedef struct {
-  apr_socket_t* sock;
-  apr_pool_t* pool;
-} ThreadArgs;
+  int fd;
+} ConnInfo;
 
-static void sendBack(apr_socket_t* sock, const char* msg)
-{
-  apr_size_t len = strlen(msg);
-  
-  apr_socket_send(sock, msg, &len);
+static void sendBack(ConnInfo* i, const char* msg) {
+  const size_t len = strlen(msg);
+  write(i->fd, msg, len);
 }
 
-static int processCommand(ThreadArgs* args, const char* cmd,
-			  CPUUsage* lastUsage)
-{
-  char buf[128];
+static int processCommand(ConnInfo* i, const char* cmd, CPUUsage* lastUsage) {
+  char buf[READ_BUF_LEN];
 
   if (!strcasecmp(cmd, "HELLO")) {
-    sendBack(args->sock, "Hi!\n");
-  } else if (!strcasecmp(cmd, "CPU")) {
+    sendBack(i, "Hi!\n");
 
-    double usage = cpu_GetInterval(lastUsage, args->pool);
-    apr_snprintf(buf, 128, "%.2lf\n", usage);
-    sendBack(args->sock, buf);
+  } else if (!strcasecmp(cmd, "CPU")) {
+    double usage = cpu_GetInterval(lastUsage);
+    assert(snprintf(buf, READ_BUF_LEN, "%.2lf\n", usage) < READ_BUF_LEN);
+    sendBack(i, buf);
 
   } else if (!strcasecmp(cmd, "MEM")) {
-   
-    double usage = cpu_GetMemoryUsage(args->pool);
-    apr_snprintf(buf, 128, "%.2lf\n", usage);
-    sendBack(args->sock, buf);
+    double usage = cpu_GetMemoryUsage();
+    assert(snprintf(buf, READ_BUF_LEN, "%.2lf\n", usage) < READ_BUF_LEN);
+    sendBack(i, buf);
 
   } else if (!strcasecmp(cmd, "BYE") || !strcasecmp(cmd, "QUIT")) {
-    sendBack(args->sock, "BYE\n");
+    sendBack(i, "BYE\n");
     return 1;
+
   } else {
-    sendBack(args->sock, "Invalid command\n");
+    sendBack(i, "Invalid command\n");
   }
   return 0;
 }
 
-#if HAVE_PTHREAD_CREATE
-static void* SocketThread(void* a)
-#else
-static void* SocketThread(apr_thread_t* t, void* a)
-#endif
-{
-  ThreadArgs* args = (ThreadArgs*)a;
-  char* readBuf = apr_palloc(args->pool, READ_BUF_LEN);
-  apr_status_t s;
-  int closeRequested = FALSE;
+static void* socketThread(void* a) {
+  ConnInfo* i = (ConnInfo*)a;
+  char* readBuf = malloc(READ_BUF_LEN);
+  int closeRequested = 0;
   CPUUsage lastUsage;
   LineState line;
 
-  cpu_GetUsage(&lastUsage, args->pool);
+  cpu_GetUsage(&lastUsage);
   linep_Start(&line, readBuf, READ_BUF_LEN, 0);
 
   while (!closeRequested) {
-    s = linep_ReadSocket(&line, args->sock);
-    if (s != APR_SUCCESS) {
+    int s = linep_ReadFd(&line, i->fd);
+    if (s <= 0) {
       break;
     }
     while (!closeRequested && linep_NextLine(&line)) {
       char* l = linep_GetLine(&line);
-      closeRequested = processCommand(args, l, &lastUsage);
+      closeRequested = processCommand(i, l, &lastUsage);
     }
     if (!closeRequested) {
       if (linep_Reset(&line)) {
-	/* Line too big to fit in buffer -- abort */
-	break;
+        /* Line too big to fit in buffer -- abort */
+        break;
       }
     }
   }
 
-  apr_socket_shutdown(args->sock, APR_SHUTDOWN_READWRITE);
-  apr_socket_close(args->sock);
-  apr_pool_destroy(args->pool);
+  close(i->fd);
+  free(readBuf);
+  free(i);
 
   return NULL;
 }
 
+static void* acceptThread(void* arg) {
+  MonServer* s = (MonServer*)arg;
+
+  for (;;) {
+    const int fd = accept(s->listenfd, NULL, NULL);
+    if (fd < 0) {
+      // This could be because the socket was closed.
+      perror("Error accepting socket");
+      return NULL;
+    }
+
+    ConnInfo* i = (ConnInfo*)malloc(sizeof(ConnInfo));
+    i->fd = fd;
+
+    pthread_t thread;
+    pthread_create(&thread, NULL, socketThread, i);
+    pthread_detach(thread);
+  }
+}
+
+int mon_StartServer(MonServer* s, int port) {
+  memset(s, 0, sizeof(MonServer));
+
+  int err = cpu_Init();
+  if (err != 0) {
+    fprintf(stderr, "CPU monitoring not available on this platform\n");
+    return -3;
+  }
+
+  s->listenfd = socket(AF_INET, SOCK_STREAM, 0);
+  if (s->listenfd < 0) {
+    perror("Cant' create socket");
+    return -1;
+  }
+
+  struct sockaddr_in addr;
+  addr.sin_family = AF_INET;
+  addr.sin_port = htons(port);
+  // Listen on localhost to avoid weird firewall stuff on Macs
+  // We may have to revisit if we test on platforms with a different address.
+  addr.sin_addr.s_addr = inet_addr(LOCALHOST);
+
+  err = bind(s->listenfd, (const struct sockaddr*)&addr,
+             sizeof(struct sockaddr_in));
+  if (err != 0) {
+    perror("Can't bind to port");
+    return -2;
+  }
+
+  err = listen(s->listenfd, LISTEN_BACKLOG);
+  if (err != 0) {
+    perror("Can't listen on socket");
+    close(s->listenfd);
+    return -3;
+  }
+
+  err = pthread_create(&(s->acceptThread), NULL, acceptThread, s);
+  assert(err == 0);
+
+  return 0;
+}
+
+int mon_GetPort(const MonServer* s) {
+  struct sockaddr_in addr;
+  socklen_t addrlen = sizeof(struct sockaddr_in);
+
+  getsockname(s->listenfd, (struct sockaddr*)&addr, &addrlen);
+  return ntohs(addr.sin_port);
+}
+
+void mon_StopServer(MonServer* s) {
+  pthread_cancel(s->acceptThread);
+  void* ret;
+  pthread_join(s->acceptThread, &ret);
+  close(s->listenfd);
+}
+
+/*
 int main(int ac, char const* const* av)
 {
   int argc = ac;
@@ -133,7 +195,7 @@ int main(int ac, char const* const* av)
   apr_sockaddr_t* addr;
   apr_status_t s;
   char buf[128];
-  
+
   apr_app_initialize(&argc, &argv, &env);
   apr_pool_create(&MainPool, NULL);
 
@@ -147,9 +209,8 @@ int main(int ac, char const* const* av)
     goto failed;
   }
 
-  s = apr_socket_create(&serverSock, APR_INET, SOCK_STREAM, APR_PROTO_TCP, MainPool);
-  if (s != APR_SUCCESS) {
-    goto failed;
+  s = apr_socket_create(&serverSock, APR_INET, SOCK_STREAM, APR_PROTO_TCP,
+MainPool); if (s != APR_SUCCESS) { goto failed;
   }
 
   s = apr_socket_opt_set(serverSock, APR_SO_REUSEADDR, TRUE);
@@ -201,7 +262,7 @@ int main(int ac, char const* const* av)
 #else
     s = apr_thread_create(&socketThread, NULL, SocketThread, args, socketPool);
 #endif
-    if (s != APR_SUCCESS) { 
+    if (s != APR_SUCCESS) {
       apr_socket_close(clientSock);
       apr_pool_destroy(socketPool);
       apr_strerror(s, buf, 128);
@@ -230,3 +291,4 @@ int main(int ac, char const* const* av)
   apr_terminate();
   return 3;
 }
+*/

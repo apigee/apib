@@ -141,3 +141,12 @@ cc_test(
         "@gtest",
     ]
 )
+
+cc_test(
+    name = "montest",
+    srcs = ["mon_test.cc"],
+    deps = [
+        "//src:mon_lib",
+        "@gtest",
+    ]
+)

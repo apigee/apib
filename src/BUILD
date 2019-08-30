@@ -59,6 +59,9 @@ cc_library(
     linkopts = [
         "-lpthread",
     ],
+    copts = [
+        "-std=gnu99",
+    ],
     deps = [
         ":common",
         "//third_party:base64",
@@ -67,6 +70,25 @@ cc_library(
         "@httpparser",
         "@libev",
     ],
+)
+
+cc_library(
+    name = "mon_lib",
+    srcs = [
+        "apib_mon.c",
+    ],
+    hdrs = [
+        "apib_mon.h",
+    ],
+    copts = [
+        "-std=gnu99",
+    ],
+    linkopts = [
+        "-lpthread",
+    ],
+    deps = [
+        ":common",
+    ]
 )
 
 cc_binary(
