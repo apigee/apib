@@ -37,7 +37,6 @@ limitations under the License.
 #define LISTEN_BACKLOG 8
 #define READ_BUF_LEN 128
 #define PROC_BUF_LEN 512
-#define LOCALHOST "127.0.0.1"
 
 typedef struct {
   int fd;
@@ -128,7 +127,7 @@ static void* acceptThread(void* arg) {
   }
 }
 
-int mon_StartServer(MonServer* s, int port) {
+int mon_StartServer(MonServer* s, const char* address, int port) {
   memset(s, 0, sizeof(MonServer));
 
   int err = cpu_Init();
@@ -148,7 +147,7 @@ int mon_StartServer(MonServer* s, int port) {
   addr.sin_port = htons(port);
   // Listen on localhost to avoid weird firewall stuff on Macs
   // We may have to revisit if we test on platforms with a different address.
-  addr.sin_addr.s_addr = inet_addr(LOCALHOST);
+  addr.sin_addr.s_addr = inet_addr(address);
 
   err = bind(s->listenfd, (const struct sockaddr*)&addr,
              sizeof(struct sockaddr_in));
@@ -185,110 +184,7 @@ void mon_StopServer(MonServer* s) {
   close(s->listenfd);
 }
 
-/*
-int main(int ac, char const* const* av)
-{
-  int argc = ac;
-  char const* const* argv = av;
-  char const * const* env = NULL;
-  apr_socket_t* serverSock;
-  apr_sockaddr_t* addr;
-  apr_status_t s;
-  char buf[128];
-
-  apr_app_initialize(&argc, &argv, &env);
-  apr_pool_create(&MainPool, NULL);
-
-  if (argc != 2) {
-    fprintf(stderr, "Usage: %s <port>\n", argv[0]);
-    return 2;
-  }
-
-  s = apr_sockaddr_info_get(&addr, NULL, APR_INET, atoi(argv[1]), 0, MainPool);
-  if (s != APR_SUCCESS) {
-    goto failed;
-  }
-
-  s = apr_socket_create(&serverSock, APR_INET, SOCK_STREAM, APR_PROTO_TCP,
-MainPool); if (s != APR_SUCCESS) { goto failed;
-  }
-
-  s = apr_socket_opt_set(serverSock, APR_SO_REUSEADDR, TRUE);
-  if (s != APR_SUCCESS) {
-    goto failed;
-  }
-
-  s = apr_socket_bind(serverSock, addr);
-  if (s != APR_SUCCESS) {
-    goto failed;
-  }
-
-  s = apr_socket_listen(serverSock, LISTEN_BACKLOG);
-  if (s != APR_SUCCESS) {
-    goto failed;
-  }
-
-  cpu_Init(MainPool);
-
-  while (TRUE) {
-    apr_pool_t* socketPool;
-#if HAVE_PTHREAD_CREATE
-    pthread_t socketThread;
-#else
-    apr_thread_t* socketThread;
-#endif
-    apr_socket_t* clientSock;
-    ThreadArgs* args;
-
-    apr_pool_create(&socketPool, MainPool);
-    s = apr_socket_accept(&clientSock, serverSock, socketPool);
-    if (s != APR_SUCCESS) {
-      apr_pool_destroy(socketPool);
-      apr_strerror(s, buf, 128);
-      fprintf(stderr, "Fatal error accepting client socket: %s\n", buf);
-      continue;
-    }
-
-    args = (ThreadArgs*)apr_palloc(socketPool, sizeof(ThreadArgs));
-    args->sock = clientSock;
-    args->pool = socketPool;
-
-#if HAVE_PTHREAD_CREATE
-    if (pthread_create(&socketThread, NULL, SocketThread, args) == 0) {
-      s = APR_SUCCESS;
-    } else {
-      s = -1;
-    }
-#else
-    s = apr_thread_create(&socketThread, NULL, SocketThread, args, socketPool);
-#endif
-    if (s != APR_SUCCESS) {
-      apr_socket_close(clientSock);
-      apr_pool_destroy(socketPool);
-      apr_strerror(s, buf, 128);
-      fprintf(stderr, "Fatal error creating socket thread: %s\n", buf);
-      continue;
-    }
-
-#if HAVE_PTHREAD_CREATE
-    pthread_detach(socketThread);
-#else
-    apr_thread_detach(socketThread);
-#endif
-  }
-
-  apr_socket_close(serverSock);
-
-  apr_pool_destroy(MainPool);
-  apr_terminate();
-
-  return 0;
-
- failed:
-  apr_strerror(s, buf, 128);
-  fprintf(stderr, "Fatal error: %s\n", buf);
-  apr_pool_destroy(MainPool);
-  apr_terminate();
-  return 3;
+void mon_JoinServer(MonServer* s) {
+  void* ret;
+  pthread_join(s->acceptThread, &ret);
 }
-*/

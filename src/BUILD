@@ -101,3 +101,13 @@ cc_binary(
         "//third_party:base64",
     ],
 )
+
+cc_binary(
+    name = "apibmon",
+    srcs = [
+        "apib_mon_main.c",
+    ],
+    deps = [
+        ":mon_lib",
+    ],
+)

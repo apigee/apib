@@ -17,6 +17,7 @@ limitations under the License.
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
 #include <sys/sysctl.h>
 #include <sys/times.h>
 #include <sys/types.h>
@@ -67,11 +68,20 @@ int cpu_Count() {
 }
 
 int cpu_Init() {
-  char* countStr;
+  struct stat statBuf;
+
+  int err = stat("/proc/stat", &statBuf);
+  if (err != 0) {
+    return -1;
+  }
+  err = stat("/proc/meminfo", &statBuf);
+  if (err != 0) {
+    return -2;
+  }
 
   TicksPerSecond = sysconf(_SC_CLK_TCK);
 
-  countStr = getenv("CPU_COUNT");
+  const char* countStr = getenv("CPU_COUNT");
   if (countStr != NULL) {
     CPUCount = atoi(countStr);
     return 0;
@@ -79,7 +89,7 @@ int cpu_Init() {
 
   CPUCount = cpu_Count();
   if (CPUCount < 0) {
-    return -1;
+    return -3;
   }
   return 0;
 }
@@ -247,8 +257,12 @@ double cpu_GetInterval(CPUUsage* oldCpu) {
 
   const long long idleTicks = cpu.idle - oldCpu->idle;
   const long long usageTicks = cpu.nonIdle - oldCpu->nonIdle;
+  const long long allUsageTicks = idleTicks + usageTicks;
 
   memcpy(oldCpu, &cpu, sizeof(CPUUsage));
 
-  return ((double)usageTicks / (double)(idleTicks + usageTicks));
+  if (allUsageTicks == 0) {
+    return 0.0;
+  }
+  return ((double)usageTicks / (double)allUsageTicks);
 }

@@ -388,6 +388,13 @@ int main(int argc, char *const *argv) {
     return 0;
   }
 
+  if (contentType != NULL) {
+    char buf[256];
+    const int pc = snprintf(buf, 256, "Content-Type: %s", contentType);
+    assert(pc < 256);
+    addHeader(buf);
+  }
+
   if (url != NULL) {
     if (url[0] == '@') {
       if (url_InitFile(url + 1) != 0) {
@@ -460,10 +467,6 @@ int main(int argc, char *const *argv) {
       t->hostHeaderOverride = HostHeaderOverride;
       t->thinkTime = thinkTime;
       t->noKeepAlive = (KeepAlive != KEEP_ALIVE_ALWAYS);
-
-      /*
-      TODO write content-type header!
-      */
 
       if (createSslContext(t) != 0) {
         goto finished;

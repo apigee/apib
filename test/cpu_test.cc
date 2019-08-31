@@ -39,6 +39,20 @@ TEST(CPU, Usage) {
   EXPECT_GE(1.0, newUsage);
 }
 
+TEST(CPU, MultiUsage) {
+  CPUUsage cpu;
+
+  cpu_GetUsage(&cpu);
+  EXPECT_LT(0, cpu.idle);
+  EXPECT_LT(0, cpu.nonIdle);
+
+  for (int i = 0; i < 10; i++) {
+    double newUsage = cpu_GetInterval(&cpu);
+    EXPECT_LE(0.0, newUsage);
+    EXPECT_GE(1.0, newUsage);
+  }
+}
+
 int main(int argc, char** argv) {
   ::testing::InitGoogleTest(&argc, argv);
 

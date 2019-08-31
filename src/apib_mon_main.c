@@ -14,29 +14,26 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-#ifndef APIB_MON_H
-#define APIB_MON_H
+#include <stdio.h>
+#include <stdlib.h>
 
-#include <pthread.h>
+#include "src/apib_mon.h"
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+int main(int argc, char** argv) {
+  MonServer mon;
 
-typedef struct {
-  int listenfd;
-  pthread_t acceptThread;
-} MonServer;
+  if (argc != 2) {
+    fprintf(stderr, "Usage: %s <port>\n", argv[0]);
+    return 2;
+  }
 
-// Start the server in a background thread.
-// "address" must be numeric, as in "127.0.0.1".
-extern int mon_StartServer(MonServer* s, const char* address, int port);
-extern int mon_GetPort(const MonServer* s);
-extern void mon_StopServer(MonServer* s);
-extern void mon_JoinServer(MonServer* s);
+  int err = mon_StartServer(&mon, "0.0.0.0", atoi(argv[1]));
+  if (err != 0) {
+    fprintf(stderr, "Can't start monitoring server: %i\n", err);
+    return 2;
+  }
+  printf("apibmon listening on port %i\n", mon_GetPort(&mon));
 
-#ifdef __cplusplus
+  mon_JoinServer(&mon);
+  return 0;
 }
-#endif
-
-#endif  // APIB_MON_H

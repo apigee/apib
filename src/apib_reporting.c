@@ -16,12 +16,18 @@ limitations under the License.
 
 #include "src/apib_reporting.h"
 
+#include <arpa/inet.h>
 #include <assert.h>
 #include <math.h>
+#include <netdb.h>
+#include <netinet/in.h>
 #include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/socket.h>
+#include <sys/types.h>
+#include <unistd.h>
 
 #include "src/apib_cpu.h"
 #include "src/apib_time.h"
@@ -90,64 +96,86 @@ static void addSample(double sample, CPUSamples* s) {
   s->count++;
 }
 
-/*
-static void connectMonitor(const char* hostName, apr_socket_t** sock) {
-  apr_status_t s;
-  apr_sockaddr_t* addr;
-  char* host;
-  char* scope;
-  apr_port_t port;
+static void connectMonitor(const char* hn, int* fd) {
+  assert(fd != NULL);
+  char* hostCopy = strdup(hn);
+  char* sp;
 
-  s = apr_parse_addr_port(&host, &scope, &port, hostName, MainPool);
-  if (s != APR_SUCCESS) {
-    return;
+  const char* hostName = strtok_r(hostCopy, ":", &sp);
+  assert(hostName != NULL);
+  const char* portName = strtok_r(NULL, "", &sp);
+  if (portName == NULL) {
+    printf("Invalid monitor host: \"%s\"\n", hn);
+    goto done;
   }
 
-  s = apr_sockaddr_info_get(&addr, host, APR_INET, port, 0, MainPool);
-  if (s != APR_SUCCESS) {
-    return;
+  char* pe;
+  short port = (short)strtol(portName, &pe, 0);
+  if (pe == portName) {
+    printf("Invalid monitor port number: \"\%s\"\n", portName);
+    goto done;
   }
 
-  s = apr_socket_create(sock, APR_INET,
-                        SOCK_STREAM, APR_PROTO_TCP, MainPool);
-  if (s != APR_SUCCESS) {
-    return;
+  struct addrinfo hints;
+
+  // For now, look up only IP V4 addresses
+  hints.ai_family = AF_INET;
+  hints.ai_socktype = SOCK_STREAM;
+  hints.ai_protocol = 0;
+  hints.ai_flags = 0;
+
+  struct addrinfo* hostInfo = NULL;
+  int err = getaddrinfo(hostName, NULL, &hints, &hostInfo);
+  if (err != 0) {
+    perror("Cannot look up remote monitoring host");
+    goto done;
   }
 
-  s = apr_socket_connect(*sock, addr);
-  if (s != APR_SUCCESS) {
-    *sock = NULL;
+  *fd = socket(hostInfo->ai_family, SOCK_STREAM, 0);
+  assert(*fd > 0);
+
+  // IP4 and IP6 versions of this should have port in same place
+  ((struct sockaddr_in*)hostInfo->ai_addr)->sin_port = htons(port);
+
+  err = connect(*fd, hostInfo->ai_addr, hostInfo->ai_addrlen);
+  if (err != 0) {
+    perror("Connection error");
+    printf("Cannot connect to remote monitoring host \"%s\" port %i\n", hostName, port);
+    close(*fd);
+    goto done;
+  }
+
+done:
+  free(hostCopy);
+  if (hostInfo != NULL) {
+    freeaddrinfo(hostInfo);
   }
 }
-*/
 
-/*
-static double getRemoteStat(const char* cmd, apr_socket_t** sock)
-{
+static double getRemoteStat(const char* cmd, int* fd) {
+  assert(fd != NULL);
   char buf[64];
-  apr_status_t s;
-  apr_size_t len;
 
-  len = strlen(cmd);
-  s = apr_socket_send(*sock, cmd, &len);
-  if (s != APR_SUCCESS) {
+  const size_t cmdLen = strlen(cmd);
+  const int wc = write(*fd, cmd, cmdLen);
+  if (wc != cmdLen) {
+    perror("Error writing to monitoring server");
     goto failure;
   }
 
-  len = 64;
-  s = apr_socket_recv(*sock, buf, &len);
-  if (s != APR_SUCCESS) {
+  const int rc = read(*fd, buf, 64);
+  if (rc <= 0) {
+    perror("Error reading from monitoring server");
     goto failure;
   }
 
   return strtod(buf, NULL);
 
- failure:
-  apr_socket_close(*sock);
-  *sock = NULL;
+failure:
+  close(*fd);
+  *fd = 0;
   return 0.0;
 }
-*/
 
 void RecordResult(int code, long long latency) {
   if (!reporting) {
@@ -202,16 +230,12 @@ void RecordInit(const char* monitorHost, const char* host2) {
   latenciesSize = NUM_INITIAL_LATENCIES;
   latencies = (long long*)malloc(sizeof(long long) * NUM_INITIAL_LATENCIES);
 
-  assert(monitorHost == NULL);
-  assert(host2 == NULL);
-  /*
   if (monitorHost != NULL) {
     remoteMonitorHost = monitorHost;
   }
   if (host2 != NULL) {
     remote2MonitorHost = host2;
   }
-  */
 }
 
 void RecordStart(int startReporting) {
@@ -229,9 +253,9 @@ void RecordStart(int startReporting) {
 
   reporting = startReporting;
   cpu_GetUsage(&cpuUsage);
-  /*
+
   if (remoteMonitorHost != NULL) {
-    if (remoteCpuSocket == NULL) {
+    if (remoteCpuSocket == 0) {
       connectMonitor(remoteMonitorHost, &remoteCpuSocket);
     } else {
       // Just re-set the CPU time
@@ -239,14 +263,14 @@ void RecordStart(int startReporting) {
     }
   }
   if (remote2MonitorHost != NULL) {
-    if (remote2CpuSocket == NULL) {
+    if (remote2CpuSocket == 0) {
       connectMonitor(remote2MonitorHost, &remote2CpuSocket);
     } else {
       // Just re-set the CPU time
       getRemoteStat(CPU_CMD, &remote2CpuSocket);
     }
   }
-  */
+
   startTime = apib_GetTime();
   intervalStartTime = startTime;
 
@@ -259,14 +283,14 @@ void RecordStart(int startReporting) {
 void RecordStop(void) {
   pthread_mutex_lock(&latch);
   clientMem = cpu_GetMemoryUsage();
-  /*
-  if (remoteCpuSocket != NULL) {
+
+  if (remoteCpuSocket != 0) {
     remoteMem = getRemoteStat(MEM_CMD, &remoteCpuSocket);
   }
-  if (remote2CpuSocket != NULL) {
+  if (remote2CpuSocket != 0) {
     remote2Mem = getRemoteStat(MEM_CMD, &remote2CpuSocket);
   }
-  */
+
   reporting = 0;
   stopTime = apib_GetTime();
   pthread_mutex_unlock(&latch);
@@ -291,16 +315,14 @@ void ReportInterval(FILE* out, int totalDuration, int warmup) {
   double remote2Cpu = 0.0;
 
   if (!warmup) {
-    /*
-    if (remoteCpuSocket != NULL) {
+    if (remoteCpuSocket != 0) {
       remoteCpu = getRemoteStat(CPU_CMD, &remoteCpuSocket);
       addSample(remoteCpu, &remoteSamples);
     }
-    if (remote2CpuSocket != NULL) {
+    if (remote2CpuSocket != 0) {
       remote2Cpu = getRemoteStat(CPU_CMD, &remote2CpuSocket);
       addSample(remote2Cpu, &remote2Samples);
     }
-    */
     cpu = cpu_GetInterval(&cpuUsage);
     addSample(cpu, &clientSamples);
   }
@@ -523,14 +545,12 @@ void PrintReportingHeader(FILE* out) {
 }
 
 void EndReporting(void) {
-  /*
-  if (remoteCpuSocket != NULL) {
-    apr_socket_close(remoteCpuSocket);
+  if (remoteCpuSocket != 0) {
+    close(remoteCpuSocket);
   }
-  if (remote2CpuSocket != NULL) {
-    apr_socket_close(remote2CpuSocket);
+  if (remote2CpuSocket != 0) {
+    close(remote2CpuSocket);
   }
-  */
   if (latencies != NULL) {
     free(latencies);
   }

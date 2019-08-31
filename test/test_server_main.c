@@ -26,8 +26,8 @@ int main(int argc, char** argv) {
   }
 
   int port = atoi(argv[1]);
-  char* keyFile;
-  char* certFile;
+  char* keyFile = NULL;
+  char* certFile = NULL;
 
   if (argc > 2) {
     keyFile = argv[2];

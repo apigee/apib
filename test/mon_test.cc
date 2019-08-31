@@ -127,7 +127,7 @@ int main(int argc, char** argv) {
   ::testing::InitGoogleTest(&argc, argv);
 
   MonServer mon;
-  int err = mon_StartServer(&mon, 0);
+  int err = mon_StartServer(&mon, "127.0.0.1", 0);
   if (err != 0) {
     fprintf(stderr, "Can't start server\n");
     return 2;
