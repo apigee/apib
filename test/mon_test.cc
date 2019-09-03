@@ -21,6 +21,7 @@ limitations under the License.
 #include <sys/types.h>
 
 #include "gtest/gtest.h"
+#include "src/apib_cpu.h"
 #include "src/apib_lines.h"
 #include "src/apib_mon.h"
 
@@ -126,8 +127,16 @@ TEST_F(MonServerTest, Multi) {
 int main(int argc, char** argv) {
   ::testing::InitGoogleTest(&argc, argv);
 
+  int err = cpu_Init();
+  if (err != 0) {
+    fprintf(stderr,
+            "Skipping monitoring tests: CPU monitoring not available on "
+            "platform\n");
+    return 0;
+  }
+
   MonServer mon;
-  int err = mon_StartServer(&mon, "127.0.0.1", 0);
+  err = mon_StartServer(&mon, "127.0.0.1", 0);
   if (err != 0) {
     fprintf(stderr, "Can't start server\n");
     return 2;
