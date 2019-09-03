@@ -28,6 +28,7 @@ limitations under the License.
 #include "src/apib_reporting.h"
 #include "src/apib_time.h"
 #include "src/apib_url.h"
+#include "src/apib_util.h"
 
 static int initialized = 0;
 http_parser_settings HttpParserSettings;
@@ -100,9 +101,9 @@ static void connectAndSend(ConnectionState* c) {
   c->startTime = apib_GetTime();
   if (c->needsOpen) {
     int err = io_Connect(c);
+    mandatoryAssert(err == 0);
     // Should only fail if we can't create a new socket --
     // errors actually connecting will be handled during write.
-    assert(err == 0);
     RecordConnectionOpen();
   }
   writeRequest(c);
@@ -260,7 +261,7 @@ void iothread_Start(IOThread* t) {
   }
   t->keepRunning = 1;
   int err = pthread_create(&(t->thread), NULL, ioThread, t);
-  assert(err == 0);
+  mandatoryAssert(err == 0);
 }
 
 void iothread_Stop(IOThread* t) {

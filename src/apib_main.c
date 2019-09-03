@@ -28,6 +28,7 @@ limitations under the License.
 #include "src/apib_iothread.h"
 #include "src/apib_reporting.h"
 #include "src/apib_url.h"
+#include "src/apib_util.h"
 #include "third_party/base64.h"
 
 #define DEFAULT_CONTENT_TYPE "application/octet-stream"
@@ -257,11 +258,11 @@ static void processBasic(const char *arg) {
   const size_t inLen = strlen(arg);
   const int encLen = Base64encode_len(inLen);
   char *b64 = (char *)malloc(encLen + 1);
-  const int realEncLen = Base64encode(b64, arg, inLen);
-  assert(realEncLen == encLen);
+  Base64encode(b64, arg, inLen);
 
-  char *hdr = malloc(encLen + 21);
-  sprintf(hdr, "Authorization: Basic %s", b64);
+  const size_t hdrLen = encLen + 21;
+  char *hdr = malloc(hdrLen);
+  safeSprintf(hdr, hdrLen, "Authorization: Basic %s", b64);
   printf("%s\n", hdr);
   free(b64);
   addHeader(hdr);
@@ -390,8 +391,7 @@ int main(int argc, char *const *argv) {
 
   if (contentType != NULL) {
     char buf[256];
-    const int pc = snprintf(buf, 256, "Content-Type: %s", contentType);
-    assert(pc < 256);
+    safeSprintf(buf, 256, "Content-Type: %s", contentType);
     addHeader(buf);
   }
 

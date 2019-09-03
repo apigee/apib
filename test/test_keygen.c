@@ -28,6 +28,8 @@ limitations under the License.
 #include <openssl/x509v3.h>
 #include <stdio.h>
 
+#include "src/apib_util.h"
+
 #define DAY (60 * 60 * 24)
 
 static void printError(const char* msg) {
@@ -55,40 +57,40 @@ RSA* keygen_MakeRSAPrivateKey(int bits) {
 X509* keygen_MakeServerCertificate(RSA* key, int serial, int days) {
   EVP_PKEY* pkey = EVP_PKEY_new();
   int err = EVP_PKEY_set1_RSA(pkey, key);
-  assert(err == 1);
+  mandatoryAssert(err == 1);
 
   X509* cert = X509_new();
   // This means X509 V3
   err = X509_set_version(cert, 2);
-  assert(err == 1);
+  mandatoryAssert(err == 1);
   err = ASN1_INTEGER_set(X509_get_serialNumber(cert), serial);
-  assert(err == 1);
+  mandatoryAssert(err == 1);
   X509_gmtime_adj(X509_get_notBefore(cert), 0);
   X509_gmtime_adj(X509_get_notAfter(cert), days * DAY);
 
   X509_NAME* subject = X509_get_subject_name(cert);
   err = X509_NAME_add_entry_by_txt(subject, "C", MBSTRING_ASC,
                                    (unsigned char*)"US", -1, -1, 0);
-  assert(err == 1);
+  mandatoryAssert(err == 1);
   err = X509_NAME_add_entry_by_txt(subject, "ST", MBSTRING_ASC,
                                    (unsigned char*)"CA", -1, -1, 0);
-  assert(err == 1);
+  mandatoryAssert(err == 1);
   err = X509_NAME_add_entry_by_txt(subject, "L", MBSTRING_ASC,
                                    (unsigned char*)"Sunnyvale", -1, -1, 0);
-  assert(err == 1);
+  mandatoryAssert(err == 1);
   err = X509_NAME_add_entry_by_txt(subject, "O", MBSTRING_ASC,
                                    (unsigned char*)"The Cloud", -1, -1, 0);
-  assert(err == 1);
+  mandatoryAssert(err == 1);
   err = X509_NAME_add_entry_by_txt(subject, "CN", MBSTRING_ASC,
                                    (unsigned char*)"testserver", -1, -1, 0);
-  assert(err == 1);
+  mandatoryAssert(err == 1);
 
   // Issuer same as key for now
   err = X509_set_issuer_name(cert, subject);
-  assert(err == 1);
+  mandatoryAssert(err == 1);
 
   err = X509_set_pubkey(cert, pkey);
-  assert(err == 1);
+  mandatoryAssert(err == 1);
   EVP_PKEY_free(pkey);
 
   // This sets subject alt names to be "127.0.0.1" and "localhost".
@@ -111,7 +113,7 @@ X509* keygen_MakeServerCertificate(RSA* key, int serial, int days) {
   sk_GENERAL_NAME_push(altNames, host);
 
   err = X509_add1_ext_i2d(cert, NID_subject_alt_name, altNames, 0, 0);
-  assert(err == 1);
+  mandatoryAssert(err == 1);
 
   // This frees the whole mess above.
   GENERAL_NAMES_free(altNames);
@@ -122,7 +124,7 @@ X509* keygen_MakeServerCertificate(RSA* key, int serial, int days) {
 int keygen_SignCertificate(RSA* key, X509* cert) {
     EVP_PKEY* pkey = EVP_PKEY_new();
     int err = EVP_PKEY_set1_RSA(pkey, key);
-    assert(err == 1);
+    mandatoryAssert(err == 1);
 
     err = X509_sign(cert, pkey, EVP_sha256());
     EVP_PKEY_free(pkey);

@@ -6,7 +6,7 @@ genrule(
     outs = [
         "config.h",
     ],
-    cmd = "sh $(location configure) &&" +
+    cmd = "sh $(location configure) --disable-dependency-tracking &&" +
           "cp config.h $(location config.h)",
 )
 
@@ -26,7 +26,6 @@ cc_library(
         "-DHAVE_CONFIG_H",
         "-Wno-comment",
         "-Wno-dangling-else",
-        "-Wno-parenthesis",
         "-Wno-unused-value",
     ],
     textual_hdrs = [

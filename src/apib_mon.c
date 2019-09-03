@@ -33,6 +33,7 @@ limitations under the License.
 
 #include "src/apib_cpu.h"
 #include "src/apib_lines.h"
+#include "src/apib_util.h"
 
 #define LISTEN_BACKLOG 8
 #define READ_BUF_LEN 128
@@ -42,9 +43,9 @@ typedef struct {
   int fd;
 } ConnInfo;
 
-static void sendBack(ConnInfo* i, const char* msg) {
+static size_t sendBack(ConnInfo* i, const char* msg) {
   const size_t len = strlen(msg);
-  write(i->fd, msg, len);
+  return write(i->fd, msg, len);
 }
 
 static int processCommand(ConnInfo* i, const char* cmd, CPUUsage* lastUsage) {
@@ -55,12 +56,12 @@ static int processCommand(ConnInfo* i, const char* cmd, CPUUsage* lastUsage) {
 
   } else if (!strcasecmp(cmd, "CPU")) {
     double usage = cpu_GetInterval(lastUsage);
-    assert(snprintf(buf, READ_BUF_LEN, "%.2lf\n", usage) < READ_BUF_LEN);
+    safeSprintf(buf, READ_BUF_LEN, "%.2lf\n", usage);
     sendBack(i, buf);
 
   } else if (!strcasecmp(cmd, "MEM")) {
     double usage = cpu_GetMemoryUsage();
-    assert(snprintf(buf, READ_BUF_LEN, "%.2lf\n", usage) < READ_BUF_LEN);
+    safeSprintf(buf, READ_BUF_LEN, "%.2lf\n", usage);
     sendBack(i, buf);
 
   } else if (!strcasecmp(cmd, "BYE") || !strcasecmp(cmd, "QUIT")) {

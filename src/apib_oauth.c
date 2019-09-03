@@ -30,6 +30,7 @@ limitations under the License.
 #include "src/apib_rand.h"
 #include "src/apib_time.h"
 #include "src/apib_url.h"
+#include "src/apib_util.h"
 #include "third_party/base64.h"
 
 #define MAX_NUM_SIZE 256
@@ -206,8 +207,7 @@ char* oauth_generateHmac(const char* base, const OAuthInfo* oauth) {
 static void makeNonce(RandState rand, char* buf, size_t len) {
   long r1 = apib_Rand(rand);
   long r2 = apib_Rand(rand);
-  const int err = snprintf(buf, len, "%lx%lx", r1, r2);
-  assert(err < len);
+  safeSprintf(buf, len, "%lx%lx", r1, r2);
 }
 
 char* oauth_buildBaseString(RandState rand, const URLInfo* url,
@@ -254,8 +254,7 @@ char* oauth_buildBaseString(RandState rand, const URLInfo* url,
   addParam(&params, "oauth_nonce", nonce);
 
   char ts[MAX_NUM_SIZE];
-  const int err = snprintf(ts, MAX_NUM_SIZE, "%li", timestamp);
-  assert(err < MAX_NUM_SIZE);
+  safeSprintf(ts, MAX_NUM_SIZE, "%li", timestamp);
   addParam(&params, "oauth_timestamp", ts);
 
   /* Re-encode each string! */

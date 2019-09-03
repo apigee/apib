@@ -29,8 +29,12 @@ cc_library(
         "test_keygen.h",
     ],
     deps = [
+        "//src:common",
         "@boringssl//:ssl",
-    ]
+    ],
+    copts = [
+        "-std=gnu99",
+    ],
 )
 
 cc_binary(
@@ -117,7 +121,6 @@ cc_test(
     deps = [
         "//src:io",
         "@gtest",
-        "@gtest//:gtest_main",
     ]
 )
 

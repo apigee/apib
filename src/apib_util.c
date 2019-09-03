@@ -14,25 +14,18 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-#include <assert.h>
-#include <time.h>
-
-#include "src/apib_time.h"
 #include "src/apib_util.h"
 
-#define NANOSECOND 1000000000LL
-#define NANOSECOND_F 1000000000.0
-#define MILLISECOND_F 1000.0
+#include <stdarg.h>
+#include <string.h>
 
-long long apib_GetTime() {
-  struct timespec tp;
-  const int err = clock_gettime(CLOCK_REALTIME, &tp);
-  mandatoryAssert(err == 0);
-  return (((long long)tp.tv_sec) * NANOSECOND) + tp.tv_nsec;
-}
-
-double apib_Seconds(long long t) { return ((double)t) / NANOSECOND_F; }
-
-double apib_Milliseconds(long long t) {
-  return ((double)t) / (NANOSECOND_F / MILLISECOND_F);
+int safeSprintf(char* str, size_t size, const char* format, ...) {
+  va_list ap;
+  va_start(ap, format);
+  const int ret = vsnprintf(str, size, format, ap);
+  va_end(ap);
+  if (ret >= size) {
+    str[size - 1] = 0;
+  }
+  return ret;
 }

@@ -22,13 +22,13 @@ limitations under the License.
 #include "gtest/gtest.h"
 #include "src/apib_oauth.h"
 
+static RandState randState;
+
 class OAuthTest : public ::testing::Test {
  protected:
-  RandState rand;
   OAuthInfo oauth;
 
   OAuthTest() {
-    rand = apib_InitRand();
     oauth.consumerKey = strdup("9djdj82h48djs9d2");
     oauth.consumerSecret = strdup("j49sk3j29djd");
     oauth.accessToken = strdup("kkk9d7dh3k39sjv7");
@@ -53,7 +53,7 @@ TEST_F(OAuthTest, Rfc5849BaseAndHmac) {
   const long timestamp = 137131201;
   const char* nonce = "7d8f3e4a";
 
-  char* base = oauth_buildBaseString(rand, url_GetNext(rand), "POST", timestamp,
+  char* base = oauth_buildBaseString(randState, url_GetNext(randState), "POST", timestamp,
                                      nonce, body, strlen(body), &oauth);
 
   // Exact results from RFC7230
@@ -81,7 +81,7 @@ TEST_F(OAuthTest, QueryString) {
                 "http://example.com/request?b5=%3D%253D&a3=a&c%40=&a2=r%20b"));
   const char* body = "c2&a3=2+q";
 
-  char* query = oauth_MakeQueryString(rand, url_GetNext(rand), "POST", body,
+  char* query = oauth_MakeQueryString(randState, url_GetNext(randState), "POST", body,
                                       strlen(body), &oauth);
   printf("%s\n", query);
 
@@ -95,4 +95,12 @@ TEST_F(OAuthTest, QueryString) {
   EXPECT_EQ(0, regexec(&re, query, 0, NULL, 0));
   regfree(&re);
   free(query);
+}
+
+int main(int argc, char** argv) {
+  ::testing::InitGoogleTest(&argc, argv);
+  randState = apib_InitRand();
+  const int err = RUN_ALL_TESTS();
+  apib_FreeRand(randState);
+  return err;
 }

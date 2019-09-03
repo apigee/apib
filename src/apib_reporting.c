@@ -140,7 +140,8 @@ static void connectMonitor(const char* hn, int* fd) {
   err = connect(*fd, hostInfo->ai_addr, hostInfo->ai_addrlen);
   if (err != 0) {
     perror("Connection error");
-    printf("Cannot connect to remote monitoring host \"%s\" port %i\n", hostName, port);
+    printf("Cannot connect to remote monitoring host \"%s\" port %i\n",
+           hostName, port);
     close(*fd);
     goto done;
   }

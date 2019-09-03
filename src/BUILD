@@ -16,6 +16,7 @@ cc_library(
         "apib_reporting.c",
         "apib_time.c",
         "apib_url.c",
+        "apib_util.c",
     ] + select({
         "apple": [
             "apib_cpu_generic.c",
@@ -35,6 +36,7 @@ cc_library(
         "apib_reporting.h",
         "apib_time.h",
         "apib_url.h",
+        "apib_util.h",
     ],
     copts = [
         "-std=gnu99",
@@ -56,11 +58,11 @@ cc_library(
         "apib_iothread.h",
         "apib_oauth.h",
     ],
-    linkopts = [
-        "-lpthread",
-    ],
     copts = [
         "-std=gnu99",
+    ],
+    linkopts = [
+        "-lpthread",
     ],
     deps = [
         ":common",
@@ -88,13 +90,16 @@ cc_library(
     ],
     deps = [
         ":common",
-    ]
+    ],
 )
 
 cc_binary(
     name = "apib",
     srcs = [
         "apib_main.c",
+    ],
+    copts = [
+        "-std=gnu99",
     ],
     deps = [
         ":io",
@@ -106,6 +111,9 @@ cc_binary(
     name = "apibmon",
     srcs = [
         "apib_mon_main.c",
+    ],
+    copts = [
+        "-std=gnu99",
     ],
     deps = [
         ":mon_lib",

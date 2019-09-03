@@ -24,6 +24,7 @@ limitations under the License.
 #include "src/apib_cpu.h"
 #include "src/apib_lines.h"
 #include "src/apib_mon.h"
+#include "src/apib_util.h"
 
 static int ServerPort;
 
@@ -41,7 +42,7 @@ class MonServerTest : public ::testing::Test {
     addr.sin_addr.s_addr = inet_addr("127.0.0.1");
 
     int err = connect(fd, (const sockaddr*)&addr, sizeof(struct sockaddr_in));
-    assert(err == 0);
+    mandatoryAssert(err == 0);
   }
 
   ~MonServerTest() { close(fd); }

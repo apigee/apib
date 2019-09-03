@@ -22,6 +22,8 @@ limitations under the License.
 #include <string.h>
 #include <sys/types.h>
 
+#include "src/apib_util.h"
+
 #define REQUEST_LINE_EXP "^([a-zA-Z]+) ([^ ]+) HTTP/([0-9])\\.([0-9])$"
 #define REQUEST_LINE_PARTS 5
 #define STATUS_LINE_EXP "^HTTP/([0-9])\\.([0-9]) ([0-9]+) .*$"
@@ -37,11 +39,11 @@ static int initialized = 0;
 void message_Init() {
   if (!initialized) {
     int s = regcomp(&requestLineRegex, REQUEST_LINE_EXP, REG_EXTENDED);
-    assert(s == 0);
+    mandatoryAssert(s == 0);
     s = regcomp(&statusLineRegex, STATUS_LINE_EXP, REG_EXTENDED);
-    assert(s == 0);
+    mandatoryAssert(s == 0);
     s = regcomp(&headerLineRegex, HEADER_LINE_EXP, REG_EXTENDED);
-    assert(s == 0);
+    mandatoryAssert(s == 0);
     initialized = 1;
   }
 }

@@ -27,6 +27,7 @@ limitations under the License.
 
 #include "http_parser.h"
 #include "src/apib_lines.h"
+#include "src/apib_util.h"
 
 #define URL_BUF_LEN 8192
 #define INITIAL_URLS 16
@@ -161,8 +162,9 @@ static int initUrl(const char* urlstr, URLInfo* u) {
   if (((u->isSsl) && (u->port == 443)) || ((!u->isSsl) && (u->port == 80))) {
     u->hostHeader = strdup(u->hostName);
   } else {
-    u->hostHeader = malloc(strlen(u->hostName) + 20);
-    sprintf(u->hostHeader, "%s:%i", u->hostName, u->port);
+    const size_t bufLen = strlen(u->hostName) + 20;
+    u->hostHeader = malloc(bufLen);
+    safeSprintf(u->hostHeader, bufLen, "%s:%i", u->hostName, u->port);
   }
 
   // Now look up the host and add the port...
