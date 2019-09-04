@@ -39,10 +39,16 @@ extern char* oauth_MakeQueryString(RandState rand, const URLInfo* url,
                                    unsigned int sendDataSize,
                                    const OAuthInfo* oauth);
 
+// Do the same but put the result into an HTTP "Authorization:" header.
+extern char* oauth_MakeHeader(RandState rand, const URLInfo* url,
+                              const char* realm, const char* method, const char* sendData,
+                              unsigned int sendDataSize,
+                              const OAuthInfo* oauth);
+
 // Externalized for testing
 extern char* oauth_buildBaseString(RandState rand, const URLInfo* url,
-                                   const char* method, long timestamp, const char* nonce,
-                                   const char* sendData,
+                                   const char* method, long timestamp,
+                                   const char* nonce, const char* sendData,
                                    size_t sendDataSize, const OAuthInfo* oauth);
 extern char* oauth_generateHmac(const char* base, const OAuthInfo* oauth);
 

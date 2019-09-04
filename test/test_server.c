@@ -206,7 +206,7 @@ static int parsedHeaderValue(http_parser* p, const char* buf, size_t len) {
       !strncasecmp("close", buf, len)) {
     i->shouldClose = 1;
   } else if (!strcasecmp("Authorization", i->nextHeader) &&
-             strncmp("Basic dGVzdDp2ZXJ5dmVyeXNlY3JldAo=", buf, len)) {
+             strncmp("Basic dGVzdDp2ZXJ5dmVyeXNlY3JldA==", buf, len)) {
     // Checked for the authorization "test:veryverysecret"
     i->notAuthorized = 1;
   }

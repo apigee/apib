@@ -227,7 +227,7 @@ TEST_F(IOTest, OneThreadHeaders) {
   t.httpVerb = strdup("GET");
   t.numHeaders = 1;
   t.headers = (char**)malloc(sizeof(char*));
-  t.headers[0] = strdup("Authorization: Basic dGVzdDp2ZXJ5dmVyeXNlY3JldAo=");
+  t.headers[0] = strdup("Authorization: Basic dGVzdDp2ZXJ5dmVyeXNlY3JldA==");
 
   iothread_Start(&t);
   sleep(1);

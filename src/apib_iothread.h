@@ -23,6 +23,7 @@ limitations under the License.
 #include "ev.h"
 #include "http_parser.h"
 #include "src/apib_lines.h"
+#include "src/apib_oauth.h"
 #include "src/apib_rand.h"
 #include "src/apib_url.h"
 
@@ -39,6 +40,7 @@ typedef struct {
   char* sendData;
   size_t sendDataLen;
   SSL_CTX* sslCtx;
+  OAuthInfo* oauth;
   char** headers;
   unsigned int numHeaders;
   unsigned int thinkTime;
@@ -92,7 +94,7 @@ extern void iothread_Stop(IOThread* t);
 
 // These are internal methods used by apib_iothread.c for various
 // implementations.
-extern void io_Verbose(ConnectionState* c, const char* format, ...);
+//extern void io_Verbose(ConnectionState* c, const char* format, ...);
 extern void io_WriteDone(ConnectionState* c, int err);
 extern void io_ReadDone(ConnectionState* c, int err);
 extern void io_CloseDone(ConnectionState* c);
@@ -117,6 +119,9 @@ extern IOStatus io_Write(ConnectionState* c, const void* buf, size_t count, size
 extern IOStatus io_Read(ConnectionState* c, void* buf, size_t count, size_t* readed);
 extern IOStatus io_CloseConnection(ConnectionState* c);
 extern void io_FreeConnection(ConnectionState* c);
+
+// Debugging macro
+#define io_Verbose(c, ...) if ((c)->t->verbose) { printf(__VA_ARGS__); }
 
 #ifdef __cplusplus
 }

@@ -8,6 +8,9 @@ cc_library(
     hdrs = [
         "http_parser.h",
     ],
+    copts = [
+        "-DHTTP_PARSER_STRICT=0",
+    ],
 )
 
 cc_test(

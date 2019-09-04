@@ -26,6 +26,7 @@ limitations under the License.
 
 #include "src/apib_cpu.h"
 #include "src/apib_iothread.h"
+#include "src/apib_oauth.h"
 #include "src/apib_reporting.h"
 #include "src/apib_url.h"
 #include "src/apib_util.h"
@@ -49,10 +50,7 @@ static unsigned int HeadersSize = 0;
 static unsigned int NumHeaders = 0;
 static int HostHeaderOverride = 0;
 
-static char *OAuthCK = NULL;
-static char *OAuthCS = NULL;
-static char *OAuthAT = NULL;
-static char *OAuthAS = NULL;
+static OAuthInfo* oauth = NULL;
 
 #define OPTIONS "c:d:f:hk:t:u:vw:x:C:H:O:K:M:X:N:ST1W:"
 
@@ -162,6 +160,12 @@ static void sslInfoCallback(const SSL *ssl, int where, int ret) {
   } else if (ret == 0) {
     printf("  Error occurred\n");
   }
+  if (where & SSL_CB_HANDSHAKE_DONE) {
+    int bits;
+    SSL_get_cipher_bits(ssl, &bits);
+    printf("  Protocol: %s\n", SSL_get_cipher_version(ssl));
+    printf("  Cipher: %s (%i bits)\n", SSL_get_cipher_name(ssl), bits);
+  }
 }
 
 static int createSslContext(IOThread *t) {
@@ -221,18 +225,20 @@ static void waitAndReport(int duration, int warmup) {
     }
 
     sleep(toSleep);
-    ReportInterval(stdout, duration, warmup);
+    if (!ShortOutput) {
+      ReportInterval(stdout, duration, warmup);
+    }
     durationLeft -= toSleep;
   }
 }
 
 static void processOAuth(char *arg) {
+  oauth = (OAuthInfo*)malloc(sizeof(OAuthInfo));
   char *last;
-
-  OAuthCK = strtok_r(arg, ":", &last);
-  OAuthCS = strtok_r(NULL, ":", &last);
-  OAuthAT = strtok_r(NULL, ":", &last);
-  OAuthAS = strtok_r(NULL, ":", &last);
+  oauth->consumerKey = strtok_r(arg, ":", &last);
+  oauth->consumerSecret = strtok_r(NULL, ":", &last);
+  oauth->accessToken = strtok_r(NULL, ":", &last);
+  oauth->tokenSecret = strtok_r(NULL, ":", &last);
 }
 
 static void addHeader(char *val) {
@@ -263,7 +269,6 @@ static void processBasic(const char *arg) {
   const size_t hdrLen = encLen + 21;
   char *hdr = malloc(hdrLen);
   safeSprintf(hdr, hdrLen, "Authorization: Basic %s", b64);
-  printf("%s\n", hdr);
   free(b64);
   addHeader(hdr);
 }
@@ -425,12 +430,6 @@ int main(int argc, char *const *argv) {
 
     RecordInit(monitorHost, monitor2Host);
 
-    if (!JustOnce && (warmupTime > 0)) {
-      RecordStart(0);
-    } else {
-      RecordStart(1);
-    }
-
     for (int i = 0; i < NumThreads; i++) {
       IOThread *t = &(threads[i]);
       int numConn = NumConnections / NumThreads;
@@ -467,6 +466,7 @@ int main(int argc, char *const *argv) {
       t->hostHeaderOverride = HostHeaderOverride;
       t->thinkTime = thinkTime;
       t->noKeepAlive = (KeepAlive != KEEP_ALIVE_ALWAYS);
+      t->oauth = oauth;
 
       if (createSslContext(t) != 0) {
         goto finished;
@@ -476,13 +476,14 @@ int main(int argc, char *const *argv) {
     }
 
     if (!JustOnce && (warmupTime > 0)) {
+      RecordStart(0);
       waitAndReport(warmupTime, 1);
     }
+
+    RecordStart(1);
     if (!JustOnce) {
       waitAndReport(duration, 0);
     }
-    printf("All I/O complete\n");
-
     RecordStop();
     Running = 0;
 
@@ -497,7 +498,11 @@ int main(int argc, char *const *argv) {
     return 0;
   }
 
-  PrintFullResults(stdout);
+  if (ShortOutput) {
+    PrintShortResults(stdout, RunName, NumThreads, NumConnections);
+  } else {
+    PrintFullResults(stdout);
+  }
   EndReporting();
 
 finished:

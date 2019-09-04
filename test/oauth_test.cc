@@ -53,8 +53,9 @@ TEST_F(OAuthTest, Rfc5849BaseAndHmac) {
   const long timestamp = 137131201;
   const char* nonce = "7d8f3e4a";
 
-  char* base = oauth_buildBaseString(randState, url_GetNext(randState), "POST", timestamp,
-                                     nonce, body, strlen(body), &oauth);
+  char* base =
+      oauth_buildBaseString(randState, url_GetNext(randState), "POST",
+                            timestamp, nonce, body, strlen(body), &oauth);
 
   // Exact results from RFC7230
   const char* expected =
@@ -81,8 +82,8 @@ TEST_F(OAuthTest, QueryString) {
                 "http://example.com/request?b5=%3D%253D&a3=a&c%40=&a2=r%20b"));
   const char* body = "c2&a3=2+q";
 
-  char* query = oauth_MakeQueryString(randState, url_GetNext(randState), "POST", body,
-                                      strlen(body), &oauth);
+  char* query = oauth_MakeQueryString(randState, url_GetNext(randState), "POST",
+                                      body, strlen(body), &oauth);
   printf("%s\n", query);
 
   const char* expectedRE =
@@ -95,6 +96,30 @@ TEST_F(OAuthTest, QueryString) {
   EXPECT_EQ(0, regexec(&re, query, 0, NULL, 0));
   regfree(&re);
   free(query);
+}
+
+TEST_F(OAuthTest, AuthHeader) {
+  ASSERT_EQ(0,
+            url_InitOne(
+                "http://example.com/request?b5=%3D%253D&a3=a&c%40=&a2=r%20b"));
+  const char* body = "c2&a3=2+q";
+
+  char* hdr = oauth_MakeHeader(randState, url_GetNext(randState), "Example",
+                               "POST", body, strlen(body), &oauth);
+  printf("%s\n", hdr);
+
+  const char* expectedRE =
+      "Authorization: OAuth realm=\"Example\", "
+      "oauth_consumer_key=\"9djdj82h48djs9d2\", "
+      "oauth_token=\"kkk9d7dh3k39sjv7\", oauth_signature_method=\"HMAC-SHA1\", "
+      "oauth_signature=\".*\", oauth_timestamp=\".*\", "
+      "oauth_nonce=\".*\"";
+
+  regex_t re;
+  ASSERT_EQ(0, regcomp(&re, expectedRE, REG_NOSUB));
+  EXPECT_EQ(0, regexec(&re, hdr, 0, NULL, 0));
+  regfree(&re);
+  free(hdr);
 }
 
 int main(int argc, char** argv) {

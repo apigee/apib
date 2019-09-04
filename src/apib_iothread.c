@@ -39,15 +39,6 @@ static void printVerbose(const char* format, va_list args) {
   vprintf(format, args);
 }
 
-void io_Verbose(ConnectionState* c, const char* format, ...) {
-  if (c->t->verbose) {
-    va_list args;
-    va_start(args, format);
-    printVerbose(format, args);
-    va_end(args);
-  }
-}
-
 void verbose(IOThread* t, const char* format, ...) {
   if (t->verbose) {
     va_list args;
@@ -80,6 +71,13 @@ void writeRequest(ConnectionState* c) {
   if (c->t->sendDataLen > 0) {
     buf_Append(&(c->writeBuf), "Content-Type: text/plain\r\n");
     buf_Printf(&(c->writeBuf), "Content-Length: %lu\r\n", c->t->sendDataLen);
+  }
+  if (c->t->oauth != NULL) {
+    char* authHdr = oauth_MakeHeader(c->t->rand, c->url, "", c->t->httpVerb,
+                                     NULL, 0, c->t->oauth);
+    buf_Append(&(c->writeBuf), authHdr);
+    buf_Append(&(c->writeBuf), "\r\n");
+    free(authHdr);
   }
   if (c->t->noKeepAlive) {
     buf_Append(&(c->writeBuf), "Connection: close\r\n");

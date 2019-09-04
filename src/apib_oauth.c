@@ -334,46 +334,40 @@ char* oauth_MakeQueryString(RandState rand, const URLInfo* url,
   return buf_Get(&buf);
 }
 
-/*
-char* oauth_MakeAuthorization(const apr_uri_t* url, const char* method,
-                              const char* sendData, unsigned int sendDataSize,
-                              const char* consumerToken,
-                              const char* consumerSecret,
-                              const char* accessToken, const char* tokenSecret,
-                              apr_pool_t* pool) {
-  Buf buf;
-  Params params;
-  int didOne;
+char* oauth_MakeHeader(RandState rand, const URLInfo* url, const char* realm,
+                       const char* method, const char* sendData,
+                       unsigned int sendDataSize, const OAuthInfo* oauth) {
+  long timestamp = (long)floor(apib_Seconds(apib_GetTime()));
+  char nonce[MAX_NUM_SIZE];
+  makeNonce(rand, nonce, MAX_NUM_SIZE);
 
-  allocBuf(&buf, 64, pool);
-  allocParams(&params, 8, pool);
+  char* baseString = oauth_buildBaseString(rand, url, method, timestamp, nonce,
+                                           sendData, sendDataSize, oauth);
+  char* hmac = oauth_generateHmac(baseString, oauth);
 
-  buildBaseString(&buf, &params, url, method, sendData, sendDataSize,
-                  consumerToken, accessToken, pool);
-  addParam(&params, "oauth_signature",
-           generateHmac(buf.buf, consumerSecret, tokenSecret, pool));
+  /* Now generate the final query string */
+  StringBuf buf;
+  buf_New(&buf, 0);
 
-  // Now generate the final header
-  buf.len = 0;
-  appendStr(&buf, "OAuth ");
-  didOne = 0;
-  for (unsigned int inc = 0; inc < params.len; inc++) {
-    if (!strncmp(params.params[inc].name, "oauth_", 6)) {
-      if (didOne) {
-        appendChar(&buf, ',');
-      } else {
-        didOne = 1;
-      }
-      appendEncoded(&buf, params.params[inc].name);
-      appendChar(&buf, '=');
-      if (params.params[inc].val != NULL) {
-        appendChar(&buf, '"');
-        appendEncoded(&buf, params.params[inc].val);
-        appendChar(&buf, '"');
-      }
-    }
+  buf_Append(&buf, "Authorization: OAuth realm=\"");
+  buf_Append(&buf, realm);
+  buf_Append(&buf, "\", oauth_consumer_key=\"");
+  appendEncoded(&buf, oauth->consumerKey);
+  if (oauth->accessToken != NULL) {
+    buf_Append(&buf, "\", oauth_token=\"");
+    appendEncoded(&buf, oauth->accessToken);
   }
+  buf_Append(&buf, "\", oauth_signature_method=\"HMAC-SHA1\", ");
+  buf_Append(&buf, "oauth_signature=\"");
+  appendEncoded(&buf, hmac);
+  buf_Printf(&buf, "\", oauth_timestamp=\"%li\", ", timestamp);
+  buf_Append(&buf, "oauth_nonce=\"");
+  buf_Append(&buf, nonce);
+  buf_Append(&buf, "\"");
 
-  return buf.buf;
+  free(baseString);
+  free(hmac);
+
+  // Caller frees the final buffer
+  return buf_Get(&buf);
 }
-*/
