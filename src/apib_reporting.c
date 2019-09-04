@@ -315,18 +315,16 @@ void ReportInterval(FILE* out, int totalDuration, int warmup) {
   double remoteCpu = 0.0;
   double remote2Cpu = 0.0;
 
-  if (!warmup) {
-    if (remoteCpuSocket != 0) {
-      remoteCpu = getRemoteStat(CPU_CMD, &remoteCpuSocket);
-      addSample(remoteCpu, &remoteSamples);
-    }
-    if (remote2CpuSocket != 0) {
-      remote2Cpu = getRemoteStat(CPU_CMD, &remote2CpuSocket);
-      addSample(remote2Cpu, &remote2Samples);
-    }
-    cpu = cpu_GetInterval(&cpuUsage);
-    addSample(cpu, &clientSamples);
+  if (remoteCpuSocket != 0) {
+    remoteCpu = getRemoteStat(CPU_CMD, &remoteCpuSocket);
+    addSample(remoteCpu, &remoteSamples);
   }
+  if (remote2CpuSocket != 0) {
+    remote2Cpu = getRemoteStat(CPU_CMD, &remote2CpuSocket);
+    addSample(remote2Cpu, &remote2Samples);
+  }
+  cpu = cpu_GetInterval(&cpuUsage);
+  addSample(cpu, &clientSamples);
 
   BenchmarkIntervalResults r;
   ReportIntervalResults(&r);
@@ -334,11 +332,11 @@ void ReportInterval(FILE* out, int totalDuration, int warmup) {
   char* warm = (warmup ? "Warming up: " : "");
 
   if (remoteCpu != 0.0) {
-    fprintf(out, "%s(%.3lf / %i) %.3lf %.0lf%% cpu %.0lf%% remote cpu\n", warm,
+    fprintf(out, "%s(%.0lf / %i) %.3lf %.0lf%% cpu %.0lf%% remote cpu\n", warm,
             r.elapsedTime, totalDuration, r.averageThroughput, cpu * 100.0,
             remoteCpu * 100.0);
   } else {
-    fprintf(out, "%s(%.3lf / %i) %.3lf %.0lf%% cpu\n", warm, r.elapsedTime,
+    fprintf(out, "%s(%.0lf / %i) %.3lf %.0lf%% cpu\n", warm, r.elapsedTime,
             totalDuration, r.averageThroughput, cpu * 100.0);
   }
 }

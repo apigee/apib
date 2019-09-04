@@ -49,7 +49,7 @@ IOStatus io_Write(ConnectionState* c, const void* buf, size_t count,
   }
 
   const int s = SSL_write(c->ssl, buf, count);
-  io_Verbose(c, "SSL write(%u) returned %i\n", count, s);
+  io_Verbose(c, "SSL write(%zu) returned %i\n", count, s);
   if (s > 0) {
     *written = s;
     return OK;
@@ -88,7 +88,7 @@ IOStatus io_Read(ConnectionState* c, void* buf, size_t count, size_t* readed) {
   }
 
   const int s = SSL_read(c->ssl, buf, count);
-  io_Verbose(c, "SSL read(%u) returned %i\n", count, s);
+  io_Verbose(c, "SSL read(%zu) returned %i\n", count, s);
   if (s > 0) {
     *readed = s;
     return OK;

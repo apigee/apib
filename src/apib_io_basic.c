@@ -177,7 +177,7 @@ static int singleWrite(ConnectionState* c, struct ev_loop* loop, ev_io* w,
 
   switch (writeStatus) {
     case OK:
-      io_Verbose(c, "Successfully wrote %u bytes\n", wrote);
+      io_Verbose(c, "Successfully wrote %zu bytes\n", wrote);
       c->writeBufPos += wrote;
       c->t->writeBytes += wrote;
       if (c->writeBufPos == buf_Length(&(c->writeBuf))) {
@@ -247,7 +247,7 @@ static int singleRead(ConnectionState* c, struct ev_loop* loop, ev_io* w,
       io_Read(c, c->readBuf + c->readBufPos, len, &readCount);
 
   if (readStatus == OK) {
-    io_Verbose(c, "Successfully read %u bytes\n", readCount);
+    io_Verbose(c, "Successfully read %zu bytes\n", readCount);
     c->t->readBytes += readCount;
     // Parse the data we just read plus whatever was left from before
     const size_t parsedLen = readCount + c->readBufPos;
@@ -259,7 +259,7 @@ static int singleRead(ConnectionState* c, struct ev_loop* loop, ev_io* w,
 
     const size_t parsed = http_parser_execute(&(c->parser), &HttpParserSettings,
                                               c->readBuf, parsedLen);
-    io_Verbose(c, "Parsed %u\n", parsed);
+    io_Verbose(c, "Parsed %zu\n", parsed);
     if (c->parser.http_errno != 0) {
       // Invalid HTTP response. Complete with an error.
       io_Verbose(c, "Parsing error %i\n", c->parser.http_errno);

@@ -50,7 +50,7 @@ static unsigned int HeadersSize = 0;
 static unsigned int NumHeaders = 0;
 static int HostHeaderOverride = 0;
 
-static OAuthInfo* oauth = NULL;
+static OAuthInfo *oauth = NULL;
 
 #define OPTIONS "c:d:f:hk:t:u:vw:x:C:H:O:K:M:X:N:ST1W:"
 
@@ -233,7 +233,7 @@ static void waitAndReport(int duration, int warmup) {
 }
 
 static void processOAuth(char *arg) {
-  oauth = (OAuthInfo*)malloc(sizeof(OAuthInfo));
+  oauth = (OAuthInfo *)malloc(sizeof(OAuthInfo));
   char *last;
   oauth->consumerKey = strtok_r(arg, ":", &last);
   oauth->consumerSecret = strtok_r(NULL, ":", &last);
@@ -476,7 +476,7 @@ int main(int argc, char *const *argv) {
     }
 
     if (!JustOnce && (warmupTime > 0)) {
-      RecordStart(0);
+      RecordStart(1);
       waitAndReport(warmupTime, 1);
     }
 
