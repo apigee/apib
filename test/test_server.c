@@ -56,6 +56,7 @@ typedef struct {
   char* nextHeader;
   int shouldClose;
   int notAuthorized;
+  int sleepTime;
   http_parser parser;
   SSL* ssl;
 } RequestInfo;
@@ -209,6 +210,10 @@ static int parsedHeaderValue(http_parser* p, const char* buf, size_t len) {
              strncmp("Basic dGVzdDp2ZXJ5dmVyeXNlY3JldA==", buf, len)) {
     // Checked for the authorization "test:veryverysecret"
     i->notAuthorized = 1;
+  } else if (!strcasecmp("X-Sleep", i->nextHeader)) {
+    char* tmpSleep = strndup(buf, len);
+    i->sleepTime = atoi(tmpSleep);
+    free(tmpSleep);
   }
   free(i->nextHeader);
   return 0;
@@ -218,6 +223,10 @@ static void handleRequest(RequestInfo* i) {
   if (i->notAuthorized) {
     sendText(i, 401, "Not authorized", "Wrong password!\n");
     return;
+  }
+
+  if (i->sleepTime > 0) {
+    sleep(i->sleepTime);
   }
 
   if (!strcmp("/hello", i->path)) {
@@ -380,8 +389,7 @@ static void* acceptThread(void* a) {
       return NULL;
     }
 
-    RequestInfo* i = (RequestInfo*)malloc(sizeof(RequestInfo));
-    memset(i, 0, sizeof(RequestInfo));
+    RequestInfo* i = (RequestInfo*)calloc(1, sizeof(RequestInfo));
     i->server = s;
     i->fd = fd;
 

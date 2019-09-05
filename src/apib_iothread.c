@@ -66,8 +66,8 @@ void writeRequest(ConnectionState* c) {
     buf_Printf(&(c->writeBuf), "Content-Length: %lu\r\n", c->t->sendDataLen);
   }
   if (c->t->oauth != NULL) {
-    char* authHdr = oauth_MakeHeader(c->t->randState, c->url, "", c->t->httpVerb,
-                                     NULL, 0, c->t->oauth);
+    char* authHdr = oauth_MakeHeader(c->t->randState, c->url, "",
+                                     c->t->httpVerb, NULL, 0, c->t->oauth);
     buf_Append(&(c->writeBuf), authHdr);
     buf_Append(&(c->writeBuf), "\r\n");
     free(authHdr);
@@ -230,6 +230,13 @@ static void setNumConnections(IOThread* t, int newVal) {
   t->numConnections = newVal;
 }
 
+static void hardShutdown(struct ev_loop* loop, ev_timer* timer, int revents) {
+  assert(revents & EV_TIMER);
+  IOThread* t = (IOThread*)timer->data;
+  iothread_Verbose(t, "Going down for a hard shutdown\n");
+  ev_break(loop, EVBREAK_ALL);
+}
+
 static void processCommands(struct ev_loop* loop, ev_async* a, int revents) {
   assert(revents & EV_ASYNC);
   IOThread* t = (IOThread*)a->data;
@@ -241,6 +248,12 @@ static void processCommands(struct ev_loop* loop, ev_async* a, int revents) {
         case STOP:
           t->keepRunning = 0;
           // We added this extra ref before we called ev_run
+          ev_unref(t->loop);
+          // Set a timer that will fire only in case shutdown takes > 2 seconds
+          ev_timer_init(&(t->shutdownTimer), hardShutdown, cmd->stopTimeoutSecs,
+                        0.0);
+          t->shutdownTimer.data = t;
+          ev_timer_start(t->loop, &(t->shutdownTimer));
           ev_unref(t->loop);
           break;
         case SET_CONNECTIONS:
@@ -316,15 +329,26 @@ void iothread_Start(IOThread* t) {
   mandatoryAssert(err == 0);
 }
 
-void iothread_Stop(IOThread* t) {
-  iothread_Verbose(t, "Signalling to threads to stop running\n");
+void iothread_RequestStop(IOThread* t, int timeoutSecs) {
+  iothread_Verbose(
+      t, "Signalling to threads to stop running in less than %i seconds\n",
+      timeoutSecs);
   Command* cmd = (Command*)malloc(sizeof(Command));
   cmd->command = STOP;
+  cmd->stopTimeoutSecs = timeoutSecs;
   command_Add(&(t->commands), cmd);
   // Wake up the loop and cause the callback to be called.
   ev_async_send(t->loop, &(t->async));
+}
+
+void iothread_Join(IOThread* t) {
   void* ret;
   pthread_join(t->thread, &ret);
+}
+
+void iothread_Stop(IOThread* t) {
+  iothread_RequestStop(t, 1);
+  iothread_Join(t);
 }
 
 void iothread_SetNumConnections(IOThread* t, int newConnections) {

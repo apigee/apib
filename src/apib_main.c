@@ -487,11 +487,11 @@ int main(int argc, char *const *argv) {
     RecordStop();
     Running = 0;
 
-    /* Sometimes threads don't terminate. Sleep for two seconds,
-       then if a thread is stuck it won't affect the results much. */
-    /*apr_sleep(apr_time_from_sec(2));  */
     for (int i = 0; i < NumThreads; i++) {
-      iothread_Stop(&(threads[i]));
+      iothread_RequestStop(&(threads[i]), 2);
+    }
+    for (int i = 0; i < NumThreads; i++) {
+      iothread_Join(&(threads[i]));
     }
   } else {
     printUsage();

@@ -192,7 +192,7 @@ void RecordResult(int code, long long latency) {
   }
   if (latenciesCount == latenciesSize) {
     latenciesSize *= 2;
-    latencies = (long long*)malloc(sizeof(long long) * latenciesSize);
+    latencies = (long long*)realloc(latencies, sizeof(long long) * latenciesSize);
   }
   latencies[latenciesCount] = latency;
   latenciesCount++;

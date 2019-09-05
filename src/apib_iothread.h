@@ -40,6 +40,7 @@ typedef enum { STOP, SET_CONNECTIONS } ThreadCmd;
 typedef struct threadCommand {
   ThreadCmd command;
   int newNumConnections;
+  int stopTimeoutSecs;
   struct threadCommand* next;
 } Command;
 
@@ -82,6 +83,7 @@ typedef struct {
   struct ev_loop* loop;
   ev_async async;
   CommandQueue commands;
+  ev_timer shutdownTimer;
 } IOThread;
 
 #define READ_BUF_SIZE 1024
@@ -115,7 +117,14 @@ typedef struct connState {
 // running until "iothread_Stop" is called.
 extern void iothread_Start(IOThread* t);
 
-// Stop the thread. It will block until all I/O operations are complete.
+// Stop the thread. It will signal for a stop, and then stop
+// more forcefully after "timeoutSecs" seconds
+extern void iothread_RequestStop(IOThread* t, int timeoutSecs);
+
+// Wait for the thread to exit cleanly.
+extern void iothread_Join(IOThread* t);
+
+// Convenience that stops and joins all at once with a one-second timeout
 extern void iothread_Stop(IOThread* t);
 
 // Change the number of connections. This will happen as part of normal
