@@ -120,11 +120,11 @@ TEST(URL, ParseGood1) {
   const URLInfo* r2 = url_GetNext(nullptr);
   EXPECT_EQ(0, r2->isSsl);
   EXPECT_EQ(8080, r2->port);
-  EXPECT_STREQ("example.net:8080", r1->hostHeader);
-  EXPECT_STREQ("example.net", r1->hostName);
-  EXPECT_STREQ("/?q=1", r1->path);
-  EXPECT_STREQ("/", r1->pathOnly);
-  EXPECT_STREQ("q=1", r1->query);
+  EXPECT_STREQ("example.net:8080", r2->hostHeader);
+  EXPECT_STREQ("example.net", r2->hostName);
+  EXPECT_STREQ("/?q=1", r2->path);
+  EXPECT_STREQ("/", r2->pathOnly);
+  EXPECT_STREQ("q=1", r2->query);
   url_Reset();
 }
 

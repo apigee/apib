@@ -2,13 +2,13 @@ cc_library(
     name = "testserver_lib",
     srcs = ["test_server.c"],
     hdrs = ["test_server.h"],
+    copts = [
+        "-std=gnu99",
+    ],
     deps = [
         "//src:common",
         "@boringssl//:ssl",
         "@httpparser",
-    ],
-    copts = [
-        "-std=gnu99",
     ],
 )
 
@@ -28,12 +28,12 @@ cc_library(
     hdrs = [
         "test_keygen.h",
     ],
+    copts = [
+        "-std=gnu99",
+    ],
     deps = [
         "//src:common",
         "@boringssl//:ssl",
-    ],
-    copts = [
-        "-std=gnu99",
     ],
 )
 
@@ -43,7 +43,17 @@ cc_binary(
         "test_keygen_main.c",
     ],
     deps = [
-        ":keygen_lib"
+        ":keygen_lib",
+    ],
+)
+
+cc_test(
+    name = "commandqueue",
+    srcs = ["commandqueue_test.cc"],
+    deps = [
+        "//src:io",
+        "@gtest",
+        "@gtest//:gtest_main",
     ],
 )
 
@@ -60,6 +70,16 @@ cc_test(
 cc_test(
     name = "lines",
     srcs = ["lines_test.cc"],
+    deps = [
+        "//src:common",
+        "@gtest",
+        "@gtest//:gtest_main",
+    ],
+)
+
+cc_test(
+    name = "rand",
+    srcs = ["rand_test.cc"],
     deps = [
         "//src:common",
         "@gtest",
@@ -102,7 +122,7 @@ cc_test(
     deps = [
         "//src:common",
         "@gtest",
-    ]
+    ],
 )
 
 cc_test(
@@ -112,7 +132,7 @@ cc_test(
         "//src:common",
         "@gtest",
         "@gtest//:gtest_main",
-    ]
+    ],
 )
 
 cc_test(
@@ -121,7 +141,7 @@ cc_test(
     deps = [
         "//src:io",
         "@gtest",
-    ]
+    ],
 )
 
 cc_test(
@@ -131,7 +151,7 @@ cc_test(
         ":testserver_lib",
         "//src:io",
         "@gtest",
-    ]
+    ],
 )
 
 cc_test(
@@ -142,7 +162,7 @@ cc_test(
         ":testserver_lib",
         "//src:io",
         "@gtest",
-    ]
+    ],
 )
 
 cc_test(
@@ -151,5 +171,5 @@ cc_test(
     deps = [
         "//src:mon_lib",
         "@gtest",
-    ]
+    ],
 )

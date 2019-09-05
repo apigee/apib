@@ -35,17 +35,10 @@ http_parser_settings HttpParserSettings;
 
 static void recycle(ConnectionState* c, int closeConn);
 
-static void printVerbose(const char* format, va_list args) {
-  vprintf(format, args);
-}
-
-void verbose(IOThread* t, const char* format, ...) {
-  if (t->verbose) {
-    va_list args;
-    va_start(args, format);
-    printVerbose(format, args);
-    va_end(args);
-  }
+static void freeConnectionState(ConnectionState* c) {
+  buf_Free(&(c->writeBuf));
+  free(c->readBuf);
+  free(c);
 }
 
 static int httpComplete(http_parser* p) {
@@ -73,7 +66,7 @@ void writeRequest(ConnectionState* c) {
     buf_Printf(&(c->writeBuf), "Content-Length: %lu\r\n", c->t->sendDataLen);
   }
   if (c->t->oauth != NULL) {
-    char* authHdr = oauth_MakeHeader(c->t->rand, c->url, "", c->t->httpVerb,
+    char* authHdr = oauth_MakeHeader(c->t->randState, c->url, "", c->t->httpVerb,
                                      NULL, 0, c->t->oauth);
     buf_Append(&(c->writeBuf), authHdr);
     buf_Append(&(c->writeBuf), "\r\n");
@@ -109,7 +102,7 @@ static void connectAndSend(ConnectionState* c) {
 }
 
 static void thinkingDone(struct ev_loop* loop, ev_timer* t, int revents) {
-  assert(revents | EV_TIMER);
+  assert(revents & EV_TIMER);
   ConnectionState* c = (ConnectionState*)t->data;
   io_Verbose(c, "Think time over\n");
   connectAndSend(c);
@@ -126,6 +119,8 @@ static void addThinkTime(ConnectionState* c) {
 static void recycle(ConnectionState* c, int closeConn) {
   if (closeConn || c->t->noKeepAlive || !c->t->keepRunning) {
     c->needsOpen = 1;
+    // Close is async, especially for TLS. So we will
+    // reconnect later...
     io_Close(c);
     return;
   }
@@ -139,15 +134,16 @@ static void recycle(ConnectionState* c, int closeConn) {
 }
 
 static int startConnect(ConnectionState* c) {
-  c->url = url_GetNext(c->t->rand);
+  c->url = url_GetNext(c->t->randState);
   c->needsOpen = 1;
   connectAndSend(c);
   return 0;
 }
 
 void io_CloseDone(ConnectionState* c) {
-  if (!c->t->keepRunning) {
-    io_Verbose(c, "Connection closed and done\n");
+  if (!c->keepRunning || !c->t->keepRunning) {
+    io_Verbose(c, "Connection %i closed and done\n", c->index);
+    freeConnectionState(c);
     return;
   }
 
@@ -189,7 +185,7 @@ void io_ReadDone(ConnectionState* c, int err) {
     recycle(c, 1);
   } else {
     const URLInfo* oldUrl = c->url;
-    c->url = url_GetNext(c->t->rand);
+    c->url = url_GetNext(c->t->randState);
     if (!url_IsSameServer(oldUrl, c->url, c->t->index)) {
       io_Verbose(c, "Switching to a different server\n");
       recycle(c, 1);
@@ -199,55 +195,113 @@ void io_ReadDone(ConnectionState* c, int err) {
   }
 }
 
+static ConnectionState* initializeConnection(IOThread* t, int index) {
+  ConnectionState* c = (ConnectionState*)calloc(1, sizeof(ConnectionState));
+  c->index = index;
+  c->keepRunning = 1;
+  c->t = t;
+  buf_New(&(c->writeBuf), WRITE_BUF_SIZE);
+  c->readBuf = (char*)malloc(READ_BUF_SIZE);
+  return c;
+}
+
+static void setNumConnections(IOThread* t, int newVal) {
+  iothread_Verbose(t, "Current connections = %i. New connections = %i\n",
+                   t->numConnections, newVal);
+  if (newVal > t->numConnections) {
+    t->connections = (ConnectionState**)realloc(
+        t->connections, sizeof(ConnectionState*) * newVal);
+    for (int i = t->numConnections; i < newVal; i++) {
+      iothread_Verbose(t, "Starting new connection %i\n", i);
+      ConnectionState* c = initializeConnection(t, i);
+      t->connections[i] = c;
+      startConnect(c);
+    }
+
+  } else if (newVal < t->numConnections) {
+    for (int i = newVal; i < t->numConnections; i++) {
+      iothread_Verbose(t, "Nicely asking connection %i to terminate\n", i);
+      t->connections[i]->keepRunning = 0;
+    }
+    t->connections = (ConnectionState**)realloc(
+        t->connections, sizeof(ConnectionState*) * newVal);
+  }
+
+  t->numConnections = newVal;
+}
+
+static void processCommands(struct ev_loop* loop, ev_async* a, int revents) {
+  assert(revents & EV_ASYNC);
+  IOThread* t = (IOThread*)a->data;
+  Command* cmd;
+  do {
+    cmd = command_Pop(&(t->commands));
+    if (cmd != NULL) {
+      switch (cmd->command) {
+        case STOP:
+          t->keepRunning = 0;
+          // We added this extra ref before we called ev_run
+          ev_unref(t->loop);
+          break;
+        case SET_CONNECTIONS:
+          setNumConnections(t, cmd->newNumConnections);
+          break;
+        default:
+          assert(0);
+      }
+      free(cmd);
+    }
+  } while (cmd != NULL);
+}
+
 static void* ioThread(void* a) {
   IOThread* t = (IOThread*)a;
-  assert(t->numConnections > 0);
+  assert(t->numConnections >= 0);
   assert(t->httpVerb != NULL);
   t->readCount = 0;
   t->writeCount = 0;
   t->readBytes = 0;
   t->writeBytes = 0;
+  t->randState = apib_InitRand();
+  command_Init(&(t->commands));
 
-  ConnectionState* conns =
-      (ConnectionState*)calloc(t->numConnections, sizeof(ConnectionState));
-  t->rand = apib_InitRand();
-  verbose(t, "Starting new event loop %i for %i connection\n", t->index,
-          t->numConnections);
+  iothread_Verbose(t, "Starting new event loop %i for %i connection\n",
+                   t->index, t->numConnections);
 
   t->loop = ev_loop_new(EVFLAG_AUTO);
-  verbose(t, "Backend %i\n", ev_backend(t->loop));
+  iothread_Verbose(t, "libev backend = %i\n", ev_backend(t->loop));
+  // Prepare to receive async events, and be sure that we don't block if there
+  // are none.
+  ev_async_init(&(t->async), processCommands);
+  t->async.data = t;
+  ev_async_start(t->loop, &(t->async));
+  ev_unref(t->loop);
 
+  t->connections =
+      (ConnectionState**)malloc(sizeof(ConnectionState*) * t->numConnections);
   for (int i = 0; i < t->numConnections; i++) {
     // First-time initialization of new connection
-    ConnectionState* s = &(conns[i]);
-    s->t = t;
-    conns[i].url = NULL;
-    buf_New(&(conns[i].writeBuf), WRITE_BUF_SIZE);
-    s->writeBufPos = 0;
-    s->readBuf = (char*)malloc(READ_BUF_SIZE);
-    s->readBufPos = 0;
-
-    int err = startConnect(&(conns[i]));
+    ConnectionState* c = initializeConnection(t, i);
+    t->connections[i] = c;
+    int err = startConnect(c);
     if (err != 0) {
       perror("Error creating non-blocking socket");
       goto finish;
     }
   }
 
+  // Add one more ref count so the loop will stay open even if zero connections
+  ev_ref(t->loop);
   int ret = ev_run(t->loop, 0);
-  verbose(t, "ev_run finished: %i\n", ret);
+  iothread_Verbose(t, "ev_run finished: %i\n", ret);
   RecordByteCounts(t->writeBytes, t->readBytes);
 
 finish:
-  verbose(t, "Cleaning up event loop %i\n", t->index);
-  for (int i = 0; i < t->numConnections; i++) {
-    ConnectionState* s = &(conns[i]);
-    buf_Free(&(s->writeBuf));
-    free(s->readBuf);
-  }
-  free(conns);
-  apib_FreeRand(t->rand);
+  iothread_Verbose(t, "Cleaning up event loop %i\n", t->index);
+  free(t->connections);
+  apib_FreeRand(t->randState);
   ev_loop_destroy(t->loop);
+  command_Free(&(t->commands));
   return NULL;
 }
 
@@ -263,8 +317,21 @@ void iothread_Start(IOThread* t) {
 }
 
 void iothread_Stop(IOThread* t) {
-  verbose(t, "Signalling to threads to stop running\n");
-  t->keepRunning = 0;
+  iothread_Verbose(t, "Signalling to threads to stop running\n");
+  Command* cmd = (Command*)malloc(sizeof(Command));
+  cmd->command = STOP;
+  command_Add(&(t->commands), cmd);
+  // Wake up the loop and cause the callback to be called.
+  ev_async_send(t->loop, &(t->async));
   void* ret;
   pthread_join(t->thread, &ret);
+}
+
+void iothread_SetNumConnections(IOThread* t, int newConnections) {
+  Command* cmd = (Command*)malloc(sizeof(Command));
+  cmd->command = SET_CONNECTIONS;
+  cmd->newNumConnections = newConnections;
+  command_Add(&(t->commands), cmd);
+  // Wake up the loop and cause the callback to be called.
+  ev_async_send(t->loop, &(t->async));
 }

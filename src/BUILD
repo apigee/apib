@@ -13,6 +13,7 @@ cc_library(
         "apib_lines.c",
         "apib_message.c",
         "apib_priorityq.c",
+        "apib_rand.c",
         "apib_reporting.c",
         "apib_time.c",
         "apib_url.c",
@@ -20,11 +21,11 @@ cc_library(
     ] + select({
         "apple": [
             "apib_cpu_generic.c",
-            "apib_rand.c",
+           # "apib_rand.c",
         ],
         "//conditions:default": [
             "apib_cpu_proc.c",
-            "apib_rand_48.c",
+            # "apib_rand_48.c",
         ],
     }),
     hdrs = [
@@ -49,6 +50,7 @@ cc_library(
 cc_library(
     name = "io",
     srcs = [
+        "apib_commandqueue.c",
         "apib_io_basic.c",
         "apib_io_socket.c",
         "apib_iothread.c",

@@ -201,7 +201,9 @@ static int singleWrite(ConnectionState* c, struct ev_loop* loop, ev_io* w,
       if (c->backwardsIo) {
         io_Verbose(c, "Restoring I/O direction\n");
         c->backwardsIo = 0;
+        ev_io_stop(c->t->loop, &(c->io));
         ev_io_set(&(c->io), c->fd, EV_WRITE);
+        ev_io_start(c->t->loop, &(c->io));
       }
       return 0;
     case NEED_READ:

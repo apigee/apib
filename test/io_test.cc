@@ -18,19 +18,18 @@ limitations under the License.
 #include <string.h>
 #include <unistd.h>
 
+#include "gtest/gtest.h"
 #include "src/apib_iothread.h"
-#include "src/apib_url.h"
 #include "src/apib_message.h"
 #include "src/apib_reporting.h"
+#include "src/apib_url.h"
 #include "test/test_server.h"
-
-#include "gtest/gtest.h"
 
 static int testServerPort;
 static TestServer* testServer;
 
 class IOTest : public ::testing::Test {
-  protected:
+ protected:
   IOTest() {
     RecordInit(NULL, NULL);
     RecordStart(1);
@@ -40,7 +39,7 @@ class IOTest : public ::testing::Test {
     // The "url_" family of functions use static data, so reset every time.
     url_Reset();
     EndReporting();
-  } 
+  }
 };
 
 static void compareReporting() {
@@ -64,10 +63,11 @@ TEST_F(IOTest, OneThread) {
   sprintf(url, "http://localhost:%i/hello", testServerPort);
   url_InitOne(url);
 
+  //t = (IOThread*)calloc(1, sizeof(IOThread));
   IOThread t;
   memset(&t, 0, sizeof(IOThread));
   t.numConnections = 1;
-  //t.verbose = 1;
+  // t.verbose = 1;
   t.httpVerb = strdup("GET");
 
   iothread_Start(&t);
@@ -87,7 +87,7 @@ TEST_F(IOTest, OneThreadNoKeepAlive) {
   IOThread t;
   memset(&t, 0, sizeof(IOThread));
   t.numConnections = 1;
-  //t.verbose = 1;
+  // t.verbose = 1;
   t.httpVerb = strdup("GET");
   t.noKeepAlive = 1;
 
@@ -112,7 +112,7 @@ TEST_F(IOTest, OneThreadThinkTime) {
   IOThread t;
   memset(&t, 0, sizeof(IOThread));
   t.numConnections = 1;
-  //t.verbose = 1;
+  // t.verbose = 1;
   t.httpVerb = strdup("GET");
   t.thinkTime = 100;
 
@@ -133,7 +133,7 @@ TEST_F(IOTest, OneThreadThinkTimeNoKeepAlive) {
   IOThread t;
   memset(&t, 0, sizeof(IOThread));
   t.numConnections = 1;
-  //t.verbose = 1;
+  // t.verbose = 1;
   t.httpVerb = strdup("GET");
   t.thinkTime = 100;
   t.noKeepAlive = 1;
@@ -155,7 +155,7 @@ TEST_F(IOTest, OneThreadLarge) {
   IOThread t;
   memset(&t, 0, sizeof(IOThread));
   t.numConnections = 1;
-  //t.verbose = 1;
+  // t.verbose = 1;
   t.httpVerb = strdup("GET");
 
   iothread_Start(&t);
@@ -175,11 +175,59 @@ TEST_F(IOTest, MoreConnections) {
   IOThread t;
   memset(&t, 0, sizeof(IOThread));
   t.numConnections = 10;
-  //t.verbose = 1;
+  // t.verbose = 1;
   t.httpVerb = strdup("GET");
 
   iothread_Start(&t);
   sleep(1);
+  iothread_Stop(&t);
+  RecordStop();
+
+  compareReporting();
+  free(t.httpVerb);
+}
+
+TEST_F(IOTest, ResizeCommand) {
+  char url[128];
+  sprintf(url, "http://localhost:%i/hello", testServerPort);
+  url_InitOne(url);
+
+  IOThread t;
+  memset(&t, 0, sizeof(IOThread));
+  t.numConnections = 1;
+  // t.verbose = 1;
+  t.httpVerb = strdup("GET");
+
+  iothread_Start(&t);
+  usleep(250000);
+  iothread_SetNumConnections(&t, 5);
+  usleep(250000);
+  iothread_SetNumConnections(&t, 2);
+  iothread_SetNumConnections(&t, 3);
+  iothread_SetNumConnections(&t, 1);
+  usleep(250000);
+  iothread_Stop(&t);
+  RecordStop();
+
+  compareReporting();
+  free(t.httpVerb);
+}
+
+TEST_F(IOTest, ResizeFromZero) {
+  char url[128];
+  sprintf(url, "http://localhost:%i/hello", testServerPort);
+  url_InitOne(url);
+
+  IOThread t;
+  memset(&t, 0, sizeof(IOThread));
+  t.numConnections = 0;
+  // t.verbose = 1;
+  t.httpVerb = strdup("GET");
+
+  iothread_Start(&t);
+  usleep(250000);
+  iothread_SetNumConnections(&t, 5);
+  usleep(250000);
   iothread_Stop(&t);
   RecordStop();
 
@@ -197,7 +245,7 @@ TEST_F(IOTest, OneThreadBigPost) {
   IOThread t;
   memset(&t, 0, sizeof(IOThread));
   t.numConnections = 1;
-  //t.verbose = 1;
+  // t.verbose = 1;
   t.httpVerb = strdup("POST");
   t.sendData = (char*)malloc(POST_LEN);
   t.sendDataLen = POST_LEN;
@@ -223,7 +271,7 @@ TEST_F(IOTest, OneThreadHeaders) {
   IOThread t;
   memset(&t, 0, sizeof(IOThread));
   t.numConnections = 1;
-  //t.verbose = 1;
+  // t.verbose = 1;
   t.httpVerb = strdup("GET");
   t.numHeaders = 1;
   t.headers = (char**)malloc(sizeof(char*));
