@@ -7,6 +7,13 @@ config_setting(
     ],
 )
 
+config_setting(
+    name = "bsd",
+    constraint_values = [
+        "@platforms//os:freebsd",
+    ],
+)
+
 cc_library(
     name = "common",
     srcs = [
@@ -21,11 +28,12 @@ cc_library(
     ] + select({
         "apple": [
             "apib_cpu_generic.c",
-           # "apib_rand.c",
+        ],
+        "bsd": [
+            "apib_cpu_bsd.c",
         ],
         "//conditions:default": [
             "apib_cpu_proc.c",
-            # "apib_rand_48.c",
         ],
     }),
     hdrs = [
@@ -41,6 +49,9 @@ cc_library(
     ],
     copts = [
         "-std=gnu99",
+    ],
+    linkopts = [
+    	"-lm",
     ],
     deps = [
         "@httpparser",

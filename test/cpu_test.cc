@@ -28,14 +28,14 @@ TEST(CPU, Usage) {
   CPUUsage cpu;
 
   cpu_GetUsage(&cpu);
-  EXPECT_LT(0, cpu.idle);
-  EXPECT_LT(0, cpu.nonIdle);
+  EXPECT_LE(0, cpu.idle);
+  EXPECT_LE(0, cpu.nonIdle);
 
   sleep(1);
 
   double newUsage = cpu_GetInterval(&cpu);
   printf("Last second: %lf\n", newUsage);
-  EXPECT_LT(0.0, newUsage);
+  EXPECT_LE(0.0, newUsage);
   EXPECT_GE(1.0, newUsage);
 }
 
@@ -43,8 +43,8 @@ TEST(CPU, MultiUsage) {
   CPUUsage cpu;
 
   cpu_GetUsage(&cpu);
-  EXPECT_LT(0, cpu.idle);
-  EXPECT_LT(0, cpu.nonIdle);
+  EXPECT_LE(0, cpu.idle);
+  EXPECT_LE(0, cpu.nonIdle);
 
   for (int i = 0; i < 10; i++) {
     double newUsage = cpu_GetInterval(&cpu);

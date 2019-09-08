@@ -15,6 +15,7 @@ limitations under the License.
 */
 
 #include <memory>
+#include <netinet/in.h>
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netdb.h>

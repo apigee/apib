@@ -137,18 +137,6 @@ double cpu_GetMemoryUsage() {
   return (double)(totalMem - (freeMem + buffers + cache)) / (double)totalMem;
 }
 
-#ifdef __FreeBSD__
-
-static int getTicks(CPUUsage* cpu, apr_pool_t* pool) {
-  struct tms ticks;
-  cpu->idle = times(&ticks);
-  if (cpu->idle == -1) return 0;
-  cpu->nonIdle = ticks.tms_utime + ticks.tms_stime;
-  return 1;
-}
-
-#else
-
 static int getTicks(CPUUsage* cpu) {
   FILE* stat = fopen("/proc/stat", "r");
   if (stat == NULL) {
@@ -198,49 +186,6 @@ static int getTicks(CPUUsage* cpu) {
 
   return 0;
 }
-
-#endif
-
-#ifdef __FreeBSD__
-
-double cpu_GetMemoryUsage(apr_pool_t* pool) {
-  long totalMem = 0;
-  long freeMem = 0;
-  long buffers = 0;
-  long cache = 0;
-
-  /* Let's work with kilobytes. */
-  long pagesize = sysconf(_SC_PAGESIZE) / 1024;
-  totalMem = sysconf(_SC_PHYS_PAGES) * pagesize;
-
-  size_t len;
-
-  unsigned free;
-  len = sizeof(free);
-  sysctlbyname("vm.stats.vm.v_free_count", &free, &len, NULL, 0);
-  freeMem = free * pagesize;
-
-  /* `buffers' is of expected type (long), no need for another variable. */
-  len = sizeof(buffers);
-  sysctlbyname("vfs.bufspace", &buffers, &len, NULL, 0);
-  buffers /= 1024;
-
-  /* `cache' is number of inactive pages since r309017. */
-  unsigned inact;
-  len = sizeof(inact);
-  sysctlbyname("vm.stats.vm.v_inactive_count", &inact, &len, NULL, 0);
-  cache = inact * pagesize;
-
-  if ((totalMem <= 0) || (freeMem <= 0)) {
-    return 0.0;
-  }
-
-  return (double)(totalMem - (freeMem + buffers + cache)) / (double)totalMem;
-}
-
-#else
-
-#endif
 
 void cpu_GetUsage(CPUUsage* cpu) {
   getTicks(cpu);

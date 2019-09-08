@@ -19,6 +19,7 @@ limitations under the License.
 #include <arpa/inet.h>
 #include <assert.h>
 #include <netdb.h>
+#include <netinet/in.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -42,6 +43,7 @@ static int initHost(const char* hostname, URLInfo* u) {
   struct addrinfo* results;
 
   // For now, look up only IP V4 addresses
+  memset(&hints, 0, sizeof(struct addrinfo));
   hints.ai_family = AF_INET;
   hints.ai_socktype = SOCK_STREAM;
   hints.ai_protocol = 0;
