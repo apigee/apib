@@ -19,7 +19,6 @@ cc_library(
     srcs = [
         "apib_lines.c",
         "apib_message.c",
-        "apib_priorityq.c",
         "apib_rand.c",
         "apib_reporting.c",
         "apib_time.c",
@@ -40,7 +39,6 @@ cc_library(
         "apib_cpu.h",
         "apib_lines.h",
         "apib_message.h",
-        "apib_priorityq.h",
         "apib_rand.h",
         "apib_reporting.h",
         "apib_time.h",
