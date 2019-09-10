@@ -36,7 +36,6 @@ limitations under the License.
 
 #define BACKLOG 32
 #define READ_BUF 1024
-#define LOCALHOST "127.0.0.1"
 
 static http_parser_settings ParserSettings;
 
@@ -418,7 +417,7 @@ static int initializeSSL(TestServer* s, const char* keyFile,
   return 0;
 }
 
-int testserver_Start(TestServer* s, int port, const char* keyFile,
+int testserver_Start(TestServer* s, const char* address, int port, const char* keyFile,
                      const char* certFile) {
   int err = regcomp(&sizeParameter, SIZE_PARAMETER_REGEX, REG_EXTENDED);
   assert(err == 0);
@@ -450,7 +449,7 @@ int testserver_Start(TestServer* s, int port, const char* keyFile,
   addr.sin_port = htons(port);
   // Listen on localhost to avoid weird firewall stuff on Macs
   // We may have to revisit if we test on platforms with a different address.
-  addr.sin_addr.s_addr = inet_addr(LOCALHOST);
+  addr.sin_addr.s_addr = inet_addr(address);
 
   err = bind(s->listenfd, (const struct sockaddr*)&addr,
              sizeof(struct sockaddr_in));

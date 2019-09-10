@@ -48,8 +48,8 @@ typedef struct {
 /*
 Start a simple and dumb thread-per-socket HTTP server on a thread.
 */
-extern int testserver_Start(TestServer* s, int port, const char* keyFile,
-                            const char* certFile);
+extern int testserver_Start(TestServer* s, const char* address, int port,
+                            const char* keyFile, const char* certFile);
 
 /*
 Get the port it's listening on.

@@ -37,7 +37,7 @@ int main(int argc, char** argv) {
   }
 
   TestServer svr;
-  int err = testserver_Start(&svr, port, keyFile, certFile);
+  int err = testserver_Start(&svr, "0.0.0.0", port, keyFile, certFile);
   if (err != 0) {
     return 2;
   }
