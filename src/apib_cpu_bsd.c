@@ -15,22 +15,17 @@ limitations under the License.
 */
 
 #include <string.h>
+#include <sys/sysctl.h>
 #include <sys/times.h>
 #include <sys/types.h>
-#include <sys/sysctl.h>
 #include <unistd.h>
 
 #include "src/apib_cpu.h"
 #include "src/apib_time.h"
 
+int cpu_Init() { return 0; }
 
-int cpu_Init() {
-  return 0;
-}
-
-int cpu_Count() {
-  return (int)sysconf(_SC_NPROCESSORS_ONLN);
-}
+int cpu_Count() { return (int)sysconf(_SC_NPROCESSORS_ONLN); }
 
 static int getTicks(CPUUsage* cpu) {
   struct tms ticks;

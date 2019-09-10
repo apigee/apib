@@ -47,6 +47,8 @@ static char *Verb = NULL;
 static char *FileName = NULL;
 static char *ContentType = NULL;
 static char *SslCipher = NULL;
+static int SslVerify = 0;
+static char *SslCertificate = NULL;
 static int Verbose = 0;
 static int ThinkTime = 0;
 
@@ -57,7 +59,7 @@ static int HostHeaderOverride = 0;
 
 static OAuthInfo *OAuth = NULL;
 
-#define OPTIONS "c:d:f:hk:t:u:vw:x:C:H:O:K:M:X:N:ST1W:"
+#define OPTIONS "c:d:f:hk:t:u:vw:x:C:F:H:O:K:M:X:N:STVW:1"
 
 static const struct option Options[] = {
     {"concurrency", required_argument, NULL, 'c'},
@@ -71,6 +73,7 @@ static const struct option Options[] = {
     {"warmup", required_argument, NULL, 'w'},
     {"method", required_argument, NULL, 'x'},
     {"cipherlist", required_argument, NULL, 'C'},
+    {"certificate", required_argument, NULL, 'F'},
     {"header", required_argument, NULL, 'H'},
     {"oauth", required_argument, NULL, 'O'},
     {"iothreads", required_argument, NULL, 'K'},
@@ -79,6 +82,7 @@ static const struct option Options[] = {
     {"name", required_argument, NULL, 'N'},
     {"csv-output", no_argument, NULL, 'S'},
     {"header-line", no_argument, NULL, 'T'},
+    {"verify", no_argument, NULL, 'V'},
     {"one", no_argument, NULL, '1'},
     {"think-time", required_argument, NULL, 'W'}};
 
@@ -97,6 +101,7 @@ static const struct option Options[] = {
   "-w --warmup             Warm-up duration, in seconds (default 0)\n"         \
   "-x --method             HTTP request method (default GET)\n"                \
   "-C --cipherlist         Cipher list offered to server for HTTPS\n"          \
+  "-F --certificate        PEM file containing CA certificates to trust\n"     \
   "-H --header             HTTP header line in Name: Value format\n"           \
   "-K --iothreads          Number of I/O threads to spawn\n"                   \
   "       default == number of CPU cores\n"                                    \
@@ -105,6 +110,7 @@ static const struct option Options[] = {
   "       in format consumerkey:secret:token:secret\n"                         \
   "-S --csv-output         Output all test results in a single CSV line\n"     \
   "-T --header-line        Do not run, but output a single CSV header line\n"  \
+  "-V --verify             Verify TLS peer\n"                                  \
   "-W --think-time         Think time to wait in between requests\n"           \
   "        in milliseconds\n"                                                  \
   "-M --monitor            Host name and port number of apibmon\n"             \
@@ -177,6 +183,16 @@ static int createSslContext(IOThread *t) {
   t->sslCtx = SSL_CTX_new(TLS_client_method());
   SSL_CTX_set_mode(t->sslCtx, SSL_MODE_ENABLE_PARTIAL_WRITE);
   SSL_CTX_set_default_verify_paths(t->sslCtx);
+  if (SslVerify) {
+    SSL_CTX_set_verify(t->sslCtx, SSL_VERIFY_PEER, NULL);
+  }
+  if (SslCertificate != NULL) {
+    int err = SSL_CTX_load_verify_locations(t->sslCtx, SslCertificate, NULL);
+    if (err != 1) {
+      fprintf(stderr, "Could not load CA certificates from %s\n", SslCertificate);
+      return -2;
+    }
+  }
   if (t->verbose) {
     SSL_CTX_set_info_callback(t->sslCtx, sslInfoCallback);
   }
@@ -278,7 +294,7 @@ static void processBasic(const char *arg) {
   addHeader(hdr);
 }
 
-static int initializeThread(int ix, IOThread* t) {
+static int initializeThread(int ix, IOThread *t) {
   int numConn = NumConnections / NumThreads;
   if (ix < (NumConnections % NumThreads)) {
     numConn++;
@@ -372,6 +388,9 @@ int main(int argc, char *const *argv) {
       case 'C':
         SslCipher = optarg;
         break;
+      case 'F':
+        SslCertificate = optarg;
+        break;
       case 'H':
         addHeader(optarg);
         break;
@@ -396,6 +415,9 @@ int main(int argc, char *const *argv) {
       case 'T':
         PrintReportingHeader(stdout);
         return 0;
+        break;
+      case 'V':
+        SslVerify = 1;
         break;
       case 'W':
         ThinkTime = atoi(optarg);
@@ -468,7 +490,7 @@ int main(int argc, char *const *argv) {
       IOThread thread;
       int err = initializeThread(0, &thread);
       if (err != 0) {
-	goto finished;
+        goto finished;
       }
       RecordStart(1);
       iothread_Start(&thread);
@@ -476,28 +498,28 @@ int main(int argc, char *const *argv) {
       RecordStop();
 
     } else {
-      IOThread* threads = (IOThread *)malloc(sizeof(IOThread) * NumThreads);
+      IOThread *threads = (IOThread *)malloc(sizeof(IOThread) * NumThreads);
       for (int i = 0; i < NumThreads; i++) {
-	int err = initializeThread(i, &(threads[i]));
-	if (err != 0) {
-	  goto finished;
-	}
-	iothread_Start(&(threads[i]));
+        int err = initializeThread(i, &(threads[i]));
+        if (err != 0) {
+          goto finished;
+        }
+        iothread_Start(&(threads[i]));
       }
 
       if (warmupTime > 0) {
-	RecordStart(1);
-	waitAndReport(warmupTime, 1);
+        RecordStart(1);
+        waitAndReport(warmupTime, 1);
       }
       RecordStart(1);
       waitAndReport(duration, 0);
       RecordStop();
 
       for (int i = 0; (i < NumThreads); i++) {
-	iothread_RequestStop(&(threads[i]), 2);
+        iothread_RequestStop(&(threads[i]), 2);
       }
       for (int i = 0; i < NumThreads; i++) {
-	iothread_Join(&(threads[i]));
+        iothread_Join(&(threads[i]));
       }
       free(threads);
     }
