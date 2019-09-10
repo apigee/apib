@@ -37,20 +37,25 @@ limitations under the License.
 #define KEEP_ALIVE_NEVER 0
 
 /* Globals */
-static volatile int Running;
 static int ShortOutput;
 static char *RunName;
 static int NumConnections;
 static int NumThreads;
 static int JustOnce = 0;
 static int KeepAlive;
+static char *Verb = NULL;
+static char *FileName = NULL;
+static char *ContentType = NULL;
+static char *SslCipher = NULL;
+static int Verbose = 0;
+static int ThinkTime = 0;
 
 static char **Headers = NULL;
 static unsigned int HeadersSize = 0;
 static unsigned int NumHeaders = 0;
 static int HostHeaderOverride = 0;
 
-static OAuthInfo *oauth = NULL;
+static OAuthInfo *OAuth = NULL;
 
 #define OPTIONS "c:d:f:hk:t:u:vw:x:C:H:O:K:M:X:N:ST1W:"
 
@@ -233,12 +238,12 @@ static void waitAndReport(int duration, int warmup) {
 }
 
 static void processOAuth(char *arg) {
-  oauth = (OAuthInfo *)malloc(sizeof(OAuthInfo));
+  OAuth = (OAuthInfo *)malloc(sizeof(OAuthInfo));
   char *last;
-  oauth->consumerKey = strtok_r(arg, ":", &last);
-  oauth->consumerSecret = strtok_r(NULL, ":", &last);
-  oauth->accessToken = strtok_r(NULL, ":", &last);
-  oauth->tokenSecret = strtok_r(NULL, ":", &last);
+  OAuth->consumerKey = strtok_r(arg, ":", &last);
+  OAuth->consumerSecret = strtok_r(NULL, ":", &last);
+  OAuth->accessToken = strtok_r(NULL, ":", &last);
+  OAuth->tokenSecret = strtok_r(NULL, ":", &last);
 }
 
 static void addHeader(char *val) {
@@ -273,20 +278,54 @@ static void processBasic(const char *arg) {
   addHeader(hdr);
 }
 
+static int initializeThread(int ix, IOThread* t) {
+  int numConn = NumConnections / NumThreads;
+  if (ix < (NumConnections % NumThreads)) {
+    numConn++;
+  }
+
+  if (FileName != NULL) {
+    if (readFile(FileName, t) != 0) {
+      return 3;
+    }
+  } else {
+    t->sendData = NULL;
+    t->sendDataLen = 0;
+  }
+
+  if (Verb == NULL) {
+    if (FileName == NULL) {
+      t->httpVerb = "GET";
+    } else {
+      t->httpVerb = "POST";
+    }
+  } else {
+    t->httpVerb = Verb;
+  }
+
+  t->index = ix;
+  t->keepRunning = (JustOnce ? -1 : 1);
+  t->numConnections = numConn;
+  t->verbose = Verbose;
+  t->sslCipher = SslCipher;
+  t->headers = Headers;
+  t->numHeaders = NumHeaders;
+  t->hostHeaderOverride = HostHeaderOverride;
+  t->thinkTime = ThinkTime;
+  t->noKeepAlive = (KeepAlive != KEEP_ALIVE_ALWAYS);
+  t->oauth = OAuth;
+
+  return createSslContext(t);
+}
+
 int main(int argc, char *const *argv) {
   /* Arguments */
   int duration = DEFAULT_DURATION;
   int warmupTime = DEFAULT_WARMUP;
   int doHelp = 0;
-  int verbose = 0;
-  char *verb = NULL;
-  char *fileName = NULL;
-  char *contentType = NULL;
-  char *sslCipher = NULL;
   const char *url = NULL;
   char *monitorHost = NULL;
   char *monitor2Host = NULL;
-  unsigned int thinkTime = 0;
 
   /* Globals */
   NumConnections = DEFAULT_NUM_CONNECTIONS;
@@ -295,7 +334,6 @@ int main(int argc, char *const *argv) {
   RunName = "";
   KeepAlive = KEEP_ALIVE_ALWAYS;
 
-  IOThread *threads = NULL;
   int failed = 0;
   int arg;
   do {
@@ -308,7 +346,7 @@ int main(int argc, char *const *argv) {
         duration = atoi(optarg);
         break;
       case 'f':
-        fileName = optarg;
+        FileName = optarg;
         break;
       case 'h':
         doHelp = 1;
@@ -317,22 +355,22 @@ int main(int argc, char *const *argv) {
         KeepAlive = atoi(optarg);
         break;
       case 't':
-        contentType = optarg;
+        ContentType = optarg;
         break;
       case 'u':
         processBasic(optarg);
         break;
       case 'v':
-        verbose = 1;
+        Verbose = 1;
         break;
       case 'w':
         warmupTime = atoi(optarg);
         break;
       case 'x':
-        verb = optarg;
+        Verb = optarg;
         break;
       case 'C':
-        sslCipher = optarg;
+        SslCipher = optarg;
         break;
       case 'H':
         addHeader(optarg);
@@ -360,7 +398,7 @@ int main(int argc, char *const *argv) {
         return 0;
         break;
       case 'W':
-        thinkTime = atoi(optarg);
+        ThinkTime = atoi(optarg);
         break;
       case '1':
         JustOnce = 1;
@@ -394,9 +432,9 @@ int main(int argc, char *const *argv) {
     return 0;
   }
 
-  if (contentType != NULL) {
+  if (ContentType != NULL) {
     char buf[256];
-    safeSprintf(buf, 256, "Content-Type: %s", contentType);
+    safeSprintf(buf, 256, "Content-Type: %s", ContentType);
     addHeader(buf);
   }
 
@@ -424,74 +462,44 @@ int main(int argc, char *const *argv) {
       NumThreads = NumConnections;
     }
 
-    Running = 1;
-
-    threads = (IOThread *)malloc(sizeof(IOThread) * NumThreads);
-
     RecordInit(monitorHost, monitor2Host);
 
-    for (int i = 0; i < NumThreads; i++) {
-      IOThread *t = &(threads[i]);
-      int numConn = NumConnections / NumThreads;
-      if (i < (NumConnections % NumThreads)) {
-        numConn++;
+    if (JustOnce) {
+      IOThread thread;
+      int err = initializeThread(0, &thread);
+      if (err != 0) {
+	goto finished;
       }
-
-      if (fileName != NULL) {
-        if (readFile(fileName, t) != 0) {
-          return 3;
-        }
-      } else {
-        t->sendData = NULL;
-        t->sendDataLen = 0;
-      }
-
-      if (verb == NULL) {
-        if (fileName == NULL) {
-          t->httpVerb = "GET";
-        } else {
-          t->httpVerb = "POST";
-        }
-      } else {
-        t->httpVerb = verb;
-      }
-
-      t->index = i;
-      t->keepRunning = 1;
-      t->numConnections = numConn;
-      t->verbose = verbose;
-      t->sslCipher = sslCipher;
-      t->headers = Headers;
-      t->numHeaders = NumHeaders;
-      t->hostHeaderOverride = HostHeaderOverride;
-      t->thinkTime = thinkTime;
-      t->noKeepAlive = (KeepAlive != KEEP_ALIVE_ALWAYS);
-      t->oauth = oauth;
-
-      if (createSslContext(t) != 0) {
-        goto finished;
-      }
-
-      iothread_Start(t);
-    }
-
-    if (!JustOnce && (warmupTime > 0)) {
       RecordStart(1);
-      waitAndReport(warmupTime, 1);
-    }
+      iothread_Start(&thread);
+      iothread_Join(&thread);
+      RecordStop();
 
-    RecordStart(1);
-    if (!JustOnce) {
+    } else {
+      IOThread* threads = (IOThread *)malloc(sizeof(IOThread) * NumThreads);
+      for (int i = 0; i < NumThreads; i++) {
+	int err = initializeThread(i, &(threads[i]));
+	if (err != 0) {
+	  goto finished;
+	}
+	iothread_Start(&(threads[i]));
+      }
+
+      if (warmupTime > 0) {
+	RecordStart(1);
+	waitAndReport(warmupTime, 1);
+      }
+      RecordStart(1);
       waitAndReport(duration, 0);
-    }
-    RecordStop();
-    Running = 0;
+      RecordStop();
 
-    for (int i = 0; i < NumThreads; i++) {
-      iothread_RequestStop(&(threads[i]), 2);
-    }
-    for (int i = 0; i < NumThreads; i++) {
-      iothread_Join(&(threads[i]));
+      for (int i = 0; (i < NumThreads); i++) {
+	iothread_RequestStop(&(threads[i]), 2);
+      }
+      for (int i = 0; i < NumThreads; i++) {
+	iothread_Join(&(threads[i]));
+      }
+      free(threads);
     }
   } else {
     printUsage();

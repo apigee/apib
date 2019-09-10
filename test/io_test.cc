@@ -63,11 +63,9 @@ TEST_F(IOTest, OneThread) {
   sprintf(url, "http://localhost:%i/hello", testServerPort);
   url_InitOne(url);
 
-  //t = (IOThread*)calloc(1, sizeof(IOThread));
   IOThread t;
   memset(&t, 0, sizeof(IOThread));
   t.numConnections = 1;
-  // t.verbose = 1;
   t.httpVerb = strdup("GET");
 
   iothread_Start(&t);
@@ -76,6 +74,32 @@ TEST_F(IOTest, OneThread) {
   RecordStop();
 
   compareReporting();
+  free(t.httpVerb);
+}
+
+TEST_F(IOTest, OneRequest) {
+  char url[128];
+  sprintf(url, "http://localhost:%i/hello", testServerPort);
+  url_InitOne(url);
+
+  IOThread t;
+  memset(&t, 0, sizeof(IOThread));
+  t.numConnections = 1;
+  // t.verbose = 1;
+  t.httpVerb = strdup("GET");
+  t.keepRunning = -1;
+
+  iothread_Start(&t);
+  iothread_Join(&t);
+  RecordStop();
+
+  BenchmarkResults results;
+  ReportResults(&results);
+
+  EXPECT_EQ(1, results.successfulRequests);
+  EXPECT_EQ(0, results.unsuccessfulRequests);
+  EXPECT_EQ(0, results.socketErrors);
+
   free(t.httpVerb);
 }
 

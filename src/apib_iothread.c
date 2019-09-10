@@ -304,7 +304,9 @@ static void* ioThread(void* a) {
   }
 
   // Add one more ref count so the loop will stay open even if zero connections
-  ev_ref(t->loop);
+  if (t->keepRunning) {
+    ev_ref(t->loop);
+  }
   int ret = ev_run(t->loop, 0);
   iothread_Verbose(t, "ev_run finished: %i\n", ret);
   RecordByteCounts(t->writeBytes, t->readBytes);
@@ -324,7 +326,12 @@ void iothread_Start(IOThread* t) {
     HttpParserSettings.on_message_complete = httpComplete;
     initialized = 1;
   }
-  t->keepRunning = 1;
+  // Special handling to signal thread to process only one request
+  if (t->keepRunning < 0) {
+    t->keepRunning = 0;
+  } else {
+    t->keepRunning = 1;
+  }
   int err = pthread_create(&(t->thread), NULL, ioThread, t);
   mandatoryAssert(err == 0);
 }
