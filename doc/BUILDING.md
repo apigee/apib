@@ -2,55 +2,43 @@
 
 Sample build instructions for CentOS:
 
-  1. Install git
-  2. Download the source
-  3. Install dependencies
-  4. ./configure
-  5. make
+  1. Get the source using git
+  2. [Install Bazel](https://docs.bazel.build/versions/0.29.0/install.html)
+  3. make
 
-## Example
+This will work on most Linux platforms. We have also tested it on Mac OS X
+and FreeBSD. It also runs on Windows 10 using the "Windows Subsystem for Linux."
+We have not tried to build it on native Windows.
 
-*git*: First, install if you don't already have it in order to get source from Google Code:
+## Details
 
-    yum install git
+apib builds using [Bazel](https://www.bazel.build/). This gives us a consistent build
+environment on many platforms. Bazel also 
 
-*Get Source*: Pull the source from GitHub
+apib requires version 0.28 or higher of Bazel. You can check the Bazel home
+page for installation instructions. Specifically:
 
-    git clone https://github.com/apigee/apib.git
+* Some Linux distributions have Bazel in their package repos
+* Otherwise, the Bazel installation instructions link to an installer
+* On the Mac, Bazel is available via Homebrew.
+* On FreeBSD, Bazel is available in "ports." (However, sometimes an older
+version is available without doing further work to build the port for
+a more recent version.)
 
-*Install Dependencies*: Install dependent packages required to build
+## Dependencies
 
-*Compiler*
+As part of the build, Bazel fetches the third-party code that apib needs.
+So, once Bazel is installed you don't need anything else in order to build.
+For the interested, that includes:
 
-To build, you will need gcc and make -- these are not always installed
-by default -- you may need to use "yum" or "apt-get" to install them.
+* [libev](http://software.schmorp.de/pkg/libev.html) for portable asynchronous
+I/O and scheduling on all our platforms.
+* [BoringSSL](https://boringssl.googlesource.com/boringssl/) Google's port of TLS
+that is consistent and easy to build with Bazel
+* A Base64 encoder from the Apache project, found in "third_party".
 
-*Libraries*
+## Testing
 
-There are three dependencies:
+    make test
 
-  * APR (Apache Portable Runtime)
-  * APR Utils (Additional APR libraries)
-  * OpenSSL (for SSL support, which currently is always built)
-
-You need the "devel" versions of these libraries in order to build.
-
-On CentOS, you can install them like this:
-
-    sudo yum install apr-devel apr-util-devel openssl-devel
-
-On Ubuntu, you would do it like this:
-
-    sudo apt-get install libapr1-dev libaprutil1-dev openssl
-
-*Configure*: Run "configure" to generate build scripts for the platform
-
-    ./configure
-
-This should work -- if you get any errors you should email me (greg@brail.org)
-
-*Make*: Build the code
-
-    make
-
-*Done*: You are done and it should work now.
+will use Bazel run the tests.

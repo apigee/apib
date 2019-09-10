@@ -1,8 +1,7 @@
 # apib: API Bench
 
-This is a tool that makes it easy to test API servers. It is supported for Unix
-systems that include the Apache Portable Runtime and OpenSSL. That includes implementations
-of Linux, Windows under Cygwin, and Apple OS X.
+This is a tool that makes it easy to run performance tests of HTTP API servers. It is built
+using [Bazel](https://www.bazel.build/) and can be built on most Linux platforms, plus Mac OS X and FreeBSD.
 
 ## Status
 
@@ -54,13 +53,6 @@ In addition, like "ab," it also supports:
 * A simple command-line interface
 * Few dependencies, so it may be easily built and deployed
 * Non-blocking I/O for high concurrency
-
-## Dependencies:
-
-* apr -- makes it more portable to Linux, Solaris, Macintosh and others
-* openssl -- because we need SSL
-
-Any reasonable platform will have both of these.
 
 ## Implementation:
 
