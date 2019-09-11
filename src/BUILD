@@ -107,10 +107,10 @@ cc_library(
 cc_binary(
     name = "apib",
     srcs = [
-        "apib_main.c",
+        "apib_main.cc",
     ],
     copts = [
-        "-std=gnu99",
+        "-std=gnu++14",
     ],
     deps = [
         ":io",

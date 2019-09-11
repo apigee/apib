@@ -55,15 +55,21 @@ void writeRequest(ConnectionState* c) {
   buf_Append(&(c->writeBuf), " ");
   buf_Append(&(c->writeBuf), c->url->path);
   buf_Append(&(c->writeBuf), " HTTP/1.1\r\n");
-  buf_Append(&(c->writeBuf), "User-Agent: apib\r\n");
-  if (!c->t->hostHeaderOverride) {
+  if (!(c->t->headersSet & USER_AGENT_HEADER_SET)) {
+    buf_Append(&(c->writeBuf), "User-Agent: apib\r\n");
+  }
+  if (!(c->t->headersSet & HOST_HEADER_SET)) {
     buf_Append(&(c->writeBuf), "Host: ");
     buf_Append(&(c->writeBuf), c->url->hostHeader);
     buf_Append(&(c->writeBuf), "\r\n");
   }
   if (c->t->sendDataLen > 0) {
-    buf_Append(&(c->writeBuf), "Content-Type: text/plain\r\n");
-    buf_Printf(&(c->writeBuf), "Content-Length: %lu\r\n", c->t->sendDataLen);
+    if (!(c->t->headersSet & CONTENT_TYPE_HEADER_SET)) {
+      buf_Append(&(c->writeBuf), "Content-Type: text/plain\r\n");
+    }
+    if (!(c->t->headersSet & CONTENT_LENGTH_HEADER_SET)) {
+      buf_Printf(&(c->writeBuf), "Content-Length: %lu\r\n", c->t->sendDataLen);
+    }
   }
   if (c->t->oauth != NULL) {
     char* authHdr = oauth_MakeHeader(c->t->randState, c->url, "",
@@ -72,7 +78,7 @@ void writeRequest(ConnectionState* c) {
     buf_Append(&(c->writeBuf), "\r\n");
     free(authHdr);
   }
-  if (c->t->noKeepAlive) {
+  if ((c->t->noKeepAlive) && !(c->t->headersSet & CONNECTION_HEADER_SET)) {
     buf_Append(&(c->writeBuf), "Connection: close\r\n");
   }
   for (int i = 0; i < c->t->numHeaders; i++) {

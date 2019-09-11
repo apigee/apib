@@ -36,6 +36,15 @@ struct threadCommand;
 
 typedef enum { STOP, SET_CONNECTIONS } ThreadCmd;
 
+// Constants used to keep track of which headers were
+// already set
+#define HOST_HEADER_SET (1 << 0)
+#define CONTENT_LENGTH_HEADER_SET (1 << 1)
+#define CONTENT_TYPE_HEADER_SET (1 << 2)
+#define AUTHORIZATION_HEADER_SET (1 << 3)
+#define CONNECTION_HEADER_SET (1 << 4)
+#define USER_AGENT_HEADER_SET (1 << 5)
+
 // This is used to send instructions to the thread from outside.
 typedef struct threadCommand {
   ThreadCmd command;
@@ -65,8 +74,8 @@ typedef struct {
   OAuthInfo* oauth;
   char** headers;
   unsigned int numHeaders;
+  int headersSet;
   unsigned int thinkTime;
-  int hostHeaderOverride;
   int noKeepAlive;
 
   // Everything ABOVE must be initialized.

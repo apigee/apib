@@ -14,15 +14,17 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-#include <assert.h>
-#include <fcntl.h>
 #include <getopt.h>
-#include <stdio.h>
-#include <stdlib.h>
 #include <sys/resource.h>
-#include <sys/stat.h>
-#include <sys/time.h>
 #include <unistd.h>
+
+#include <cstring>
+#include <ctime>
+#include <fstream>
+#include <iostream>
+#include <sstream>
+#include <string>
+#include <vector>
 
 #include "src/apib_cpu.h"
 #include "src/apib_iothread.h"
@@ -32,30 +34,32 @@ limitations under the License.
 #include "src/apib_util.h"
 #include "third_party/base64.h"
 
-#define DEFAULT_CONTENT_TYPE "application/octet-stream"
-#define KEEP_ALIVE_ALWAYS -1
-#define KEEP_ALIVE_NEVER 0
+using std::cerr;
+using std::cout;
+using std::endl;
 
-/* Globals */
-static int ShortOutput;
-static char *RunName;
-static int NumConnections;
-static int NumThreads;
-static int JustOnce = 0;
-static int KeepAlive;
-static char *Verb = NULL;
-static char *FileName = NULL;
-static char *ContentType = NULL;
-static char *SslCipher = NULL;
-static int SslVerify = 0;
-static char *SslCertificate = NULL;
-static int Verbose = 0;
+static const int KeepAliveAlways = -1;
+static const int DefaultNumConnections = 1;
+static const int DefaultDuration = 60;
+static const int DefaultWarmup = 0;
+static const int ReportSleepTime = 5;
+
+static int ShortOutput = 0;
+static std::string RunName;
+static int NumConnections = DefaultNumConnections;
+static int NumThreads = -1;
+static bool JustOnce = false;
+static int KeepAlive = KeepAliveAlways;
+static std::string Verb;
+static std::string FileName;
+static std::string ContentType;
+static std::string SslCipher;
+static bool SslVerify = false;
+static std::string SslCertificate;
+static bool Verbose = false;
 static int ThinkTime = 0;
-
-static char **Headers = NULL;
-static unsigned int HeadersSize = 0;
-static unsigned int NumHeaders = 0;
-static int HostHeaderOverride = 0;
+static std::vector<std::string> Headers;
+static int SetHeaders = 0;
 
 static OAuthInfo *OAuth = NULL;
 
@@ -127,15 +131,10 @@ static const struct option Options[] = {
   "\n"                                                                         \
   "  if -O is used then the value is four parameters, separated by a colon:\n" \
   "  consumer key:secret:token:secret. You may omit the last two.\n"
-#define DEFAULT_NUM_CONNECTIONS 1
-#define DEFAULT_LATENCIES_SIZE 1024
-#define DEFAULT_DURATION 60
-#define DEFAULT_WARMUP 0
-#define REPORT_SLEEP_TIME 5
 
 static void printUsage() {
-  fprintf(stderr, "Usage: apib [options] [URL | @file]\n");
-  fprintf(stderr, "%s", USAGE_DOCS);
+  cerr << "Usage: apib [options] [URL | @file]" << endl;
+  cerr << USAGE_DOCS << endl;
 }
 
 static int setProcessLimits(int numConnections) {
@@ -143,39 +142,38 @@ static int setProcessLimits(int numConnections) {
   int err;
 
   getrlimit(RLIMIT_NOFILE, &limits);
-  if (numConnections < limits.rlim_cur) {
+  if (numConnections < (int)limits.rlim_cur) {
     return 0;
   }
-  if (numConnections < limits.rlim_max) {
+  if (numConnections < (int)limits.rlim_max) {
     limits.rlim_cur = limits.rlim_max;
     err = setrlimit(RLIMIT_NOFILE, &limits);
     if (err == 0) {
       return 0;
     } else {
-      fprintf(stderr, "Error setting file descriptor limit: %i\n", err);
+      cerr << "Error setting file descriptor limit: " << err << endl;
       return -1;
     }
   } else {
-    fprintf(stderr,
-            "Current hard file descriptor limit is %lu: it is too low. Try "
-            "sudo.\n",
-            limits.rlim_max);
+    cerr << "Current hard file descriptor limit is " << limits.rlim_max
+         << ": it is too low. Try sudo" << endl;
     return -1;
   }
 }
 
 static void sslInfoCallback(const SSL *ssl, int where, int ret) {
-  printf("OpenSSL: %s\n", SSL_state_string_long(ssl));
+  cout << "OpenSSL: " << SSL_state_string_long(ssl) << endl;
   if (ret == SSL_CB_ALERT) {
-    printf("  alert: %s\n", SSL_alert_desc_string_long(ret));
+    cout << "  alert: " << SSL_alert_desc_string_long(ret) << endl;
   } else if (ret == 0) {
-    printf("  Error occurred\n");
+    cout << "  Error occurred" << endl;
   }
   if (where & SSL_CB_HANDSHAKE_DONE) {
     int bits;
     SSL_get_cipher_bits(ssl, &bits);
-    printf("  Protocol: %s\n", SSL_get_cipher_version(ssl));
-    printf("  Cipher: %s (%i bits)\n", SSL_get_cipher_name(ssl), bits);
+    cout << "  Protocol: " << SSL_get_cipher_version(ssl) << endl;
+    cout << "  Cipher: " << SSL_get_cipher_name(ssl) << " (" << bits << " bits)"
+         << endl;
   }
 }
 
@@ -186,10 +184,11 @@ static int createSslContext(IOThread *t) {
   if (SslVerify) {
     SSL_CTX_set_verify(t->sslCtx, SSL_VERIFY_PEER, NULL);
   }
-  if (SslCertificate != NULL) {
-    int err = SSL_CTX_load_verify_locations(t->sslCtx, SslCertificate, NULL);
+  if (!SslCertificate.empty()) {
+    int err =
+        SSL_CTX_load_verify_locations(t->sslCtx, SslCertificate.c_str(), NULL);
     if (err != 1) {
-      fprintf(stderr, "Could not load CA certificates from %s\n", SslCertificate);
+      cerr << "Could not load CA certificates from " << SslCertificate << endl;
       return -2;
     }
   }
@@ -200,37 +199,30 @@ static int createSslContext(IOThread *t) {
   if (t->sslCipher) {
     int res = SSL_CTX_set_cipher_list(t->sslCtx, t->sslCipher);
     if (res != 1) {
-      fprintf(stderr, "Set Cipher list to %s failed\n", t->sslCipher);
+      cerr << "Set Cipher list to " << t->sslCipher << " failed" << endl;
       return -1;
     }
   }
   return 0;
 }
 
-static int readFile(const char *name, IOThread *t) {
-  int fd = open(name, O_RDONLY);
-  if (fd < 0) {
-    perror("Can't open input file");
+static int readFile(const std::string &name, IOThread *t) {
+  // Open and seek to the end
+  std::ifstream in(name, std::ios::binary | std::ios::ate);
+  if (!in) {
+    cerr << "Cannot open input file " << name << endl;
     return -1;
   }
 
-  struct stat s;
-  int err = fstat(fd, &s);
-  if (err != 0) {
-    perror("Can't get file size");
-    close(fd);
-    return -2;
-  }
+  const auto size = in.tellg();
+  std::string buf(size, '\0');
+  in.seekg(0);
+  in.read(&buf[0], size);
 
-  t->sendDataLen = s.st_size;
-  t->sendData = (char *)malloc(s.st_size);
-  ssize_t rc = read(fd, t->sendData, s.st_size);
-  if (rc != s.st_size) {
-    perror("Unable to read input file");
-    close(fd);
-    return -3;
-  }
-  close(fd);
+  // TODO replace this when we convert other stuff to C++
+  t->sendDataLen = size;
+  t->sendData = (char *)malloc(size);
+  memcpy(t->sendData, buf.data(), size);
   return 0;
 }
 
@@ -239,10 +231,10 @@ static void waitAndReport(int duration, int warmup) {
   int toSleep;
 
   while (durationLeft > 0) {
-    if (durationLeft < REPORT_SLEEP_TIME) {
+    if (durationLeft < ReportSleepTime) {
       toSleep = durationLeft;
     } else {
-      toSleep = REPORT_SLEEP_TIME;
+      toSleep = ReportSleepTime;
     }
 
     sleep(toSleep);
@@ -253,45 +245,53 @@ static void waitAndReport(int duration, int warmup) {
   }
 }
 
-static void processOAuth(char *arg) {
+static void processOAuth(const std::string &arg) {
+  // TODO split using a regex
+  char *tmp = strdup(arg.c_str());
   OAuth = (OAuthInfo *)malloc(sizeof(OAuthInfo));
   char *last;
-  OAuth->consumerKey = strtok_r(arg, ":", &last);
+  OAuth->consumerKey = strtok_r(tmp, ":", &last);
   OAuth->consumerSecret = strtok_r(NULL, ":", &last);
   OAuth->accessToken = strtok_r(NULL, ":", &last);
   OAuth->tokenSecret = strtok_r(NULL, ":", &last);
+  free(tmp);
+  SetHeaders |= AUTHORIZATION_HEADER_SET;
 }
 
-static void addHeader(char *val) {
-  if (Headers == NULL) {
-    Headers = (char **)malloc(sizeof(char *));
-    HeadersSize = 1;
-  } else if (NumHeaders == HeadersSize) {
-    HeadersSize *= 2;
-    Headers = (char **)realloc(Headers, sizeof(char *) * HeadersSize);
+static void addHeader(const std::string &val) {
+  const auto colon = val.find(':');
+  if (colon >= 0) {
+    const auto n = val.substr(0, colon);
+    const char *name = n.c_str();
+    // This is the easiest way for non-case-sensitive comparison in C++
+    if (!strcasecmp(name, "Host")) {
+      SetHeaders |= HOST_HEADER_SET;
+    } else if (!strcasecmp(name, "Content-Length")) {
+      SetHeaders |= CONTENT_LENGTH_HEADER_SET;
+    } else if (!strcasecmp(name, "Content-Type")) {
+      SetHeaders |= CONTENT_TYPE_HEADER_SET;
+    } else if (!strcasecmp(name, "Authorization")) {
+      SetHeaders |= AUTHORIZATION_HEADER_SET;
+    } else if (!strcasecmp(name, "Connection")) {
+      SetHeaders |= CONNECTION_HEADER_SET;
+    } else if (!strcasecmp(name, "User-Agent")) {
+      SetHeaders |= USER_AGENT_HEADER_SET;
+    }
   }
-  Headers[NumHeaders] = strdup(val);
-  NumHeaders++;
 
-  char *tokLast;
-  char *tok;
-  tok = strtok_r(val, ":", &tokLast);
-  if ((tok != NULL) && !strcmp("Host", tok)) {
-    HostHeaderOverride = 1;
-  }
+  Headers.push_back(val);
 }
 
-static void processBasic(const char *arg) {
-  const size_t inLen = strlen(arg);
-  const int encLen = Base64encode_len(inLen);
-  char *b64 = (char *)malloc(encLen + 1);
-  Base64encode(b64, arg, inLen);
+static void processBasic(const std::string &arg) {
+  // TODO more C++y
+  const int encLen = Base64encode_len(arg.size());
+  char *b64 = new char[encLen + 1];
+  Base64encode(b64, arg.c_str(), arg.size());
 
-  const size_t hdrLen = encLen + 21;
-  char *hdr = malloc(hdrLen);
-  safeSprintf(hdr, hdrLen, "Authorization: Basic %s", b64);
-  free(b64);
-  addHeader(hdr);
+  std::ostringstream hdr;
+  hdr << "Authorization: Basic " << b64;
+  delete[] b64;
+  addHeader(hdr.rdbuf()->str());
 }
 
 static int initializeThread(int ix, IOThread *t) {
@@ -300,7 +300,7 @@ static int initializeThread(int ix, IOThread *t) {
     numConn++;
   }
 
-  if (FileName != NULL) {
+  if (!FileName.empty()) {
     if (readFile(FileName, t) != 0) {
       return 3;
     }
@@ -309,57 +309,60 @@ static int initializeThread(int ix, IOThread *t) {
     t->sendDataLen = 0;
   }
 
-  if (Verb == NULL) {
-    if (FileName == NULL) {
-      t->httpVerb = "GET";
+  if (Verb.empty()) {
+    if (FileName.empty()) {
+      t->httpVerb = strdup("GET");
     } else {
-      t->httpVerb = "POST";
+      t->httpVerb = strdup("POST");
     }
   } else {
-    t->httpVerb = Verb;
+    // TODO C++y
+    t->httpVerb = strdup(Verb.c_str());
   }
 
   t->index = ix;
   t->keepRunning = (JustOnce ? -1 : 1);
   t->numConnections = numConn;
   t->verbose = Verbose;
-  t->sslCipher = SslCipher;
-  t->headers = Headers;
-  t->numHeaders = NumHeaders;
-  t->hostHeaderOverride = HostHeaderOverride;
+  t->sslCipher = (SslCipher.empty() ? NULL : strdup(SslCipher.c_str()));
+  t->numHeaders = Headers.size();
+  t->headersSet = SetHeaders;
   t->thinkTime = ThinkTime;
-  t->noKeepAlive = (KeepAlive != KEEP_ALIVE_ALWAYS);
+  t->noKeepAlive = (KeepAlive != KeepAliveAlways);
   t->oauth = OAuth;
+
+  // TODO C++y again
+  if (Headers.empty()) {
+    t->headers = NULL;
+  } else {
+    t->headers = (char **)malloc(sizeof(char *) * Headers.size());
+    for (size_t i = 0; i < Headers.size(); i++) {
+      t->headers[i] = strdup(Headers[i].c_str());
+    }
+  }
 
   return createSslContext(t);
 }
 
 int main(int argc, char *const *argv) {
   /* Arguments */
-  int duration = DEFAULT_DURATION;
-  int warmupTime = DEFAULT_WARMUP;
-  int doHelp = 0;
-  const char *url = NULL;
-  char *monitorHost = NULL;
-  char *monitor2Host = NULL;
+  int duration = DefaultDuration;
+  int warmupTime = DefaultWarmup;
+  bool doHelp = false;
+  std::string url;
+  std::string monitorHost;
+  std::string monitor2Host;
 
-  /* Globals */
-  NumConnections = DEFAULT_NUM_CONNECTIONS;
-  NumThreads = -1;
-  ShortOutput = 0;
-  RunName = "";
-  KeepAlive = KEEP_ALIVE_ALWAYS;
-
-  int failed = 0;
+  bool failed = false;
   int arg;
   do {
     arg = getopt_long(argc, argv, OPTIONS, Options, NULL);
     switch (arg) {
       case 'c':
-        NumConnections = atoi(optarg);
+        NumConnections = std::stoi(optarg);
         break;
       case 'd':
-        duration = atoi(optarg);
+        duration = std::stoi(optarg);
         break;
       case 'f':
         FileName = optarg;
@@ -368,7 +371,7 @@ int main(int argc, char *const *argv) {
         doHelp = 1;
         break;
       case 'k':
-        KeepAlive = atoi(optarg);
+        KeepAlive = std::stoi(optarg);
         break;
       case 't':
         ContentType = optarg;
@@ -380,7 +383,7 @@ int main(int argc, char *const *argv) {
         Verbose = 1;
         break;
       case 'w':
-        warmupTime = atoi(optarg);
+        warmupTime = std::stoi(optarg);
         break;
       case 'x':
         Verb = optarg;
@@ -395,7 +398,7 @@ int main(int argc, char *const *argv) {
         addHeader(optarg);
         break;
       case 'K':
-        NumThreads = atoi(optarg);
+        NumThreads = std::stoi(optarg);
         break;
       case 'M':
         monitorHost = optarg;
@@ -420,7 +423,7 @@ int main(int argc, char *const *argv) {
         SslVerify = 1;
         break;
       case 'W':
-        ThinkTime = atoi(optarg);
+        ThinkTime = std::stoi(optarg);
         break;
       case '1':
         JustOnce = 1;
@@ -434,7 +437,8 @@ int main(int argc, char *const *argv) {
         // Done!
         break;
       default:
-        assert(0);
+        cerr << "Internal error: Unknown option " << arg << endl;
+        std::abort();
         break;
     }
   } while (arg >= 0);
@@ -454,21 +458,21 @@ int main(int argc, char *const *argv) {
     return 0;
   }
 
-  if (ContentType != NULL) {
-    char buf[256];
-    safeSprintf(buf, 256, "Content-Type: %s", ContentType);
-    addHeader(buf);
+  if (!ContentType.empty()) {
+    std::ostringstream hdr;
+    hdr << "Content-Type: " << ContentType;
+    addHeader(hdr.rdbuf()->str());
   }
 
-  if (url != NULL) {
+  if (!url.empty()) {
     if (url[0] == '@') {
-      if (url_InitFile(url + 1) != 0) {
-        fprintf(stderr, "Invalid URL file\n");
+      if (url_InitFile(url.substr(1).c_str()) != 0) {
+        cerr << "Invalid URL file " << url.substr(1) << endl;
         goto finished;
       }
     } else {
-      if (url_InitOne(url) != 0) {
-        fprintf(stderr, "Invalid url: \"%s\"\n", url);
+      if (url_InitOne(url.c_str()) != 0) {
+        cerr << "Invalid url: " << url << endl;
         goto finished;
       }
     }
@@ -484,7 +488,8 @@ int main(int argc, char *const *argv) {
       NumThreads = NumConnections;
     }
 
-    RecordInit(monitorHost, monitor2Host);
+    RecordInit(monitorHost.empty() ? NULL : monitorHost.c_str(),
+               monitor2Host.empty() ? NULL : monitor2Host.c_str());
 
     if (JustOnce) {
       IOThread thread;
@@ -498,7 +503,7 @@ int main(int argc, char *const *argv) {
       RecordStop();
 
     } else {
-      IOThread *threads = (IOThread *)malloc(sizeof(IOThread) * NumThreads);
+      IOThread *threads = new IOThread[NumThreads];
       for (int i = 0; i < NumThreads; i++) {
         int err = initializeThread(i, &(threads[i]));
         if (err != 0) {
@@ -521,7 +526,7 @@ int main(int argc, char *const *argv) {
       for (int i = 0; i < NumThreads; i++) {
         iothread_Join(&(threads[i]));
       }
-      free(threads);
+      delete[] threads;
     }
   } else {
     printUsage();
@@ -529,7 +534,7 @@ int main(int argc, char *const *argv) {
   }
 
   if (ShortOutput) {
-    PrintShortResults(stdout, RunName, NumThreads, NumConnections);
+    PrintShortResults(stdout, RunName.c_str(), NumThreads, NumConnections);
   } else {
     PrintFullResults(stdout);
   }
