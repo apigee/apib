@@ -1,10 +1,5 @@
-Makefile
 apib
 apibmon
-config.log
-config.status
-src/config.h
-autom4te.cache
 *.o
 bazel-*
 .vscode
