@@ -59,18 +59,19 @@ cc_library(
 cc_library(
     name = "io",
     srcs = [
-        "apib_commandqueue.c",
-        "apib_io_basic.c",
-        "apib_io_socket.c",
-        "apib_iothread.c",
+        "apib_commandqueue.cc",
+        "apib_io_basic.cc",
+        "apib_io_socket.cc",
+        "apib_iothread.cc",
         "apib_oauth.c",
     ],
     hdrs = [
+        "apib_commandqueue.h",
         "apib_iothread.h",
         "apib_oauth.h",
     ],
     copts = [
-        "-std=gnu99",
+        #"-std=gnu++14",
     ],
     linkopts = [
         "-lpthread",

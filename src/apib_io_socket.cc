@@ -14,25 +14,21 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-#include <assert.h>
-#include <errno.h>
 #include <openssl/err.h>
 #include <openssl/ssl.h>
 #include <unistd.h>
 
+#include <cassert>
+
 #include "src/apib_iothread.h"
 
-static void printSslError(const char* msg, int err) {
-  char buf[256];
-  ERR_error_string_n(err, buf, 256);
-  printf("%s: %s\n", msg, buf);
-}
+namespace apib {
 
-IOStatus io_Write(ConnectionState* c, const void* buf, size_t count,
-                  size_t* written) {
+IOStatus ConnectionState::doWrite(const void* buf, size_t count,
+                                  size_t* written) {
   assert(written != NULL);
-  if (c->ssl == NULL) {
-    const ssize_t ws = write(c->fd, buf, count);
+  if (ssl_ == NULL) {
+    const ssize_t ws = write(fd_, buf, count);
     if (ws > 0) {
       *written = ws;
       return OK;
@@ -48,8 +44,8 @@ IOStatus io_Write(ConnectionState* c, const void* buf, size_t count,
     return SOCKET_ERROR;
   }
 
-  const int s = SSL_write(c->ssl, buf, count);
-  io_Verbose(c, "SSL write(%zu) returned %i\n", count, s);
+  const int s = SSL_write(ssl_, buf, count);
+  io_Verbose(this, "SSL write(%zu) returned %i\n", count, s);
   if (s > 0) {
     *written = s;
     return OK;
@@ -57,7 +53,7 @@ IOStatus io_Write(ConnectionState* c, const void* buf, size_t count,
 
   // Man page says that "0" means "failure".
   *written = 0;
-  const int sslErr = SSL_get_error(c->ssl, s);
+  const int sslErr = SSL_get_error(ssl_, s);
   if (sslErr == SSL_ERROR_WANT_READ) {
     return NEED_READ;
   }
@@ -68,10 +64,10 @@ IOStatus io_Write(ConnectionState* c, const void* buf, size_t count,
   return TLS_ERROR;
 }
 
-IOStatus io_Read(ConnectionState* c, void* buf, size_t count, size_t* readed) {
+IOStatus ConnectionState::doRead(void* buf, size_t count, size_t* readed) {
   assert(readed != NULL);
-  if (c->ssl == NULL) {
-    const ssize_t rs = read(c->fd, buf, count);
+  if (ssl_ == NULL) {
+    const ssize_t rs = read(fd_, buf, count);
     if (rs > 0) {
       *readed = rs;
       return OK;
@@ -87,18 +83,18 @@ IOStatus io_Read(ConnectionState* c, void* buf, size_t count, size_t* readed) {
     return SOCKET_ERROR;
   }
 
-  const int s = SSL_read(c->ssl, buf, count);
-  io_Verbose(c, "SSL read(%zu) returned %i\n", count, s);
+  const int s = SSL_read(ssl_, buf, count);
+  io_Verbose(this, "SSL read(%zu) returned %i\n", count, s);
   if (s > 0) {
     *readed = s;
     return OK;
   }
 
   *readed = 0;
-  int sentShutdown = (SSL_get_shutdown(c->ssl) & SSL_SENT_SHUTDOWN);
+  int sentShutdown = (SSL_get_shutdown(ssl_) & SSL_SENT_SHUTDOWN);
 
-  const int sslErr = SSL_get_error(c->ssl, s);
-  io_Verbose(c, "SSL read = %i, error = %i\n", s, sslErr);
+  const int sslErr = SSL_get_error(ssl_, s);
+  io_Verbose(this, "SSL read = %i, error = %i\n", s, sslErr);
   switch (sslErr) {
     case SSL_ERROR_WANT_READ:
       return NEED_READ;
@@ -119,25 +115,25 @@ IOStatus io_Read(ConnectionState* c, void* buf, size_t count, size_t* readed) {
   }
 }
 
-IOStatus io_CloseConnection(ConnectionState* c) {
-  if (c->ssl == NULL) {
-    const int err = close(c->fd);
-    io_Verbose(c, "Close returned %i\n", err);
+IOStatus ConnectionState::doClose() {
+  if (ssl_ == NULL) {
+    const int err = close(fd_);
+    io_Verbose(this, "Close returned %i\n", err);
     return (err == 0 ? OK : SOCKET_ERROR);
   }
 
-  const int s = SSL_shutdown(c->ssl);
-  io_Verbose(c, "SSL_shutdown returned %i\n", s);
+  const int s = SSL_shutdown(ssl_);
+  io_Verbose(this, "SSL_shutdown returned %i\n", s);
   if (s == 1) {
     return OK;
   }
   if (s == 0) {
     // Docs say that we must call SSL_read here.
     size_t readed;
-    return io_Read(c, NULL, 0, &readed);
+    return doRead(NULL, 0, &readed);
   }
 
-  const int sslErr = SSL_get_error(c->ssl, s);
+  const int sslErr = SSL_get_error(ssl_, s);
   switch (sslErr) {
     case SSL_ERROR_WANT_READ:
       return NEED_READ;
@@ -149,10 +145,12 @@ IOStatus io_CloseConnection(ConnectionState* c) {
   }
 }
 
-void io_FreeConnection(ConnectionState* c) {
-  if (c->ssl != NULL) {
-    SSL_free(c->ssl);
-    c->ssl = NULL;
-    close(c->fd);
+void ConnectionState::Reset() {
+  if (ssl_ != NULL) {
+    SSL_free(ssl_);
+    ssl_ = NULL;
   }
+  close(fd_);
 }
+
+}  // namespace apib

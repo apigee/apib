@@ -34,6 +34,7 @@ limitations under the License.
 #include "src/apib_util.h"
 #include "third_party/base64.h"
 
+using apib::IOThread;
 using std::cerr;
 using std::cout;
 using std::endl;
@@ -196,8 +197,8 @@ static int createSslContext(IOThread *t) {
     SSL_CTX_set_info_callback(t->sslCtx, sslInfoCallback);
   }
 
-  if (t->sslCipher) {
-    int res = SSL_CTX_set_cipher_list(t->sslCtx, t->sslCipher);
+  if (!t->sslCipher.empty()) {
+    int res = SSL_CTX_set_cipher_list(t->sslCtx, t->sslCipher.c_str());
     if (res != 1) {
       cerr << "Set Cipher list to " << t->sslCipher << " failed" << endl;
       return -1;
@@ -311,20 +312,19 @@ static int initializeThread(int ix, IOThread *t) {
 
   if (Verb.empty()) {
     if (FileName.empty()) {
-      t->httpVerb = strdup("GET");
+      t->httpVerb = "GET";
     } else {
-      t->httpVerb = strdup("POST");
+      t->httpVerb = "POST";
     }
   } else {
-    // TODO C++y
-    t->httpVerb = strdup(Verb.c_str());
+    t->httpVerb = Verb;
   }
 
   t->index = ix;
   t->keepRunning = (JustOnce ? -1 : 1);
   t->numConnections = numConn;
   t->verbose = Verbose;
-  t->sslCipher = (SslCipher.empty() ? NULL : strdup(SslCipher.c_str()));
+  t->sslCipher = SslCipher;
   t->numHeaders = Headers.size();
   t->headersSet = SetHeaders;
   t->thinkTime = ThinkTime;
@@ -498,8 +498,8 @@ int main(int argc, char *const *argv) {
         goto finished;
       }
       RecordStart(1);
-      iothread_Start(&thread);
-      iothread_Join(&thread);
+      thread.Start();
+      thread.Join();
       RecordStop();
 
     } else {
@@ -509,7 +509,7 @@ int main(int argc, char *const *argv) {
         if (err != 0) {
           goto finished;
         }
-        iothread_Start(&(threads[i]));
+        threads[i].Start();
       }
 
       if (warmupTime > 0) {
@@ -521,10 +521,10 @@ int main(int argc, char *const *argv) {
       RecordStop();
 
       for (int i = 0; (i < NumThreads); i++) {
-        iothread_RequestStop(&(threads[i]), 2);
+        threads[i].RequestStop(2);
       }
       for (int i = 0; i < NumThreads; i++) {
-        iothread_Join(&(threads[i]));
+        threads[i].Join();
       }
       delete[] threads;
     }

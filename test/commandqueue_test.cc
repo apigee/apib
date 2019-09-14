@@ -14,54 +14,54 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-#include "src/apib_iothread.h"
-
 #include "gtest/gtest.h"
+#include "src/apib_commandqueue.h"
+
+using apib::Command;
+using apib::CommandQueue;
+
+namespace {
 
 TEST(CommandQueue, Basic) {
   CommandQueue queue;
-  command_Init(&queue);
-  Command* c1 = (Command*)malloc(sizeof(Command));
-  c1->newNumConnections = 1;
-  command_Add(&queue, c1);
-  Command* head = command_Pop(&queue);
-  EXPECT_EQ(c1, head);
-  free(c1);
-  head = command_Pop(&queue);
-  EXPECT_EQ(NULL, head);
-  head = command_Pop(&queue);
-  EXPECT_EQ(NULL, head);
-  command_Free(&queue);
+  Command c1;
+  c1.cmd = apib::SET_CONNECTIONS;
+  c1.newNumConnections = 1;
+  queue.Add(c1);
+
+  Command ret;
+  ASSERT_TRUE(queue.Pop(&ret));
+  EXPECT_EQ(ret.cmd, apib::SET_CONNECTIONS);
+  EXPECT_EQ(1, ret.newNumConnections);
+  EXPECT_FALSE(queue.Pop(&ret));
 }
 
 TEST(CommandQueue, Larger) {
   CommandQueue queue;
-  command_Init(&queue);
-  Command* c1 = (Command*)malloc(sizeof(Command));
-  c1->newNumConnections = 1;
-  command_Add(&queue, c1);
-  Command* c2 = (Command*)malloc(sizeof(Command));
-  c2->newNumConnections = 2;
-  command_Add(&queue, c2);
-  Command* c3 = (Command*)malloc(sizeof(Command));
-  c3->newNumConnections = 3;
-  command_Add(&queue, c3);
+  Command c1;
+  c1.cmd = apib::SET_CONNECTIONS;
+  c1.newNumConnections = 1;
+  queue.Add(c1);
+  Command c2;
+  c2.cmd = apib::SET_CONNECTIONS;
+  c2.newNumConnections = 10;
+  queue.Add(c2);
+  Command c3;
+  c3.cmd = apib::STOP;
+  c3.stopTimeoutSecs = 100;
+  queue.Add(c3);
 
-  Command* head = command_Pop(&queue);
-  EXPECT_EQ(c1, head);
-  EXPECT_EQ(1, head->newNumConnections);
-  free(head);
-
-  head = command_Pop(&queue);
-  EXPECT_EQ(c2, head);
-  EXPECT_EQ(2, head->newNumConnections);
-  free(head);
-
-  head = command_Pop(&queue);
-  EXPECT_EQ(c3, head);
-  EXPECT_EQ(3, head->newNumConnections);
-  free(head);
-
-  head = command_Pop(&queue);
-  EXPECT_EQ(NULL, head);
+  Command ret;
+  ASSERT_TRUE(queue.Pop(&ret));
+  EXPECT_EQ(apib::SET_CONNECTIONS, ret.cmd);
+  EXPECT_EQ(1, ret.newNumConnections);
+  ASSERT_TRUE(queue.Pop(&ret));
+  EXPECT_EQ(apib::SET_CONNECTIONS, ret.cmd);
+  EXPECT_EQ(10, ret.newNumConnections);
+  ASSERT_TRUE(queue.Pop(&ret));
+  EXPECT_EQ(apib::STOP, ret.cmd);
+  EXPECT_EQ(100, ret.stopTimeoutSecs);
+  EXPECT_FALSE(queue.Pop(&ret));
 }
+
+}  // namespace

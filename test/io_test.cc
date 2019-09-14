@@ -14,16 +14,16 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-#include <stdio.h>
-#include <string.h>
-#include <unistd.h>
-
 #include "gtest/gtest.h"
 #include "src/apib_iothread.h"
 #include "src/apib_message.h"
 #include "src/apib_reporting.h"
 #include "src/apib_url.h"
 #include "test/test_server.h"
+
+using apib::IOThread;
+
+namespace {
 
 static int testServerPort;
 static TestServer* testServer;
@@ -64,17 +64,15 @@ TEST_F(IOTest, OneThread) {
   url_InitOne(url);
 
   IOThread t;
-  memset(&t, 0, sizeof(IOThread));
   t.numConnections = 1;
-  t.httpVerb = strdup("GET");
+  t.httpVerb = "GET";
 
-  iothread_Start(&t);
+  t.Start();
   sleep(1);
-  iothread_Stop(&t);
+  t.Stop();
   RecordStop();
 
   compareReporting();
-  free(t.httpVerb);
 }
 
 TEST_F(IOTest, OneRequest) {
@@ -83,14 +81,13 @@ TEST_F(IOTest, OneRequest) {
   url_InitOne(url);
 
   IOThread t;
-  memset(&t, 0, sizeof(IOThread));
   t.numConnections = 1;
   // t.verbose = 1;
-  t.httpVerb = strdup("GET");
+  t.httpVerb = "GET";
   t.keepRunning = -1;
 
-  iothread_Start(&t);
-  iothread_Join(&t);
+  t.Start();
+  t.Join();
   RecordStop();
 
   BenchmarkResults results;
@@ -99,8 +96,6 @@ TEST_F(IOTest, OneRequest) {
   EXPECT_EQ(1, results.successfulRequests);
   EXPECT_EQ(0, results.unsuccessfulRequests);
   EXPECT_EQ(0, results.socketErrors);
-
-  free(t.httpVerb);
 }
 
 TEST_F(IOTest, OneThreadNoKeepAlive) {
@@ -109,15 +104,14 @@ TEST_F(IOTest, OneThreadNoKeepAlive) {
   url_InitOne(url);
 
   IOThread t;
-  memset(&t, 0, sizeof(IOThread));
   t.numConnections = 1;
   // t.verbose = 1;
-  t.httpVerb = strdup("GET");
+  t.httpVerb = "GET";
   t.noKeepAlive = 1;
 
-  iothread_Start(&t);
+  t.Start();
   sleep(1);
-  iothread_Stop(&t);
+  t.Stop();
   RecordStop();
 
   compareReporting();
@@ -125,7 +119,6 @@ TEST_F(IOTest, OneThreadNoKeepAlive) {
   ReportResults(&results);
   EXPECT_LT(1, results.connectionsOpened);
   EXPECT_EQ(results.completedRequests, results.connectionsOpened);
-  free(t.httpVerb);
 }
 
 TEST_F(IOTest, OneThreadThinkTime) {
@@ -134,19 +127,17 @@ TEST_F(IOTest, OneThreadThinkTime) {
   url_InitOne(url);
 
   IOThread t;
-  memset(&t, 0, sizeof(IOThread));
   t.numConnections = 1;
   // t.verbose = 1;
-  t.httpVerb = strdup("GET");
+  t.httpVerb = "GET";
   t.thinkTime = 100;
 
-  iothread_Start(&t);
+  t.Start();
   sleep(1);
-  iothread_Stop(&t);
+  t.Stop();
   RecordStop();
 
   compareReporting();
-  free(t.httpVerb);
 }
 
 TEST_F(IOTest, OneThreadThinkTimeNoKeepAlive) {
@@ -155,20 +146,18 @@ TEST_F(IOTest, OneThreadThinkTimeNoKeepAlive) {
   url_InitOne(url);
 
   IOThread t;
-  memset(&t, 0, sizeof(IOThread));
   t.numConnections = 1;
   // t.verbose = 1;
-  t.httpVerb = strdup("GET");
+  t.httpVerb = "GET";
   t.thinkTime = 100;
   t.noKeepAlive = 1;
 
-  iothread_Start(&t);
+  t.Start();
   sleep(1);
-  iothread_Stop(&t);
+  t.Stop();
   RecordStop();
 
   compareReporting();
-  free(t.httpVerb);
 }
 
 TEST_F(IOTest, OneThreadLarge) {
@@ -177,18 +166,16 @@ TEST_F(IOTest, OneThreadLarge) {
   url_InitOne(url);
 
   IOThread t;
-  memset(&t, 0, sizeof(IOThread));
   t.numConnections = 1;
   // t.verbose = 1;
-  t.httpVerb = strdup("GET");
+  t.httpVerb = "GET";
 
-  iothread_Start(&t);
+  t.Start();
   sleep(1);
-  iothread_Stop(&t);
+  t.Stop();
   RecordStop();
 
   compareReporting();
-  free(t.httpVerb);
 }
 
 TEST_F(IOTest, MoreConnections) {
@@ -197,18 +184,16 @@ TEST_F(IOTest, MoreConnections) {
   url_InitOne(url);
 
   IOThread t;
-  memset(&t, 0, sizeof(IOThread));
   t.numConnections = 10;
   // t.verbose = 1;
-  t.httpVerb = strdup("GET");
+  t.httpVerb = "GET";
 
-  iothread_Start(&t);
+  t.Start();
   sleep(1);
-  iothread_Stop(&t);
+  t.Stop();
   RecordStop();
 
   compareReporting();
-  free(t.httpVerb);
 }
 
 TEST_F(IOTest, ResizeCommand) {
@@ -217,24 +202,22 @@ TEST_F(IOTest, ResizeCommand) {
   url_InitOne(url);
 
   IOThread t;
-  memset(&t, 0, sizeof(IOThread));
   t.numConnections = 1;
   // t.verbose = 1;
-  t.httpVerb = strdup("GET");
+  t.httpVerb = "GET";
 
-  iothread_Start(&t);
+  t.Start();
   usleep(250000);
-  iothread_SetNumConnections(&t, 5);
+  t.SetNumConnections(5);
   usleep(250000);
-  iothread_SetNumConnections(&t, 2);
-  iothread_SetNumConnections(&t, 3);
-  iothread_SetNumConnections(&t, 1);
+  t.SetNumConnections(2);
+  t.SetNumConnections(3);
+  t.SetNumConnections(1);
   usleep(250000);
-  iothread_Stop(&t);
+  t.Stop();
   RecordStop();
 
   compareReporting();
-  free(t.httpVerb);
 }
 
 TEST_F(IOTest, ResizeFromZero) {
@@ -243,20 +226,18 @@ TEST_F(IOTest, ResizeFromZero) {
   url_InitOne(url);
 
   IOThread t;
-  memset(&t, 0, sizeof(IOThread));
   t.numConnections = 0;
   // t.verbose = 1;
-  t.httpVerb = strdup("GET");
+  t.httpVerb = "GET";
 
-  iothread_Start(&t);
+  t.Start();
   usleep(250000);
-  iothread_SetNumConnections(&t, 5);
+  t.SetNumConnections(5);
   usleep(250000);
-  iothread_Stop(&t);
+  t.Stop();
   RecordStop();
 
   compareReporting();
-  free(t.httpVerb);
 }
 
 #define POST_LEN 3000
@@ -267,10 +248,9 @@ TEST_F(IOTest, OneThreadBigPost) {
   url_InitOne(url);
 
   IOThread t;
-  memset(&t, 0, sizeof(IOThread));
   t.numConnections = 1;
   // t.verbose = 1;
-  t.httpVerb = strdup("POST");
+  t.httpVerb = "POST";
   t.sendData = (char*)malloc(POST_LEN);
   t.sendDataLen = POST_LEN;
 
@@ -278,13 +258,12 @@ TEST_F(IOTest, OneThreadBigPost) {
     memcpy(t.sendData + p, "abcdefghij", 10);
   }
 
-  iothread_Start(&t);
+  t.Start();
   sleep(1);
-  iothread_Stop(&t);
+  t.Stop();
   RecordStop();
 
   compareReporting();
-  free(t.httpVerb);
 }
 
 TEST_F(IOTest, OneThreadHeaders) {
@@ -293,24 +272,24 @@ TEST_F(IOTest, OneThreadHeaders) {
   url_InitOne(url);
 
   IOThread t;
-  memset(&t, 0, sizeof(IOThread));
   t.numConnections = 1;
   // t.verbose = 1;
-  t.httpVerb = strdup("GET");
+  t.httpVerb = "GET";
   t.numHeaders = 1;
   t.headers = (char**)malloc(sizeof(char*));
   t.headers[0] = strdup("Authorization: Basic dGVzdDp2ZXJ5dmVyeXNlY3JldA==");
 
-  iothread_Start(&t);
+  t.Start();
   sleep(1);
-  iothread_Stop(&t);
+  t.Stop();
   RecordStop();
 
   compareReporting();
-  free(t.httpVerb);
   free(t.headers[0]);
   free(t.headers);
 }
+
+}  // namespace
 
 int main(int argc, char** argv) {
   ::testing::InitGoogleTest(&argc, argv);
