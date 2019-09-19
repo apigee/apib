@@ -219,11 +219,7 @@ static int readFile(const std::string &name, IOThread *t) {
   std::string buf(size, '\0');
   in.seekg(0);
   in.read(&buf[0], size);
-
-  // TODO replace this when we convert other stuff to C++
-  t->sendDataLen = size;
-  t->sendData = (char *)malloc(size);
-  memcpy(t->sendData, buf.data(), size);
+  t->sendData = std::move(buf);
   return 0;
 }
 
@@ -256,7 +252,7 @@ static void processOAuth(const std::string &arg) {
   OAuth->accessToken = strtok_r(NULL, ":", &last);
   OAuth->tokenSecret = strtok_r(NULL, ":", &last);
   free(tmp);
-  SetHeaders |= AUTHORIZATION_HEADER_SET;
+  SetHeaders |= IOThread::kAuthorizationSet;
 }
 
 static void addHeader(const std::string &val) {
@@ -266,17 +262,17 @@ static void addHeader(const std::string &val) {
     const char *name = n.c_str();
     // This is the easiest way for non-case-sensitive comparison in C++
     if (!strcasecmp(name, "Host")) {
-      SetHeaders |= HOST_HEADER_SET;
+      SetHeaders |= IOThread::kHostSet;
     } else if (!strcasecmp(name, "Content-Length")) {
-      SetHeaders |= CONTENT_LENGTH_HEADER_SET;
+      SetHeaders |= IOThread::kContentLengthSet;
     } else if (!strcasecmp(name, "Content-Type")) {
-      SetHeaders |= CONTENT_TYPE_HEADER_SET;
+      SetHeaders |= IOThread::kContentTypeSet;
     } else if (!strcasecmp(name, "Authorization")) {
-      SetHeaders |= AUTHORIZATION_HEADER_SET;
+      SetHeaders |= IOThread::kAuthorizationSet;
     } else if (!strcasecmp(name, "Connection")) {
-      SetHeaders |= CONNECTION_HEADER_SET;
+      SetHeaders |= IOThread::kConnectionSet;
     } else if (!strcasecmp(name, "User-Agent")) {
-      SetHeaders |= USER_AGENT_HEADER_SET;
+      SetHeaders |= IOThread::kUserAgentSet;
     }
   }
 
@@ -305,9 +301,6 @@ static int initializeThread(int ix, IOThread *t) {
     if (readFile(FileName, t) != 0) {
       return 3;
     }
-  } else {
-    t->sendData = NULL;
-    t->sendDataLen = 0;
   }
 
   if (Verb.empty()) {
@@ -325,21 +318,11 @@ static int initializeThread(int ix, IOThread *t) {
   t->numConnections = numConn;
   t->verbose = Verbose;
   t->sslCipher = SslCipher;
-  t->numHeaders = Headers.size();
+  t->headers = &Headers;
   t->headersSet = SetHeaders;
   t->thinkTime = ThinkTime;
   t->noKeepAlive = (KeepAlive != KeepAliveAlways);
   t->oauth = OAuth;
-
-  // TODO C++y again
-  if (Headers.empty()) {
-    t->headers = NULL;
-  } else {
-    t->headers = (char **)malloc(sizeof(char *) * Headers.size());
-    for (size_t i = 0; i < Headers.size(); i++) {
-      t->headers[i] = strdup(Headers[i].c_str());
-    }
-  }
 
   return createSslContext(t);
 }

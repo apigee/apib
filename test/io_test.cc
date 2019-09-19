@@ -227,7 +227,7 @@ TEST_F(IOTest, ResizeFromZero) {
 
   IOThread t;
   t.numConnections = 0;
-  // t.verbose = 1;
+  // t.verbose = true;
   t.httpVerb = "GET";
 
   t.Start();
@@ -251,11 +251,8 @@ TEST_F(IOTest, OneThreadBigPost) {
   t.numConnections = 1;
   // t.verbose = 1;
   t.httpVerb = "POST";
-  t.sendData = (char*)malloc(POST_LEN);
-  t.sendDataLen = POST_LEN;
-
   for (int p = 0; p < POST_LEN; p += 10) {
-    memcpy(t.sendData + p, "abcdefghij", 10);
+    t.sendData.append("abcdefghij");
   }
 
   t.Start();
@@ -275,9 +272,8 @@ TEST_F(IOTest, OneThreadHeaders) {
   t.numConnections = 1;
   // t.verbose = 1;
   t.httpVerb = "GET";
-  t.numHeaders = 1;
-  t.headers = (char**)malloc(sizeof(char*));
-  t.headers[0] = strdup("Authorization: Basic dGVzdDp2ZXJ5dmVyeXNlY3JldA==");
+  t.headers = new std::vector<std::string>();
+  t.headers->push_back("Authorization: Basic dGVzdDp2ZXJ5dmVyeXNlY3JldA==");
 
   t.Start();
   sleep(1);
@@ -285,8 +281,7 @@ TEST_F(IOTest, OneThreadHeaders) {
   RecordStop();
 
   compareReporting();
-  free(t.headers[0]);
-  free(t.headers);
+  delete t.headers;
 }
 
 }  // namespace

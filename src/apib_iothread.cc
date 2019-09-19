@@ -62,20 +62,20 @@ void ConnectionState::writeRequest() {
   buf_Append(&writeBuf_, " ");
   buf_Append(&writeBuf_, url_->path);
   buf_Append(&writeBuf_, " HTTP/1.1\r\n");
-  if (!(t_->headersSet & USER_AGENT_HEADER_SET)) {
+  if (!(t_->headersSet & IOThread::kUserAgentSet)) {
     buf_Append(&writeBuf_, "User-Agent: apib\r\n");
   }
-  if (!(t_->headersSet & HOST_HEADER_SET)) {
+  if (!(t_->headersSet & IOThread::kHostSet)) {
     buf_Append(&writeBuf_, "Host: ");
     buf_Append(&writeBuf_, url_->hostHeader);
     buf_Append(&writeBuf_, "\r\n");
   }
-  if (t_->sendDataLen > 0) {
-    if (!(t_->headersSet & CONTENT_TYPE_HEADER_SET)) {
+  if (!t_->sendData.empty()) {
+    if (!(t_->headersSet & IOThread::kContentTypeSet)) {
       buf_Append(&writeBuf_, "Content-Type: text/plain\r\n");
     }
-    if (!(t_->headersSet & CONTENT_LENGTH_HEADER_SET)) {
-      buf_Printf(&writeBuf_, "Content-Length: %lu\r\n", t_->sendDataLen);
+    if (!(t_->headersSet & IOThread::kContentLengthSet)) {
+      buf_Printf(&writeBuf_, "Content-Length: %lu\r\n", t_->sendData.size());
     }
   }
   if (t_->oauth != NULL) {
@@ -85,18 +85,20 @@ void ConnectionState::writeRequest() {
     buf_Append(&writeBuf_, "\r\n");
     free(authHdr);
   }
-  if ((t_->noKeepAlive) && !(t_->headersSet & CONNECTION_HEADER_SET)) {
+  if (t_->noKeepAlive && !(t_->headersSet & IOThread::kConnectionSet)) {
     buf_Append(&writeBuf_, "Connection: close\r\n");
   }
-  for (size_t i = 0; i < t_->numHeaders; i++) {
-    buf_Append(&writeBuf_, t_->headers[i]);
-    buf_Append(&writeBuf_, "\r\n");
+  if (t_->headers != nullptr) {
+    for (auto it = t_->headers->begin(); it != t_->headers->end(); it++) {
+      buf_AppendN(&writeBuf_, it->data(), it->size());
+      buf_Append(&writeBuf_, "\r\n");
+    }
   }
   io_Verbose(this, "%s\n", buf_Get(&writeBuf_));
 
   buf_Append(&writeBuf_, "\r\n");
-  if (t_->sendDataLen > 0) {
-    buf_AppendN(&writeBuf_, t_->sendData, t_->sendDataLen);
+  if (!t_->sendData.empty()) {
+    buf_AppendN(&writeBuf_, t_->sendData.data(), t_->sendData.size());
   }
   io_Verbose(this, "Total send is %i bytes\n", buf_Length(&writeBuf_));
 }
@@ -245,6 +247,7 @@ void IOThread::processCommands(struct ev_loop* loop, ev_async* a, int revents) {
   while (t->commands_.Pop(&cmd)) {
     switch (cmd.cmd) {
       case STOP:
+        iothread_Verbose(t, "Marking main loop to stop");
         t->keepRunning = 0;
         // We added this extra ref before we called ev_run
         ev_unref(t->loop_);

@@ -35,12 +35,6 @@ namespace apib {
 
 // Constants used to keep track of which headers were
 // already set
-#define HOST_HEADER_SET (1 << 0)
-#define CONTENT_LENGTH_HEADER_SET (1 << 1)
-#define CONTENT_TYPE_HEADER_SET (1 << 2)
-#define AUTHORIZATION_HEADER_SET (1 << 3)
-#define CONNECTION_HEADER_SET (1 << 4)
-#define USER_AGENT_HEADER_SET (1 << 5)
 
 class ConnectionState;
 
@@ -54,17 +48,23 @@ class IOThread {
   bool verbose = false;
   std::string httpVerb;
   std::string sslCipher;
-  char* sendData = nullptr;
-  size_t sendDataLen = 0;
+  std::string sendData;
   SSL_CTX* sslCtx = nullptr;
   OAuthInfo* oauth = nullptr;
-  char** headers = nullptr;
-  unsigned int numHeaders = 0;
+  std::vector<std::string>* headers = nullptr;
   int headersSet = 0;
   unsigned int thinkTime = 0;
   int noKeepAlive = 0;
   int keepRunning = 0;
   // Everything ABOVE must be initialized.
+
+  // Constants for "headersSet"
+  static constexpr int kHostSet = (1 << 0);
+  static constexpr int kContentLengthSet = (1 << 1);
+  static constexpr int kContentTypeSet = (1 << 2);
+  static constexpr int kAuthorizationSet = (1 << 3);
+  static constexpr int kConnectionSet = (1 << 4);
+  static constexpr int kUserAgentSet = (1 << 5);
 
   ~IOThread();
 
@@ -184,7 +184,7 @@ class ConnectionState {
   static void thinkingDone(struct ev_loop* loop, ev_timer* t, int revents);
 
   int index_ = 0;
-  int keepRunning_ = 0;
+  bool keepRunning_ = 0;
   IOThread* t_ = nullptr;
   int fd_ = 0;
   SSL* ssl_ = nullptr;
