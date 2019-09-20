@@ -170,19 +170,19 @@ void ConnectionState::Close() {
 // 1 means keep on writing
 int ConnectionState::singleWrite(struct ev_loop* loop, ev_io* w, int revents) {
   io_Verbose(this, "I/O ready on write path: %i\n", revents);
-  const size_t len = buf_Length(&writeBuf_) - writeBufPos_;
-  assert(len > 0);
 
+  const size_t len = fullWrite_.size() - fullWritePos_;
+  assert(len > 0);
   size_t wrote;
   const IOStatus writeStatus =
-      doWrite(buf_Get(&writeBuf_) + writeBufPos_, len, &wrote);
+      doWrite(fullWrite_.data() + fullWritePos_, len, &wrote);
 
   switch (writeStatus) {
     case OK:
       io_Verbose(this, "Successfully wrote %zu bytes\n", wrote);
-      writeBufPos_ += wrote;
+      fullWritePos_ += wrote;
       t_->recordWrite(wrote);
-      if (writeBufPos_ == (size_t)buf_Length(&writeBuf_)) {
+      if (fullWritePos_ == fullWrite_.size()) {
         // Whole message body has been written, so stop writing
         ev_io_stop(loop, &io_);
         WriteDone(0);

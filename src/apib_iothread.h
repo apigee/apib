@@ -19,6 +19,7 @@ limitations under the License.
 
 #include <openssl/ssl.h>
 
+#include <sstream>
 #include <string>
 #include <thread>
 #include <vector>
@@ -192,8 +193,9 @@ class ConnectionState {
   ev_io io_;
   ev_timer thinkTimer_;
   URLInfo* url_ = nullptr;
-  StringBuf writeBuf_;
-  size_t writeBufPos_ = 0;
+  std::ostringstream writeBuf_;
+  std::string fullWrite_;
+  size_t fullWritePos_ = 0;
   char* readBuf_ = nullptr;
   size_t readBufPos_ = 0;
   http_parser parser_;

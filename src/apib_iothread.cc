@@ -37,16 +37,12 @@ ConnectionState::ConnectionState(int index, IOThread* t) {
   index_ = index;
   keepRunning_ = 1;
   t_ = t;
-  buf_New(&writeBuf_, writeBufSize);
   readBuf_ = (char*)malloc(readBufSize);
 }
 
 // TODO memory leak -- COnnectionStates are freed when threads exit but not
 // when they just close. Think of a way to handle this...
-ConnectionState::~ConnectionState() {
-  buf_Free(&writeBuf_);
-  free(readBuf_);
-}
+ConnectionState::~ConnectionState() { free(readBuf_); }
 
 int ConnectionState::httpComplete(http_parser* p) {
   ConnectionState* c = (ConnectionState*)p->data;
@@ -56,51 +52,50 @@ int ConnectionState::httpComplete(http_parser* p) {
 
 void ConnectionState::writeRequest() {
   // TODO if we didn't change URL, then don't do this every time!
-  writeBufPos_ = 0;
-  buf_Clear(&writeBuf_);
-  buf_Append(&writeBuf_, t_->httpVerb.c_str());
-  buf_Append(&writeBuf_, " ");
-  buf_Append(&writeBuf_, url_->path);
-  buf_Append(&writeBuf_, " HTTP/1.1\r\n");
+  writeBuf_.rdbuf()->pubseekpos(0, std::ios_base::in);
+  writeBuf_.rdbuf()->pubseekpos(0, std::ios_base::out);
+  writeBuf_ << t_->httpVerb.c_str() << " " << url_->path << " HTTP/1.1\r\n";
   if (!(t_->headersSet & IOThread::kUserAgentSet)) {
-    buf_Append(&writeBuf_, "User-Agent: apib\r\n");
+    writeBuf_ << "User-Agent: apib\r\n";
   }
   if (!(t_->headersSet & IOThread::kHostSet)) {
-    buf_Append(&writeBuf_, "Host: ");
-    buf_Append(&writeBuf_, url_->hostHeader);
-    buf_Append(&writeBuf_, "\r\n");
+    writeBuf_ << "Host: " << url_->hostHeader << "\r\n";
   }
   if (!t_->sendData.empty()) {
     if (!(t_->headersSet & IOThread::kContentTypeSet)) {
-      buf_Append(&writeBuf_, "Content-Type: text/plain\r\n");
+      writeBuf_ << "Content-Type: text/plain\r\n";
     }
     if (!(t_->headersSet & IOThread::kContentLengthSet)) {
-      buf_Printf(&writeBuf_, "Content-Length: %lu\r\n", t_->sendData.size());
+      writeBuf_ << "Content-Length: " << t_->sendData.size() << "\r\n";
     }
   }
   if (t_->oauth != NULL) {
     char* authHdr = oauth_MakeHeader(t_->randState(), url_, "",
                                      t_->httpVerb.c_str(), NULL, 0, t_->oauth);
-    buf_Append(&writeBuf_, authHdr);
-    buf_Append(&writeBuf_, "\r\n");
+    writeBuf_ << authHdr << "\r\n";
     free(authHdr);
   }
   if (t_->noKeepAlive && !(t_->headersSet & IOThread::kConnectionSet)) {
-    buf_Append(&writeBuf_, "Connection: close\r\n");
+    writeBuf_ << "Connection: close\r\n";
   }
   if (t_->headers != nullptr) {
     for (auto it = t_->headers->begin(); it != t_->headers->end(); it++) {
-      buf_AppendN(&writeBuf_, it->data(), it->size());
-      buf_Append(&writeBuf_, "\r\n");
+      writeBuf_ << *it << "\r\n";
     }
   }
-  io_Verbose(this, "%s\n", buf_Get(&writeBuf_));
-
-  buf_Append(&writeBuf_, "\r\n");
-  if (!t_->sendData.empty()) {
-    buf_AppendN(&writeBuf_, t_->sendData.data(), t_->sendData.size());
+  if (t_->verbose) {
+    io_Verbose(this, "%s\n", writeBuf_.str().c_str());
   }
-  io_Verbose(this, "Total send is %i bytes\n", buf_Length(&writeBuf_));
+
+  writeBuf_ << "\r\n";
+  if (!t_->sendData.empty()) {
+    writeBuf_ << t_->sendData;
+  }
+  if (t_->verbose) {
+    io_Verbose(this, "Total send is %zi bytes\n", writeBuf_.str().size());
+  }
+  fullWrite_ = writeBuf_.str();
+  fullWritePos_ = 0;
 }
 
 void ConnectionState::ConnectAndSend() {
