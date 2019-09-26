@@ -26,6 +26,7 @@ limitations under the License.
 #include "test/test_server.h"
 
 using apib::IOThread;
+using apib::URLInfo;
 
 namespace {
 
@@ -43,7 +44,7 @@ class TLSTest : public ::testing::Test {
   }
   ~TLSTest() {
     // The "url_" family of functions use static data, so reset every time.
-    url_Reset();
+    URLInfo::Reset();
     EndReporting();
   }
 };
@@ -73,7 +74,7 @@ static SSL_CTX* setUpTLS() {
 TEST_F(TLSTest, Basic) {
   char url[128];
   sprintf(url, "https://localhost:%i/hello", testServerPort);
-  url_InitOne(url);
+  URLInfo::InitOne(url);
 
   IOThread t;
   t.numConnections = 1;
@@ -93,7 +94,7 @@ TEST_F(TLSTest, Basic) {
 TEST_F(TLSTest, NoKeepAlive) {
   char url[128];
   sprintf(url, "https://localhost:%i/hello", testServerPort);
-  url_InitOne(url);
+  URLInfo::InitOne(url);
 
   IOThread t;
   t.numConnections = 1;
@@ -114,7 +115,7 @@ TEST_F(TLSTest, NoKeepAlive) {
 TEST_F(TLSTest, Larger) {
   char url[128];
   sprintf(url, "https://localhost:%i/data?size=8000", testServerPort);
-  url_InitOne(url);
+  URLInfo::InitOne(url);
 
   IOThread t;
   t.numConnections = 1;
@@ -134,7 +135,7 @@ TEST_F(TLSTest, Larger) {
 TEST_F(TLSTest, VerifyPeerFailing) {
   char url[128];
   sprintf(url, "https://localhost:%i/hello", testServerPort);
-  url_InitOne(url);
+  URLInfo::InitOne(url);
 
   IOThread t;
   t.numConnections = 1;
@@ -159,7 +160,7 @@ TEST_F(TLSTest, VerifyPeerFailing) {
 TEST_F(TLSTest, VerifyPeerSuccess) {
   char url[128];
   sprintf(url, "https://localhost:%i/hello", testServerPort);
-  url_InitOne(url);
+  URLInfo::InitOne(url);
 
   IOThread t;
   t.numConnections = 1;

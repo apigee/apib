@@ -22,6 +22,7 @@ limitations under the License.
 #include "test/test_server.h"
 
 using apib::IOThread;
+using apib::URLInfo;
 
 namespace {
 
@@ -37,7 +38,7 @@ class IOTest : public ::testing::Test {
   }
   ~IOTest() {
     // The "url_" family of functions use static data, so reset every time.
-    url_Reset();
+    URLInfo::Reset();
     EndReporting();
   }
 };
@@ -61,7 +62,7 @@ static void compareReporting() {
 TEST_F(IOTest, OneThread) {
   char url[128];
   sprintf(url, "http://localhost:%i/hello", testServerPort);
-  url_InitOne(url);
+  URLInfo::InitOne(url);
 
   IOThread t;
   t.numConnections = 1;
@@ -78,7 +79,7 @@ TEST_F(IOTest, OneThread) {
 TEST_F(IOTest, OneRequest) {
   char url[128];
   sprintf(url, "http://localhost:%i/hello", testServerPort);
-  url_InitOne(url);
+  URLInfo::InitOne(url);
 
   IOThread t;
   t.numConnections = 1;
@@ -101,7 +102,7 @@ TEST_F(IOTest, OneRequest) {
 TEST_F(IOTest, OneThreadNoKeepAlive) {
   char url[128];
   sprintf(url, "http://localhost:%i/hello", testServerPort);
-  url_InitOne(url);
+  URLInfo::InitOne(url);
 
   IOThread t;
   t.numConnections = 1;
@@ -124,7 +125,7 @@ TEST_F(IOTest, OneThreadNoKeepAlive) {
 TEST_F(IOTest, OneThreadThinkTime) {
   char url[128];
   sprintf(url, "http://localhost:%i/hello", testServerPort);
-  url_InitOne(url);
+  URLInfo::InitOne(url);
 
   IOThread t;
   t.numConnections = 1;
@@ -143,7 +144,7 @@ TEST_F(IOTest, OneThreadThinkTime) {
 TEST_F(IOTest, OneThreadThinkTimeNoKeepAlive) {
   char url[128];
   sprintf(url, "http://localhost:%i/hello", testServerPort);
-  url_InitOne(url);
+  URLInfo::InitOne(url);
 
   IOThread t;
   t.numConnections = 1;
@@ -163,7 +164,7 @@ TEST_F(IOTest, OneThreadThinkTimeNoKeepAlive) {
 TEST_F(IOTest, OneThreadLarge) {
   char url[128];
   sprintf(url, "http://localhost:%i/data?size=4000", testServerPort);
-  url_InitOne(url);
+  URLInfo::InitOne(url);
 
   IOThread t;
   t.numConnections = 1;
@@ -181,7 +182,7 @@ TEST_F(IOTest, OneThreadLarge) {
 TEST_F(IOTest, MoreConnections) {
   char url[128];
   sprintf(url, "http://localhost:%i/hello", testServerPort);
-  url_InitOne(url);
+  URLInfo::InitOne(url);
 
   IOThread t;
   t.numConnections = 10;
@@ -199,7 +200,7 @@ TEST_F(IOTest, MoreConnections) {
 TEST_F(IOTest, ResizeCommand) {
   char url[128];
   sprintf(url, "http://localhost:%i/hello", testServerPort);
-  url_InitOne(url);
+  URLInfo::InitOne(url);
 
   IOThread t;
   t.numConnections = 1;
@@ -223,7 +224,7 @@ TEST_F(IOTest, ResizeCommand) {
 TEST_F(IOTest, ResizeFromZero) {
   char url[128];
   sprintf(url, "http://localhost:%i/hello", testServerPort);
-  url_InitOne(url);
+  URLInfo::InitOne(url);
 
   IOThread t;
   t.numConnections = 0;
@@ -245,7 +246,7 @@ TEST_F(IOTest, ResizeFromZero) {
 TEST_F(IOTest, OneThreadBigPost) {
   char url[128];
   sprintf(url, "http://localhost:%i/echo", testServerPort);
-  url_InitOne(url);
+  URLInfo::InitOne(url);
 
   IOThread t;
   t.numConnections = 1;
@@ -266,7 +267,7 @@ TEST_F(IOTest, OneThreadBigPost) {
 TEST_F(IOTest, OneThreadHeaders) {
   char url[128];
   sprintf(url, "http://localhost:%i/hello", testServerPort);
-  url_InitOne(url);
+  URLInfo::InitOne(url);
 
   IOThread t;
   t.numConnections = 1;

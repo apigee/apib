@@ -22,7 +22,7 @@ cc_library(
         "apib_rand.c",
         "apib_reporting.c",
         "apib_time.c",
-        "apib_url.c",
+        "apib_url.cc",
         "apib_util.c",
     ] + select({
         "apple": [
@@ -45,9 +45,6 @@ cc_library(
         "apib_url.h",
         "apib_util.h",
     ],
-    copts = [
-        "-std=gnu99",
-    ],
     linkopts = [
     	"-lm",
     ],
@@ -63,7 +60,7 @@ cc_library(
         "apib_io_basic.cc",
         "apib_io_socket.cc",
         "apib_iothread.cc",
-        "apib_oauth.c",
+        "apib_oauth.cc",
     ],
     hdrs = [
         "apib_commandqueue.h",

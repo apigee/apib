@@ -54,12 +54,12 @@ void ConnectionState::writeRequest() {
   // TODO if we didn't change URL, then don't do this every time!
   writeBuf_.rdbuf()->pubseekpos(0, std::ios_base::in);
   writeBuf_.rdbuf()->pubseekpos(0, std::ios_base::out);
-  writeBuf_ << t_->httpVerb.c_str() << " " << url_->path << " HTTP/1.1\r\n";
+  writeBuf_ << t_->httpVerb << " " << url_->path() << " HTTP/1.1\r\n";
   if (!(t_->headersSet & IOThread::kUserAgentSet)) {
     writeBuf_ << "User-Agent: apib\r\n";
   }
   if (!(t_->headersSet & IOThread::kHostSet)) {
-    writeBuf_ << "Host: " << url_->hostHeader << "\r\n";
+    writeBuf_ << "Host: " << url_->hostHeader() << "\r\n";
   }
   if (!t_->sendData.empty()) {
     if (!(t_->headersSet & IOThread::kContentTypeSet)) {
@@ -70,10 +70,10 @@ void ConnectionState::writeRequest() {
     }
   }
   if (t_->oauth != NULL) {
-    char* authHdr = oauth_MakeHeader(t_->randState(), url_, "",
-                                     t_->httpVerb.c_str(), NULL, 0, t_->oauth);
+    const auto authHdr =
+        oauth_MakeHeader(t_->randState(), *url_, "", t_->httpVerb.c_str(), NULL,
+                         0, *(t_->oauth));
     writeBuf_ << authHdr << "\r\n";
-    free(authHdr);
   }
   if (t_->noKeepAlive && !(t_->headersSet & IOThread::kConnectionSet)) {
     writeBuf_ << "Connection: close\r\n";
@@ -144,7 +144,7 @@ void ConnectionState::recycle(int closeConn) {
 }
 
 int ConnectionState::StartConnect() {
-  url_ = url_GetNext(t_->randState());
+  url_ = URLInfo::GetNext(t_->randState());
   needsOpen_ = 1;
   ConnectAndSend();
   return 0;
@@ -194,8 +194,8 @@ void ConnectionState::ReadDone(int err) {
     recycle(1);
   } else {
     const URLInfo* oldUrl = url_;
-    url_ = url_GetNext(t_->randState());
-    if (!url_IsSameServer(oldUrl, url_, t_->index)) {
+    url_ = URLInfo::GetNext(t_->randState());
+    if (!URLInfo::IsSameServer(*oldUrl, *url_, t_->index)) {
       io_Verbose(this, "Switching to a different server\n");
       recycle(1);
     } else {

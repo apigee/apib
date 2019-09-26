@@ -22,6 +22,7 @@ limitations under the License.
 #include <ctime>
 #include <fstream>
 #include <iostream>
+#include <regex>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -35,6 +36,8 @@ limitations under the License.
 #include "third_party/base64.h"
 
 using apib::IOThread;
+using apib::OAuthInfo;
+using apib::URLInfo;
 using std::cerr;
 using std::cout;
 using std::endl;
@@ -62,7 +65,8 @@ static int ThinkTime = 0;
 static std::vector<std::string> Headers;
 static int SetHeaders = 0;
 
-static OAuthInfo *OAuth = NULL;
+static const std::regex kColon(":");
+static OAuthInfo *OAuth = nullptr;
 
 #define OPTIONS "c:d:f:hk:t:u:vw:x:C:F:H:O:K:M:X:N:STVW:1"
 
@@ -243,15 +247,24 @@ static void waitAndReport(int duration, int warmup) {
 }
 
 static void processOAuth(const std::string &arg) {
-  // TODO split using a regex
-  char *tmp = strdup(arg.c_str());
-  OAuth = (OAuthInfo *)malloc(sizeof(OAuthInfo));
-  char *last;
-  OAuth->consumerKey = strtok_r(tmp, ":", &last);
-  OAuth->consumerSecret = strtok_r(NULL, ":", &last);
-  OAuth->accessToken = strtok_r(NULL, ":", &last);
-  OAuth->tokenSecret = strtok_r(NULL, ":", &last);
-  free(tmp);
+  OAuth = new OAuthInfo();
+  auto part = std::sregex_token_iterator(arg.cbegin(), arg.cend(), kColon, -1);
+  if (part != std::sregex_token_iterator()) {
+    OAuth->consumerKey = *part;
+    part++;
+  }
+  if (part != std::sregex_token_iterator()) {
+    OAuth->consumerSecret = *part;
+    part++;
+  }
+  if (part != std::sregex_token_iterator()) {
+    OAuth->accessToken = *part;
+    part++;
+  }
+  if (part != std::sregex_token_iterator()) {
+    OAuth->tokenSecret = *part;
+    part++;
+  }
   SetHeaders |= IOThread::kAuthorizationSet;
 }
 
@@ -288,7 +301,7 @@ static void processBasic(const std::string &arg) {
   std::ostringstream hdr;
   hdr << "Authorization: Basic " << b64;
   delete[] b64;
-  addHeader(hdr.rdbuf()->str());
+  addHeader(hdr.str());
 }
 
 static int initializeThread(int ix, IOThread *t) {
@@ -444,17 +457,17 @@ int main(int argc, char *const *argv) {
   if (!ContentType.empty()) {
     std::ostringstream hdr;
     hdr << "Content-Type: " << ContentType;
-    addHeader(hdr.rdbuf()->str());
+    addHeader(hdr.str());
   }
 
   if (!url.empty()) {
     if (url[0] == '@') {
-      if (url_InitFile(url.substr(1).c_str()) != 0) {
+      if (URLInfo::InitFile(url.substr(1)) != 0) {
         cerr << "Invalid URL file " << url.substr(1) << endl;
         goto finished;
       }
     } else {
-      if (url_InitOne(url.c_str()) != 0) {
+      if (URLInfo::InitFile(url) != 0) {
         cerr << "Invalid url: " << url << endl;
         goto finished;
       }

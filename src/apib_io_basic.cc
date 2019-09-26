@@ -20,6 +20,7 @@ limitations under the License.
 #include <openssl/err.h>
 #include <sys/socket.h>
 #include <sys/types.h>
+#include <netdb.h>
 #include <unistd.h>
 
 #include <cassert>
@@ -64,13 +65,22 @@ int ConnectionState::Connect() {
 
   size_t addrLen;
   const struct sockaddr* addr =
-      url_GetAddress(url_, t_->threadIndex(), &addrLen);
+    url_->address(t_->threadIndex(), &addrLen);
+  
+  if (t_->verbose) {
+    char hostName[512];
+    getnameinfo(addr, addrLen, hostName, 512, nullptr, 0, NI_NUMERICHOST);
+    io_Verbose(this, "Connecting to %s:%i\n", hostName, ntohs(((struct sockaddr_in*)addr)->sin_port));
+  }
+
   err = connect(fd_, addr, addrLen);
   if ((err != 0) && (errno == EINPROGRESS)) {
     err = 0;
+  } else if (err != 0) {
+    io_Verbose(this, "Error from connect(): %i\n", errno);
   }
 
-  if ((err == 0) && (url_->isSsl)) {
+  if ((err == 0) && (url_->isSsl())) {
     io_Verbose(this, "Setting up connection for TLS\n");
     assert(t_->sslCtx != NULL);
     ssl_ = SSL_new(t_->sslCtx);
@@ -83,7 +93,7 @@ int ConnectionState::Connect() {
       printSslError("Can't initialize SSL connection", sslErr);
       return -2;
     }
-    sslErr = SSL_set_tlsext_host_name(ssl_, url_->hostName);
+    sslErr = SSL_set_tlsext_host_name(ssl_, url_->hostName().c_str());
     if (sslErr != 1) {
       printSslError("Can't set host name on SSL connection", sslErr);
       return -3;

@@ -20,11 +20,13 @@ limitations under the License.
 #include <sys/socket.h>
 #include <sys/types.h>
 
+#include <memory>
+#include <string>
+#include <vector>
+
 #include "src/apib_rand.h"
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+namespace apib {
 
 /*
 Code for URL handling. The list of URLs is global. It's
@@ -34,57 +36,78 @@ for each invocation. There's no locking because the "Get"
 functions don't change state.
 */
 
-typedef struct {
-  struct sockaddr_storage* addresses;
-  size_t* addressLengths;
-  int addressCount;
-  unsigned int port;
-  int isSsl;
-  char* path;
-  char* pathOnly;
-  char* query;
-  char* hostName;
-  char* hostHeader;
-} URLInfo;
+class URLInfo {
+ public:
+  static const std::string kHttp;
+  static const std::string kHttps;
 
-/*
- * Set the following as the one and only one URL for this session.
- */
-extern int url_InitOne(const char* urlStr);
+  URLInfo();
+  URLInfo(const URLInfo& u);
+  ~URLInfo();
 
-/*
- * Read a list of URLs from a file, one line per URL.
- */
-extern int url_InitFile(const char* fileName);
+  /*
+   * Set the following as the one and only one URL for this session.
+   */
+  static int InitOne(const std::string& urlStr);
 
-/*
- * Clear the effects of one of the Init functions. This is helpful
- * in writing tests.
- */
-extern void url_Reset();
+  /*
+   * Read a list of URLs from a file, one line per URL.
+   */
+  static int InitFile(const std::string& fileName);
 
-/*
- * Get a randomly-selected URL, plus address and port, for the next
- * request. This allows us to balance requests over many separate URLs.
- */
-extern URLInfo* url_GetNext(RandState rand);
+  /*
+   * Clear the effects of one of the Init functions. This is helpful
+   * in writing tests.
+   */
+  static void Reset();
 
-/*
- * Get the network address for the next request based on which connection is
- * making it. Using the index number for each connection means that for a host
- * with multiple IPs, we evenly distribute requests across them without opening
- * a new connection for each request.
- */
-extern struct sockaddr* url_GetAddress(const URLInfo* url, int index, size_t* len);
+  /*
+   * Get a randomly-selected URL, plus address and port, for the next
+   * request. This allows us to balance requests over many separate URLs.
+   */
+  static URLInfo* const GetNext(RandState rand);
 
-/*
- * Return whether the two URLs refer to the same host and port for the given
- * connection -- we use this to optimize socket management.
- */
-extern int url_IsSameServer(const URLInfo* u1, const URLInfo* u2, int index);
+  /*
+   * Return whether the two URLs refer to the same host and port for the given
+   * connection -- we use this to optimize socket management.
+   */
+  static bool IsSameServer(const URLInfo& u1, const URLInfo& u2, int index);
 
-#ifdef __cplusplus
-}
-#endif
+  /*
+   * Get the network address for the next request based on which connection is
+   * making it. Using the index number for each connection means that for a host
+   * with multiple IPs, we evenly distribute requests across them without
+   * opening a new connection for each request.
+   */
+  struct sockaddr* address(int index, size_t* len) const;
+
+  unsigned int port() const { return port_; }
+  bool isSsl() const { return isSsl_; }
+  std::string path() const { return path_; }
+  std::string pathOnly() const { return pathOnly_; }
+  std::string query() const { return query_; }
+  std::string hostName() const { return hostName_; }
+  std::string hostHeader() const { return hostHeader_; }
+  size_t addressCount() const { return addresses_.size(); }
+
+ private:
+  int init(const std::string& urlStr);
+  int initHost(const std::string& hostName);
+
+  std::vector<struct sockaddr*> addresses_;
+  std::vector<socklen_t> addressLengths_;
+  unsigned int port_;
+  bool isSsl_;
+  std::string path_;
+  std::string pathOnly_;
+  std::string query_;
+  std::string hostName_;
+  std::string hostHeader_;
+
+  static std::vector<URLInfo> urls_;
+  static bool initialized_;
+};
+
+}  // namespace apib
 
 #endif  // APIB_URL_H
