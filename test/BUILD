@@ -68,16 +68,6 @@ cc_test(
 )
 
 cc_test(
-    name = "rand",
-    srcs = ["rand_test.cc"],
-    deps = [
-        "//src:common",
-        "@gtest",
-        "@gtest//:gtest_main",
-    ],
-)
-
-cc_test(
     name = "urls",
     srcs = ["url_test.cc"],
     data = [
@@ -131,6 +121,7 @@ cc_test(
     deps = [
         "//src:io",
         "@gtest",
+        "@gtest//:gtest_main",
     ],
 )
 

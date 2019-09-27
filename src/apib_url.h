@@ -65,7 +65,7 @@ class URLInfo {
    * Get a randomly-selected URL, plus address and port, for the next
    * request. This allows us to balance requests over many separate URLs.
    */
-  static URLInfo* const GetNext(RandState rand);
+  static URLInfo* const GetNext(RandomGenerator* rand);
 
   /*
    * Return whether the two URLs refer to the same host and port for the given

@@ -14,24 +14,18 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-#include "gtest/gtest.h"
-#include "src/apib_rand.h"
+#include "apib_rand.h"
 
-TEST(Rand, Basic) {
-  RandState rs = apib_InitRand();
-  long rv = apib_Rand(rs);
-  EXPECT_LE(0, rv);
-  apib_FreeRand(rs);
+namespace apib {
+
+RandomGenerator::RandomGenerator() {
+  std::random_device rd;
+  engine_ = std::minstd_rand(rd());
 }
 
-typedef struct {
-  RandState rs;
-} RandThing;
-
-TEST(Rand, InAStruct) {
-  RandThing t;
-  t.rs = apib_InitRand();
-  long rv = apib_Rand(t.rs);
-  EXPECT_LE(0, rv);
-  apib_FreeRand(t.rs);
+int32_t RandomGenerator::get(int32_t min, int32_t max) {
+  std::uniform_int_distribution<int32_t> dist(min, max);
+  return dist(engine_);
 }
+
+}  // namespace apib

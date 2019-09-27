@@ -71,7 +71,7 @@ void ConnectionState::writeRequest() {
   }
   if (t_->oauth != NULL) {
     const auto authHdr =
-        oauth_MakeHeader(t_->randState(), *url_, "", t_->httpVerb.c_str(), NULL,
+        oauth_MakeHeader(t_->rand(), *url_, "", t_->httpVerb.c_str(), NULL,
                          0, *(t_->oauth));
     writeBuf_ << authHdr << "\r\n";
   }
@@ -144,7 +144,7 @@ void ConnectionState::recycle(int closeConn) {
 }
 
 int ConnectionState::StartConnect() {
-  url_ = URLInfo::GetNext(t_->randState());
+  url_ = URLInfo::GetNext(t_->rand());
   needsOpen_ = 1;
   ConnectAndSend();
   return 0;
@@ -194,7 +194,7 @@ void ConnectionState::ReadDone(int err) {
     recycle(1);
   } else {
     const URLInfo* oldUrl = url_;
-    url_ = URLInfo::GetNext(t_->randState());
+    url_ = URLInfo::GetNext(t_->rand());
     if (!URLInfo::IsSameServer(*oldUrl, *url_, t_->index)) {
       io_Verbose(this, "Switching to a different server\n");
       recycle(1);
@@ -268,7 +268,6 @@ void IOThread::threadLoop() {
   writeCount_ = 0;
   readBytes_ = 0;
   writeBytes_ = 0;
-  randState_ = apib_InitRand();
 
   iothread_Verbose(this, "Starting new event loop %i for %i connection\n",
                    index, numConnections);
@@ -306,7 +305,6 @@ finish:
   for (auto it = connections_.cbegin(); it != connections_.cend(); it++) {
     delete *it;
   }
-  apib_FreeRand(randState_);
   ev_loop_destroy(loop_);
 }
 

@@ -19,7 +19,7 @@ cc_library(
     srcs = [
         "apib_lines.c",
         "apib_message.c",
-        "apib_rand.c",
+        "apib_rand.cc",
         "apib_reporting.c",
         "apib_time.c",
         "apib_url.cc",

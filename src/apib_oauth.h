@@ -35,14 +35,14 @@ class OAuthInfo {
 // Generate an OAuth 1.0a query string for the specified URL,
 // form body content, and security tokens. The result must be freed
 // using free().
-extern std::string oauth_MakeQueryString(RandState rand, const URLInfo& url,
+extern std::string oauth_MakeQueryString(RandomGenerator* rand, const URLInfo& url,
                                          const std::string& method,
                                          const char* sendData,
                                          unsigned int sendDataSize,
                                          const OAuthInfo& oauth);
 
 // Do the same but put the result into an HTTP "Authorization:" header.
-extern std::string oauth_MakeHeader(RandState rand, const URLInfo& url,
+extern std::string oauth_MakeHeader(RandomGenerator* rand, const URLInfo& url,
                               const std::string& realm,
                               const std::string& method,
                               const char* sendData,
@@ -50,7 +50,7 @@ extern std::string oauth_MakeHeader(RandState rand, const URLInfo& url,
                               const OAuthInfo& oauth);
 
 // Externalized for testing
-extern std::string oauth_buildBaseString(RandState rand, const URLInfo& url,
+extern std::string oauth_buildBaseString(RandomGenerator* rand, const URLInfo& url,
                                    const std::string& method, long timestamp,
                                    const std::string& nonce,
                                    const char* sendData,

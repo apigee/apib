@@ -146,15 +146,13 @@ std::string oauth_generateHmac(const std::string& base,
   return std::string(ret);
 }
 
-static std::string makeNonce(RandState rand) {
-  long r1 = apib_Rand(rand);
-  long r2 = apib_Rand(rand);
+static std::string makeNonce(RandomGenerator* rand) {
   std::ostringstream nonce;
-  nonce << std::hex << std::uppercase << r1 << r2 << std::dec;
+  nonce << std::hex << std::uppercase << rand->get() << rand->get() << std::dec;
   return nonce.str();
 }
 
-std::string oauth_buildBaseString(RandState rand, const URLInfo& url,
+std::string oauth_buildBaseString(RandomGenerator* rand, const URLInfo& url,
                                   const std::string& method, long timestamp,
                                   const std::string& nonce,
                                   const char* sendData, size_t sendDataSize,
@@ -218,7 +216,7 @@ std::string oauth_buildBaseString(RandState rand, const URLInfo& url,
   return base.str();
 }
 
-std::string oauth_MakeQueryString(RandState rand, const URLInfo& url,
+std::string oauth_MakeQueryString(RandomGenerator* rand, const URLInfo& url,
                                   const std::string& method,
                                   const char* sendData,
                                   unsigned int sendDataSize,
@@ -245,7 +243,7 @@ std::string oauth_MakeQueryString(RandState rand, const URLInfo& url,
   return query.str();
 }
 
-std::string oauth_MakeHeader(RandState rand, const URLInfo& url,
+std::string oauth_MakeHeader(RandomGenerator* rand, const URLInfo& url,
                              const std::string& realm,
                              const std::string& method, const char* sendData,
                              unsigned int sendDataSize,

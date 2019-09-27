@@ -261,7 +261,7 @@ int URLInfo::InitFile(const std::string& fileName) {
   return 0;
 }
 
-URLInfo* const URLInfo::GetNext(RandState rand) {
+URLInfo* const URLInfo::GetNext(RandomGenerator* rand) {
   if (urls_.empty()) {
     return nullptr;
   }
@@ -269,8 +269,8 @@ URLInfo* const URLInfo::GetNext(RandState rand) {
     return &(urls_[0]);
   }
 
-  const long randVal = apib_Rand(rand);
-  return &(urls_[randVal % urls_.size()]);
+  const int32_t ix = rand->get(0, (urls_.size() - 1));
+  return &(urls_[ix]);
 }
 
 void URLInfo::Reset() {

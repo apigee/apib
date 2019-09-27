@@ -24,7 +24,7 @@ namespace {
 using apib::OAuthInfo;
 using apib::URLInfo;
 
-static RandState randState;
+static apib::RandomGenerator randgen;
 
 class OAuthTest : public ::testing::Test {
  protected:
@@ -52,7 +52,7 @@ TEST_F(OAuthTest, Rfc5849BaseAndHmac) {
   const std::string nonce = "7d8f3e4a";
 
   std::string base =
-      oauth_buildBaseString(randState, *(URLInfo::GetNext(randState)), "POST",
+      oauth_buildBaseString(&randgen, *(URLInfo::GetNext(&randgen)), "POST",
                             timestamp, nonce, body.data(), body.size(), oauth);
 
   // Exact results from RFC7230
@@ -79,7 +79,7 @@ TEST_F(OAuthTest, QueryString) {
   const std::string body = "c2&a3=2+q";
 
   std::string query =
-      oauth_MakeQueryString(randState, *(URLInfo::GetNext(randState)), "POST",
+      oauth_MakeQueryString(&randgen, *(URLInfo::GetNext(&randgen)), "POST",
                             body.data(), body.size(), oauth);
 
   const std::string expectedRE =
@@ -98,7 +98,7 @@ TEST_F(OAuthTest, AuthHeader) {
   const std::string body = "c2&a3=2+q";
 
   std::string hdr =
-      oauth_MakeHeader(randState, *(URLInfo::GetNext(randState)), "Example",
+      oauth_MakeHeader(&randgen, *(URLInfo::GetNext(&randgen)), "Example",
                        "POST", body.data(), body.size(), oauth);
 
   const std::string expectedRE =
@@ -113,11 +113,3 @@ TEST_F(OAuthTest, AuthHeader) {
 }
 
 }  // namespace
-
-int main(int argc, char** argv) {
-  ::testing::InitGoogleTest(&argc, argv);
-  randState = apib_InitRand();
-  const int err = RUN_ALL_TESTS();
-  apib_FreeRand(randState);
-  return err;
-}

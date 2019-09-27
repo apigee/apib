@@ -148,13 +148,12 @@ TEST(URL, ParseLocalhost) {
 }
 
 TEST(URL, ParseFile) {
-  auto rand = apib_InitRand();
+  apib::RandomGenerator rand;
   EXPECT_EQ(0, URLInfo::InitFile("test/data/urls.txt"));
   for (int i = 0; i < 10000; i++) {
-    const URLInfo* u = URLInfo::GetNext(rand);
+    const URLInfo* u = URLInfo::GetNext(&rand);
     ASSERT_NE(nullptr, u);
   }
-  apib_FreeRand(rand);
 }
 
 } // namespace

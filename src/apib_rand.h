@@ -17,21 +17,25 @@ limitations under the License.
 #ifndef APIB_RAND_H
 #define APIB_RAND_H
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+#include <random>
 
-typedef void* RandState;
+namespace apib {
 
-// Create a random state. These are not thread-safe.
-extern RandState apib_InitRand();
-extern void apib_FreeRand(RandState s);
+/*
+This class wraps the very complicated random number stuff in C++.
+*/
 
-// Get a random integer
-extern long apib_Rand(RandState s);
+class RandomGenerator {
+ public:
+  RandomGenerator();
+  int32_t get() { return dist_(engine_); }
+  int32_t get(int32_t min, int32_t max);
 
-#ifdef __cplusplus
-}
-#endif
+ private:
+  std::minstd_rand engine_;
+  std::uniform_int_distribution<int32_t> dist_;
+};
+
+}  // namespace apib
 
 #endif  //  APIB_RAND_H

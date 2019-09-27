@@ -95,7 +95,7 @@ class IOThread {
   int threadIndex() { return index; }
   http_parser_settings* parserSettings() { return &parserSettings_; }
   bool shouldKeepRunning() { return keepRunning; }
-  RandState randState() { return randState_; }
+  RandomGenerator* rand() { return &rand_; }
 
   void recordRead(size_t c);
   void recordWrite(size_t c);
@@ -115,7 +115,7 @@ class IOThread {
   long long writeBytes_;
   std::vector<ConnectionState*> connections_;
   std::thread* thread_;
-  RandState randState_;
+  RandomGenerator rand_;
   struct ev_loop* loop_;
   ev_async async_;
   CommandQueue commands_;
