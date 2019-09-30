@@ -311,6 +311,9 @@ finish:
 }
 
 IOThread::~IOThread() {
+  if (sslCtx != nullptr) {
+    SSL_CTX_free(sslCtx);
+  }
   if (thread_ != nullptr) {
     delete thread_;
   }
