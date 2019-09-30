@@ -17,16 +17,17 @@ limitations under the License.
 #include "gtest/gtest.h"
 #include "src/apib_reporting.h"
 
-using apib::BenchmarkResults;
 using apib::BenchmarkIntervalResults;
+using apib::BenchmarkResults;
 using apib::RecordByteCounts;
 using apib::RecordConnectionOpen;
+using apib::RecordLatencies;
+using apib::RecordResult;
 using apib::RecordSocketError;
 using apib::RecordStart;
 using apib::RecordStop;
-using apib::RecordResult;
-using apib::ReportResults;
 using apib::ReportIntervalResults;
+using apib::ReportResults;
 
 namespace {
 
@@ -52,15 +53,17 @@ TEST_F(Reporting, ReportingZero) {
 TEST_F(Reporting, ReportingCount) {
   RecordStart(1);
   RecordConnectionOpen();
-  RecordResult(200, 100000000);
-  RecordResult(201, 110000000);
-  RecordResult(204, 120000000);
-  RecordResult(403, 100000000);
-  RecordResult(401, 100000000);
-  RecordResult(500, 100000000);
+  RecordResult(200);
+  RecordResult(201);
+  RecordResult(204);
+  RecordResult(403);
+  RecordResult(401);
+  RecordResult(500);
   RecordSocketError();
   RecordConnectionOpen();
   RecordByteCounts(100, 200);
+  RecordLatencies(std::vector<int64_t>({120000000, 110000000}));
+  RecordLatencies(std::vector<int64_t>({100000000, 110000000, 100000000}));
   RecordStop();
 
   BenchmarkResults r = ReportResults();
@@ -79,19 +82,19 @@ TEST_F(Reporting, ReportingCount) {
 TEST_F(Reporting, ReportingInterval) {
   RecordStart(1);
   RecordConnectionOpen();
-  RecordResult(200, 100000000);
-  RecordResult(201, 100000000);
-  RecordResult(400, 100000000);
+  RecordResult(200);
+  RecordResult(201);
+  RecordResult(400);
 
   BenchmarkIntervalResults ri = ReportIntervalResults();
   EXPECT_EQ(2, ri.successfulRequests);
   EXPECT_LT(0.0, ri.averageThroughput);
 
-  RecordResult(204, 100000000);
-  RecordResult(403, 100000000);
-  RecordResult(401, 100000000);
-  RecordResult(500, 100000000);
-  RecordResult(200, 100000000);
+  RecordResult(204);
+  RecordResult(403);
+  RecordResult(401);
+  RecordResult(500);
+  RecordResult(200);
 
   ri = ReportIntervalResults();
   EXPECT_EQ(2, ri.successfulRequests);

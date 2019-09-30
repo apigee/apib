@@ -17,7 +17,6 @@ limitations under the License.
 #include "src/apib_reporting.h"
 
 #include <arpa/inet.h>
-#include <assert.h>
 #include <netdb.h>
 #include <netinet/in.h>
 #include <sys/socket.h>
@@ -25,6 +24,8 @@ limitations under the License.
 #include <unistd.h>
 
 #include <algorithm>
+#include <atomic>
+#include <cassert>
 #include <cmath>
 #include <iomanip>
 #include <iostream>
@@ -49,12 +50,12 @@ static const std::regex kHostPort("^([^:]+):([0-9]+)$");
 static std::mutex latch;
 static volatile bool reporting = 0;
 static bool cpuAvailable = false;
-static int32_t completedRequests = 0;
-static int32_t successfulRequests = 0;
-static int32_t intervalSuccessful = 0;
-static int32_t unsuccessfulRequests = 0;
-static int32_t socketErrors = 0;
-static int32_t connectionsOpened = 0;
+static std::atomic_int32_t completedRequests = ATOMIC_VAR_INIT(0);
+static std::atomic_int32_t successfulRequests = ATOMIC_VAR_INIT(0);
+static std::atomic_int32_t intervalSuccessful = ATOMIC_VAR_INIT(0);
+static std::atomic_int32_t unsuccessfulRequests = ATOMIC_VAR_INIT(0);
+static std::atomic_int32_t socketErrors = ATOMIC_VAR_INIT(0);
+static std::atomic_int32_t connectionsOpened = ATOMIC_VAR_INIT(0);
 
 static int64_t startTime;
 static int64_t stopTime;
@@ -151,12 +152,11 @@ failure:
   return 0.0;
 }
 
-void RecordResult(int code, int64_t latency) {
+void RecordResult(int code) {
   if (!reporting) {
     return;
   }
 
-  std::lock_guard<std::mutex> lock(latch);
   completedRequests++;
   if ((code >= 200) && (code < 300)) {
     successfulRequests++;
@@ -164,14 +164,12 @@ void RecordResult(int code, int64_t latency) {
   } else {
     unsuccessfulRequests++;
   }
-  latencies.push_back(latency);
 }
 
 void RecordSocketError(void) {
   if (!reporting) {
     return;
   }
-  std::lock_guard<std::mutex> lock(latch);
   socketErrors++;
 }
 
@@ -179,14 +177,17 @@ void RecordConnectionOpen(void) {
   if (!reporting) {
     return;
   }
-  std::lock_guard<std::mutex> lock(latch);
   connectionsOpened++;
 }
 
 void RecordByteCounts(int64_t sent, int64_t received) {
-  std::lock_guard<std::mutex> lock(latch);
   totalBytesSent += sent;
   totalBytesReceived += received;
+}
+
+void RecordLatencies(const std::vector<int64_t>& l) {
+  std::lock_guard<std::mutex> lock(latch);
+  latencies.insert(latencies.end(), l.cbegin(), l.cend());
 }
 
 void RecordInit(const std::string& monitorHost, const std::string& host2) {
@@ -197,8 +198,8 @@ void RecordInit(const std::string& monitorHost, const std::string& host2) {
 }
 
 void RecordStart(bool startReporting) {
-  std::lock_guard<std::mutex> lock(latch);
   /* When we warm up we want to zero these out before continuing */
+  std::lock_guard<std::mutex> lock(latch);
   completedRequests = 0;
   successfulRequests = 0;
   intervalSuccessful = 0;
@@ -238,7 +239,6 @@ void RecordStart(bool startReporting) {
 }
 
 void RecordStop(void) {
-  std::lock_guard<std::mutex> lock(latch);
   clientMem = cpu_GetMemoryUsage();
 
   if (remoteCpuSocket != 0) {
@@ -254,14 +254,11 @@ void RecordStop(void) {
 
 BenchmarkIntervalResults ReportIntervalResults() {
   BenchmarkIntervalResults r;
-  std::lock_guard<std::mutex> lock(latch);
   const int64_t now = apib_GetTime();
-  r.successfulRequests = intervalSuccessful;
+  r.successfulRequests = intervalSuccessful.exchange(0);
   r.intervalTime = apib_Seconds(now - intervalStartTime);
   r.elapsedTime = apib_Seconds(now - startTime);
-  r.averageThroughput = (double)intervalSuccessful / r.intervalTime;
-
-  intervalSuccessful = 0;
+  r.averageThroughput = (double)r.successfulRequests / r.intervalTime;
   intervalStartTime = now;
   return r;
 }

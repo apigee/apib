@@ -20,6 +20,7 @@ limitations under the License.
 #include <cstdint>
 #include <ostream>
 #include <string>
+#include <vector>
 
 namespace apib {
 
@@ -60,7 +61,8 @@ class BenchmarkIntervalResults {
 };
 
 // One time initialization
-extern void RecordInit(const std::string& monitorHost, const std::string& monitor2Host);
+extern void RecordInit(const std::string& monitorHost,
+                       const std::string& monitor2Host);
 
 // Start a reporting run
 extern void RecordStart(bool startReporting);
@@ -75,23 +77,25 @@ extern BenchmarkResults ReportResults();
 extern void EndReporting();
 
 // Record an HTTP response and response code
-extern void RecordResult(int code, int64_t latency);
+extern void RecordResult(int code);
 // Record an error connecting
 extern void RecordSocketError();
 // Report any time we open a connection
 extern void RecordConnectionOpen();
-// Add to the total number of bytes processes
+// Add to the total number of bytes processed
 extern void RecordByteCounts(int64_t sent, int64_t received);
+// Add to the collection of latency counts
+extern void RecordLatencies(const std::vector<int64_t>& l);
 
 // Call ReportResults and print to a file
-extern void PrintShortResults(std::ostream& out, const std::string& runName, int threads,
-                              int connections);
+extern void PrintShortResults(std::ostream& out, const std::string& runName,
+                              int threads, int connections);
 extern void PrintFullResults(std::ostream& out);
 // Call ReportIntervalResults and print to a file
 extern void ReportInterval(std::ostream& out, int totalDuration, int warmup);
 // Print a CSV header for the "short" reporting format
 extern void PrintReportingHeader(std::ostream& out);
 
-}  // namespace
+}  // namespace apib
 
 #endif  // APIB_REPORTING_H

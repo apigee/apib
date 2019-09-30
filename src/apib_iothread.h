@@ -99,6 +99,7 @@ class IOThread {
 
   void recordRead(size_t c);
   void recordWrite(size_t c);
+  void recordLatency(int64_t l) { latencies_.push_back(l); }
 
  private:
   void threadLoop();
@@ -120,6 +121,7 @@ class IOThread {
   ev_async async_;
   CommandQueue commands_;
   ev_timer shutdownTimer_;
+  std::vector<int64_t> latencies_;
 };
 
 typedef enum {

@@ -188,7 +188,8 @@ void ConnectionState::ReadDone(int err) {
     return;
   }
 
-  RecordResult(parser_.status_code, apib_GetTime() - startTime_);
+  RecordResult(parser_.status_code);
+  t_->recordLatency(apib_GetTime() - startTime_);
   if (!http_should_keep_alive(&(parser_))) {
     io_Verbose(this, "Server does not want keep-alive\n");
     recycle(1);
@@ -299,6 +300,7 @@ void IOThread::threadLoop() {
   ret = ev_run(loop_, 0);
   iothread_Verbose(this, "ev_run finished: %i\n", ret);
   RecordByteCounts(writeBytes_, readBytes_);
+  RecordLatencies(latencies_);
 
 finish:
   iothread_Verbose(this, "Cleaning up event loop %i\n", index);
