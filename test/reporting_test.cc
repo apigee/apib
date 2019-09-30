@@ -17,17 +17,29 @@ limitations under the License.
 #include "gtest/gtest.h"
 #include "src/apib_reporting.h"
 
+using apib::BenchmarkResults;
+using apib::BenchmarkIntervalResults;
+using apib::RecordByteCounts;
+using apib::RecordConnectionOpen;
+using apib::RecordSocketError;
+using apib::RecordStart;
+using apib::RecordStop;
+using apib::RecordResult;
+using apib::ReportResults;
+using apib::ReportIntervalResults;
+
+namespace {
+
 class Reporting : public ::testing::Test {
  protected:
-  Reporting() { RecordInit(NULL, NULL); }
-  ~Reporting() { EndReporting(); }
+  Reporting() { apib::RecordInit("", ""); }
+  ~Reporting() { apib::EndReporting(); }
 };
 
 TEST_F(Reporting, ReportingZero) {
-  RecordStart(1);
+  RecordStart(true);
   RecordStop();
-  BenchmarkResults r;
-  ReportResults(&r);
+  BenchmarkResults r = ReportResults();
   EXPECT_EQ(0, r.completedRequests);
   EXPECT_EQ(0, r.successfulRequests);
   EXPECT_EQ(0, r.unsuccessfulRequests);
@@ -51,8 +63,7 @@ TEST_F(Reporting, ReportingCount) {
   RecordByteCounts(100, 200);
   RecordStop();
 
-  BenchmarkResults r;
-  ReportResults(&r);
+  BenchmarkResults r = ReportResults();
 
   EXPECT_EQ(6, r.completedRequests);
   EXPECT_EQ(3, r.successfulRequests);
@@ -72,8 +83,7 @@ TEST_F(Reporting, ReportingInterval) {
   RecordResult(201, 100000000);
   RecordResult(400, 100000000);
 
-  BenchmarkIntervalResults ri;
-  ReportIntervalResults(&ri);
+  BenchmarkIntervalResults ri = ReportIntervalResults();
   EXPECT_EQ(2, ri.successfulRequests);
   EXPECT_LT(0.0, ri.averageThroughput);
 
@@ -83,13 +93,12 @@ TEST_F(Reporting, ReportingInterval) {
   RecordResult(500, 100000000);
   RecordResult(200, 100000000);
 
-  ReportIntervalResults(&ri);
+  ri = ReportIntervalResults();
   EXPECT_EQ(2, ri.successfulRequests);
   EXPECT_LT(0.0, ri.averageThroughput);
 
   RecordStop();
-  BenchmarkResults r;
-  ReportResults(&r);
+  BenchmarkResults r = ReportResults();
 
   EXPECT_EQ(8, r.completedRequests);
   EXPECT_EQ(4, r.successfulRequests);
@@ -99,3 +108,5 @@ TEST_F(Reporting, ReportingInterval) {
   EXPECT_EQ(0, r.totalBytesSent);
   EXPECT_EQ(0, r.totalBytesReceived);
 }
+
+}  // namespace

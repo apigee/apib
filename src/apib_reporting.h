@@ -17,20 +17,21 @@ limitations under the License.
 #ifndef APIB_REPORTING_H
 #define APIB_REPORTING_H
 
-#include <stdio.h>
+#include <cstdint>
+#include <ostream>
+#include <string>
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+namespace apib {
 
-typedef struct {
-  long completedRequests;
-  long successfulRequests;
-  long unsuccessfulRequests;
-  long socketErrors;
-  long connectionsOpened;
-  long long totalBytesSent;
-  long long totalBytesReceived;
+class BenchmarkResults {
+ public:
+  int32_t completedRequests;
+  int32_t successfulRequests;
+  int32_t unsuccessfulRequests;
+  int32_t socketErrors;
+  int32_t connectionsOpened;
+  int64_t totalBytesSent;
+  int64_t totalBytesReceived;
 
   // Consolidated times in seconds
   double elapsedTime;
@@ -46,52 +47,51 @@ typedef struct {
   // Megabits / second
   double averageSendBandwidth;
   double averageReceiveBandwidth;
-} BenchmarkResults;
+};
 
-typedef struct {
-  long successfulRequests;
+class BenchmarkIntervalResults {
+ public:
+  int32_t successfulRequests;
   // In seconds
   double elapsedTime;
   double intervalTime;
   // In tps, for this interval
   double averageThroughput;
-} BenchmarkIntervalResults;
+};
 
 // One time initialization
-extern void RecordInit(const char* monitorHost, const char* monitor2Host);
+extern void RecordInit(const std::string& monitorHost, const std::string& monitor2Host);
 
 // Start a reporting run
-extern void RecordStart(int startReporting);
+extern void RecordStart(bool startReporting);
 // Stop it
-extern void RecordStop(void);
+extern void RecordStop();
 
 // Get results since last interval -- may be called while running
-extern void ReportIntervalResults(BenchmarkIntervalResults* r);
+extern BenchmarkIntervalResults ReportIntervalResults();
 // Get total results -- must be called after stop
-extern void ReportResults(BenchmarkResults* r);
+extern BenchmarkResults ReportResults();
 // And clean it up. Don't call before reporting.
-extern void EndReporting(void);
+extern void EndReporting();
 
 // Record an HTTP response and response code
-extern void RecordResult(int code, long long latency);
+extern void RecordResult(int code, int64_t latency);
 // Record an error connecting
-extern void RecordSocketError(void);
+extern void RecordSocketError();
 // Report any time we open a connection
-extern void RecordConnectionOpen(void);
+extern void RecordConnectionOpen();
 // Add to the total number of bytes processes
-extern void RecordByteCounts(long long sent, long long received);
+extern void RecordByteCounts(int64_t sent, int64_t received);
 
 // Call ReportResults and print to a file
-extern void PrintShortResults(FILE* out, const char* runName, int threads,
+extern void PrintShortResults(std::ostream& out, const std::string& runName, int threads,
                               int connections);
-extern void PrintFullResults(FILE* out);
+extern void PrintFullResults(std::ostream& out);
 // Call ReportIntervalResults and print to a file
-extern void ReportInterval(FILE* out, int totalDuration, int warmup);
+extern void ReportInterval(std::ostream& out, int totalDuration, int warmup);
 // Print a CSV header for the "short" reporting format
-extern void PrintReportingHeader(FILE* out);
+extern void PrintReportingHeader(std::ostream& out);
 
-#ifdef __cplusplus
-}
-#endif
+}  // namespace
 
 #endif  // APIB_REPORTING_H

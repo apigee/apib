@@ -20,7 +20,7 @@ cc_library(
         "apib_lines.c",
         "apib_message.c",
         "apib_rand.cc",
-        "apib_reporting.c",
+        "apib_reporting.cc",
         "apib_time.c",
         "apib_url.cc",
         "apib_util.c",

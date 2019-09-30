@@ -37,6 +37,10 @@ limitations under the License.
 
 using apib::IOThread;
 using apib::OAuthInfo;
+using apib::RecordInit;
+using apib::RecordStart;
+using apib::RecordStop;
+using apib::ReportInterval;
 using apib::URLInfo;
 using std::cerr;
 using std::cout;
@@ -240,7 +244,7 @@ static void waitAndReport(int duration, int warmup) {
 
     sleep(toSleep);
     if (!ShortOutput) {
-      ReportInterval(stdout, duration, warmup);
+      ReportInterval(std::cout, duration, warmup);
     }
     durationLeft -= toSleep;
   }
@@ -412,7 +416,7 @@ int main(int argc, char *const *argv) {
         ShortOutput = 1;
         break;
       case 'T':
-        PrintReportingHeader(stdout);
+        apib::PrintReportingHeader(std::cout);
         return 0;
         break;
       case 'V':
@@ -467,7 +471,7 @@ int main(int argc, char *const *argv) {
         goto finished;
       }
     } else {
-      if (URLInfo::InitFile(url) != 0) {
+      if (URLInfo::InitOne(url) != 0) {
         cerr << "Invalid url: " << url << endl;
         goto finished;
       }
@@ -484,8 +488,7 @@ int main(int argc, char *const *argv) {
       NumThreads = NumConnections;
     }
 
-    RecordInit(monitorHost.empty() ? NULL : monitorHost.c_str(),
-               monitor2Host.empty() ? NULL : monitor2Host.c_str());
+    RecordInit(monitorHost, monitor2Host);
 
     if (JustOnce) {
       IOThread thread;
@@ -493,7 +496,7 @@ int main(int argc, char *const *argv) {
       if (err != 0) {
         goto finished;
       }
-      RecordStart(1);
+      RecordStart(true);
       thread.Start();
       thread.Join();
       RecordStop();
@@ -509,10 +512,10 @@ int main(int argc, char *const *argv) {
       }
 
       if (warmupTime > 0) {
-        RecordStart(1);
+        RecordStart(true);
         waitAndReport(warmupTime, 1);
       }
-      RecordStart(1);
+      RecordStart(true);
       waitAndReport(duration, 0);
       RecordStop();
 
@@ -530,11 +533,11 @@ int main(int argc, char *const *argv) {
   }
 
   if (ShortOutput) {
-    PrintShortResults(stdout, RunName.c_str(), NumThreads, NumConnections);
+    apib::PrintShortResults(std::cout, RunName, NumThreads, NumConnections);
   } else {
-    PrintFullResults(stdout);
+    apib::PrintFullResults(std::cout);
   }
-  EndReporting();
+  apib::EndReporting();
 
 finished:
   return 0;

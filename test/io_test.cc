@@ -21,7 +21,10 @@ limitations under the License.
 #include "src/apib_url.h"
 #include "test/test_server.h"
 
+using apib::BenchmarkResults;
 using apib::IOThread;
+using apib::ReportResults;
+using apib::RecordStop;
 using apib::URLInfo;
 
 namespace {
@@ -32,22 +35,21 @@ static TestServer* testServer;
 class IOTest : public ::testing::Test {
  protected:
   IOTest() {
-    RecordInit(NULL, NULL);
-    RecordStart(1);
+    apib::RecordInit("", "");
+    apib::RecordStart(true);
     testserver_ResetStats(testServer);
   }
   ~IOTest() {
     // The "url_" family of functions use static data, so reset every time.
     URLInfo::Reset();
-    EndReporting();
+    apib::EndReporting();
   }
 };
 
 static void compareReporting() {
   TestServerStats stats;
   testserver_GetStats(testServer, &stats);
-  BenchmarkResults results;
-  ReportResults(&results);
+  BenchmarkResults results = ReportResults();
 
   EXPECT_LT(0, results.successfulRequests);
   EXPECT_EQ(0, results.unsuccessfulRequests);
@@ -91,8 +93,7 @@ TEST_F(IOTest, OneRequest) {
   t.Join();
   RecordStop();
 
-  BenchmarkResults results;
-  ReportResults(&results);
+  BenchmarkResults results = ReportResults();
 
   EXPECT_EQ(1, results.successfulRequests);
   EXPECT_EQ(0, results.unsuccessfulRequests);
@@ -116,8 +117,7 @@ TEST_F(IOTest, OneThreadNoKeepAlive) {
   RecordStop();
 
   compareReporting();
-  BenchmarkResults results;
-  ReportResults(&results);
+  BenchmarkResults results = ReportResults();
   EXPECT_LT(1, results.connectionsOpened);
   EXPECT_EQ(results.completedRequests, results.connectionsOpened);
 }

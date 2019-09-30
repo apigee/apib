@@ -25,7 +25,10 @@ limitations under the License.
 #include "test/test_keygen.h"
 #include "test/test_server.h"
 
+using apib::BenchmarkResults;
 using apib::IOThread;
+using apib::RecordStop;
+using apib::ReportResults;
 using apib::URLInfo;
 
 namespace {
@@ -38,22 +41,21 @@ static TestServer* testServer;
 class TLSTest : public ::testing::Test {
  protected:
   TLSTest() {
-    RecordInit(NULL, NULL);
-    RecordStart(1);
+    apib::RecordInit("", "");
+    apib::RecordStart(true);
     testserver_ResetStats(testServer);
   }
   ~TLSTest() {
     // The "url_" family of functions use static data, so reset every time.
     URLInfo::Reset();
-    EndReporting();
+    apib::EndReporting();
   }
 };
 
 static void compareReporting() {
   TestServerStats stats;
   testserver_GetStats(testServer, &stats);
-  BenchmarkResults results;
-  ReportResults(&results);
+  BenchmarkResults results = ReportResults();
 
   EXPECT_LT(0, results.successfulRequests);
   EXPECT_EQ(0, results.unsuccessfulRequests);
@@ -149,8 +151,7 @@ TEST_F(TLSTest, VerifyPeerFailing) {
   t.Stop();
   RecordStop();
 
-  BenchmarkResults results;
-  ReportResults(&results);
+  BenchmarkResults results = ReportResults();
   EXPECT_EQ(0, results.successfulRequests);
   EXPECT_LT(0, results.socketErrors);
 
