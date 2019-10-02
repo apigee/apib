@@ -49,11 +49,11 @@ namespace apib {
 
 MonServerConnection::MonServerConnection(int fd) : fd_(fd) {}
 
-size_t MonServerConnection::sendBack(const std::string& msg) {
+size_t MonServerConnection::sendBack(const absl::string_view msg) {
   return write(fd_, msg.data(), msg.size());
 }
 
-bool MonServerConnection::processCommand(const std::string& cmd,
+bool MonServerConnection::processCommand(const absl::string_view cmd,
                                          CPUUsage* lastUsage) {
   if (eqcase(cmd, "HELLO")) {
     sendBack("Hi!\n");

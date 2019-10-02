@@ -120,14 +120,14 @@ bool LineState::next() {
   return true;
 }
 
-std::string LineState::line() {
+absl::string_view LineState::line() {
   if (!lineComplete_) {
     return "";
   }
-  return std::string(buf_ + lineStart_);
+  return absl::string_view(buf_ + lineStart_);
 }
 
-std::string LineState::nextToken(const std::string& toks) {
+absl::string_view LineState::nextToken(const std::string& toks) {
   if (!lineComplete_) {
     return "";
   }
@@ -147,7 +147,7 @@ std::string LineState::nextToken(const std::string& toks) {
     }
   }
 
-  return std::string(buf_ + tokStart_);
+  return absl::string_view(buf_ + tokStart_);
 }
 
 void LineState::skipMatches(const std::string& toks) {

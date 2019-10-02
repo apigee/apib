@@ -20,6 +20,7 @@ limitations under the License.
 #include <iostream>
 #include <regex>
 
+#include "absl/strings/numbers.h"
 #include "src/apib_util.h"
 
 using std::cerr;
@@ -74,9 +75,10 @@ int HttpMessage::parseStatus(LineState* buf) {
     return 1;
   }
 
-  const std::string line = buf->line();
+  const auto line = buf->line();
   std::smatch matches;
-  if (!std::regex_match(line, matches, statusLineRegex)) {
+  const std::string lines(line);
+  if (!std::regex_match(lines, matches, statusLineRegex)) {
     return -1;
   }
   assert(matches.size() == kStatusLineParts);
@@ -94,9 +96,10 @@ int HttpMessage::parseRequestLine(LineState* buf) {
     return 1;
   }
 
-  const std::string line = buf->line();
+  const auto line = buf->line();
   std::smatch matches;
-  if (!std::regex_match(line, matches, requestLineRegex)) {
+  const std::string lines(line);
+  if (!std::regex_match(lines, matches, requestLineRegex)) {
     return -1;
   }
   assert(matches.size() == kRequestLineParts);
@@ -128,10 +131,13 @@ void HttpMessage::finishHeaders() {
   }
 }
 
-void HttpMessage::examineHeader(const std::string& name,
-                                const std::string& value) {
+void HttpMessage::examineHeader(const absl::string_view name,
+                                const absl::string_view value) {
   if (eqcase("Content-Length", name)) {
-    contentLength = std::stol(value);
+    int32_t newLength;
+    if (absl::SimpleAtoi(value, &newLength)) {
+      contentLength = newLength;
+    }
   } else if (eqcase("Transfer-Encoding", name)) {
     chunked = eqcase("chunked", value) ? 1 : 0;
   } else if (eqcase("Connection", name)) {
@@ -144,7 +150,7 @@ int HttpMessage::parseHeaderLine(LineState* buf) {
     return 1;
   }
 
-  const std::string hl = buf->line();
+  const auto hl = buf->line();
   if (hl.empty()) {
     // Empty line -- means end of headers!
     finishHeaders();
@@ -165,9 +171,9 @@ int HttpMessage::parseHeaderLine(LineState* buf) {
     examineHeader(matches[1], matches[3]);
     */
 
-  const std::string name = buf->nextToken(":");
+  const auto name = buf->nextToken(":");
   buf->skipMatches(" \t");
-  const std::string value = buf->nextToken("");
+  const auto value = buf->nextToken("");
   examineHeader(name, value);
 
   return 0;
@@ -205,7 +211,7 @@ int HttpMessage::parseChunkHeader(LineState* buf) {
   }
 
   // TODO regular expression for extra chunk header stuff like encoding!
-  const long len = std::stol(buf->line(), 0, 16);
+  const long len = std::stol(std::string(buf->line()), 0, 16);
   if (len == 0) {
     chunkState_ = kChunkEnd;
   } else {
@@ -256,7 +262,7 @@ int HttpMessage::parseTrailerLine(LineState* buf) {
     return 1;
   }
 
-  const std::string hl = buf->line();
+  const auto hl = buf->line();
   if (hl.empty()) {
     // Empty line -- means end of everything!
     state = kMessageDone;
@@ -268,7 +274,8 @@ int HttpMessage::parseTrailerLine(LineState* buf) {
   }
 
   std::smatch matches;
-  if (!std::regex_match(hl, matches, headerLineRegex)) {
+  const std::string hls(hl);
+  if (!std::regex_match(hls, matches, headerLineRegex)) {
     cerr << "Invalid trailer line: \"" << hl << '\"' << endl;
     return -2;
   }

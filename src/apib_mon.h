@@ -21,6 +21,7 @@ limitations under the License.
 #include <string>
 #include <thread>
 
+#include "absl/strings/string_view.h"
 #include "ev.h"
 #include "src/apib_cpu.h"
 
@@ -49,8 +50,8 @@ class MonServerConnection {
  public:
   MonServerConnection(int fd);
   void socketLoop();
-  bool processCommand(const std::string& cmd, CPUUsage* lastUsage);
-  size_t sendBack(const std::string& msg);
+  bool processCommand(const absl::string_view msg, CPUUsage* lastUsage);
+  size_t sendBack(const absl::string_view msg);
 
  private:
   int fd_;

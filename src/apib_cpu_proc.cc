@@ -21,6 +21,7 @@ limitations under the License.
 #include <cstring>
 #include <fstream>
 
+#include "absl/strings/numbers.h"
 #include "src/apib_cpu.h"
 #include "src/apib_lines.h"
 #include "src/apib_time.h"
@@ -116,13 +117,21 @@ double cpu_GetMemoryUsage() {
     const auto v = line.nextToken(" ");
 
     if ("MemTotal:" == n) {
-      totalMem = std::stol(v);
+      if (!absl::SimpleAtoi(v, &totalMem)) {
+        return 0.0;
+      }
     } else if ("MemFree:" == n) {
-      freeMem = std::stol(v);
+      if (!absl::SimpleAtoi(v, &freeMem)) {
+        return 0.0;
+      }
     } else if ("Buffers:" == n) {
-      buffers = std::stol(v);
+      if (!absl::SimpleAtoi(v, &buffers)) {
+        return 0.0;
+      }
     } else if ("Cached:" == n) {
-      cache = std::stol(v);
+      if (!absl::SimpleAtoi(v, &cache)) {
+        return 0.0;
+      }
     }
   }
 
@@ -153,7 +162,7 @@ static int getTicks(CPUUsage* cpu) {
       int64_t idleCount = 0LL;
       int64_t nonIdleCount = 0LL;
       int i = 0;
-      std::string tok;
+      absl::string_view tok;
 
       line.nextToken(" \t");
       do {
@@ -164,9 +173,13 @@ static int getTicks(CPUUsage* cpu) {
                  We consider both to be idle CPU.
                The eigth is "steal", which is time lost to virtualization
                as a client -- that's idle two in our estimation */
-            idleCount += std::stoll(tok);
+            if (!absl::SimpleAtoi(tok, &idleCount)) {
+              return 0;
+            }
           } else {
-            nonIdleCount += std::stoll(tok);
+            if (!absl::SimpleAtoi(tok, &nonIdleCount)) {
+              return 0;
+            }
           }
           i++;
         }

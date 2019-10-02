@@ -49,6 +49,7 @@ cc_library(
     	"-lm",
     ],
     deps = [
+        "@absl//absl/strings",
         "@httpparser",
     ],
 )
@@ -90,6 +91,7 @@ cc_library(
     ],
     deps = [
         ":common",
+        "@absl//absl/strings",
         "@libev",
     ],
     linkopts = [

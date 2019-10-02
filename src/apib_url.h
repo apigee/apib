@@ -24,6 +24,7 @@ limitations under the License.
 #include <string>
 #include <vector>
 
+#include "absl/strings/string_view.h"
 #include "src/apib_rand.h"
 
 namespace apib {
@@ -91,8 +92,8 @@ class URLInfo {
   size_t addressCount() const { return addresses_.size(); }
 
  private:
-  int init(const std::string& urlStr);
-  int initHost(const std::string& hostName);
+  int init(const absl::string_view urlStr);
+  int initHost(const absl::string_view hostName);
 
   std::vector<struct sockaddr*> addresses_;
   std::vector<socklen_t> addressLengths_;

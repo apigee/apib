@@ -37,3 +37,10 @@ git_repository(
     remote = "https://boringssl.googlesource.com/boringssl",
     shallow_since = "1566966435 +0000",
 )
+
+http_archive(
+    name = "absl",
+    sha256 = "8100085dada279bf3ee00cd064d43b5f55e5d913be0dfe2906f06f8f28d5b37e",
+    strip_prefix = "abseil-cpp-20190808",
+    urls = ["https://github.com/abseil/abseil-cpp/archive/20190808.tar.gz"],
+)

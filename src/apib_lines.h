@@ -21,6 +21,8 @@ limitations under the License.
 #include <ostream>
 #include <string>
 
+#include "absl/strings/string_view.h"
+
 namespace apib {
 
 /*
@@ -49,11 +51,11 @@ class LineState {
    * present. */
   bool next();
   /* If NextLine returned non-zero, return a pointer to the entire line */
-  std::string line();
+  absl::string_view line();
   /* If NextLine returned non-zero, return the next token delimited by "toks"
    * like strtok. If "toks" is zn empty string, return everything until the end
    * of the current line. */
-  std::string nextToken(const std::string& toks);
+  absl::string_view nextToken(const std::string& toks);
   /* Move the token position to skip anything that's not whitespace */
   void skipMatches(const std::string& toks);
   /* Move any data remaining in the line to the start. Used if we didn't

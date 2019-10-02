@@ -72,7 +72,7 @@ URLInfo::~URLInfo() {
   }
 }
 
-int URLInfo::initHost(const std::string& hostname) {
+int URLInfo::initHost(const absl::string_view hostname) {
   struct addrinfo hints;
   struct addrinfo* results;
 
@@ -83,7 +83,8 @@ int URLInfo::initHost(const std::string& hostname) {
   hints.ai_protocol = 0;
   hints.ai_flags = 0;
 
-  const int addrerr = getaddrinfo(hostname.c_str(), NULL, &hints, &results);
+  std::string tmpHost(hostname);
+  const int addrerr = getaddrinfo(tmpHost.c_str(), NULL, &hints, &results);
   if (addrerr) {
     return -1;
   }
@@ -104,12 +105,12 @@ int URLInfo::initHost(const std::string& hostname) {
   return 0;
 }
 
-static std::string urlPart(const struct http_parser_url* pu,
-                           const std::string& urlstr, int part) {
+static absl::string_view urlPart(const struct http_parser_url* pu,
+                                 const absl::string_view urlstr, int part) {
   return urlstr.substr(pu->field_data[part].off, pu->field_data[part].len);
 }
 
-int URLInfo::init(const std::string& urlstr) {
+int URLInfo::init(const absl::string_view urlstr) {
   struct http_parser_url pu;
 
   http_parser_url_init(&pu);
@@ -133,7 +134,7 @@ int URLInfo::init(const std::string& urlstr) {
     return -3;
   }
 
-  hostName_ = urlPart(&pu, urlstr, UF_HOST);
+  hostName_ = std::string(urlPart(&pu, urlstr, UF_HOST));
 
   if (pu.field_set & (1 << UF_PORT)) {
     port_ = pu.port;
@@ -148,7 +149,7 @@ int URLInfo::init(const std::string& urlstr) {
   if (pu.field_set & (1 << UF_PATH)) {
     const auto p = urlPart(&pu, urlstr, UF_PATH);
     path << p;
-    pathOnly_ = p;
+    pathOnly_ = std::string(p);
   } else {
     path << '/';
     pathOnly_ = "/";
@@ -157,7 +158,7 @@ int URLInfo::init(const std::string& urlstr) {
   if (pu.field_set & (1 << UF_QUERY)) {
     const auto q = urlPart(&pu, urlstr, UF_QUERY);
     path << '?' << q;
-    query_ = q;
+    query_ = std::string(q);
   }
 
   if (pu.field_set & (1 << UF_FRAGMENT)) {

@@ -21,6 +21,8 @@ limitations under the License.
 #include <iostream>
 #include <string>
 
+#include "absl/strings/string_view.h"
+
 namespace apib {
 
 #define mandatoryAssert(e)                                           \
@@ -30,7 +32,7 @@ namespace apib {
     abort();                                                         \
   }
 
-extern bool eqcase(const std::string& s1, const std::string& s2);
+extern bool eqcase(const absl::string_view s1, const absl::string_view s2);
 
 }  // namespace apib
 

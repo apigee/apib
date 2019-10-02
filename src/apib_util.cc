@@ -21,7 +21,7 @@ limitations under the License.
 
 namespace apib {
 
-bool eqcase(const std::string& s1, const std::string& s2) {
+bool eqcase(const absl::string_view s1, const absl::string_view s2) {
   if (s1.size() != s2.size()) {
     return false;
   }

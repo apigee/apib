@@ -20,6 +20,7 @@ limitations under the License.
 #include <cstdint>
 #include <string>
 
+#include "absl/strings/string_view.h"
 #include "src/apib_lines.h"
 
 namespace apib {
@@ -90,7 +91,8 @@ class HttpMessage {
   int parseRequestLine(LineState* buf);
   void finishHeaders();
   int parseHeaderLine(LineState* buf);
-  void examineHeader(const std::string& name, const std::string& value);
+  void examineHeader(const absl::string_view name,
+                     const absl::string_view value);
   int parseLengthBody(LineState* buf);
   int parseChunkHeader(LineState* buf);
   int parseChunkBody(LineState* buf);

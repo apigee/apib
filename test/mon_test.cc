@@ -23,6 +23,7 @@ limitations under the License.
 #include <cstring>
 #include <iostream>
 
+#include "absl/strings/numbers.h"
 #include "gtest/gtest.h"
 #include "src/apib_cpu.h"
 #include "src/apib_lines.h"
@@ -116,11 +117,10 @@ TEST_F(MonServerTest, Multi) {
       while (line.next()) {
         const auto l = line.line();
         if (cmd < 3) {
-          char* bufEnd;
-          double c = strtod(l.c_str(), &bufEnd);
+          double c;
+          EXPECT_TRUE(absl::SimpleAtod(l, &c));
           cout << "CPU = " << l << endl;
           EXPECT_LE(0.0, c);
-          EXPECT_NE(l, bufEnd);
         } else {
           EXPECT_EQ("BYE", l);
         }
