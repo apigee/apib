@@ -230,7 +230,7 @@ void RecordStart(bool startReporting) {
     }
   }
 
-  startTime = apib_GetTime();
+  startTime = GetTime();
   intervalStartTime = startTime;
 
   clientSamples.clear();
@@ -249,15 +249,15 @@ void RecordStop(void) {
   }
 
   reporting = 0;
-  stopTime = apib_GetTime();
+  stopTime = GetTime();
 }
 
 BenchmarkIntervalResults ReportIntervalResults() {
   BenchmarkIntervalResults r;
-  const int64_t now = apib_GetTime();
+  const int64_t now = GetTime();
   r.successfulRequests = intervalSuccessful.exchange(0);
-  r.intervalTime = apib_Seconds(now - intervalStartTime);
-  r.elapsedTime = apib_Seconds(now - startTime);
+  r.intervalTime = Seconds(now - intervalStartTime);
+  r.elapsedTime = Seconds(now - startTime);
   r.averageThroughput = (double)r.successfulRequests / r.intervalTime;
   intervalStartTime = now;
   return r;
@@ -321,12 +321,12 @@ static double getLatencyStdDev(void) {
   if (latencies.empty()) {
     return 0.0;
   }
-  unsigned long avg = apib_Milliseconds(getAverageLatency());
+  unsigned long avg = Milliseconds(getAverageLatency());
   double differences = 0.0;
 
   std::for_each(latencies.begin(), latencies.end(),
                 [&differences, avg](int64_t& l) {
-                  differences += pow(apib_Milliseconds(l) - avg, 2.0);
+                  differences += pow(Milliseconds(l) - avg, 2.0);
                 });
 
   return sqrt(differences / (double)latencies.size());
@@ -358,11 +358,11 @@ BenchmarkResults ReportResults() {
   r.totalBytesReceived = totalBytesReceived;
 
   const int64_t rawElapsed = stopTime - startTime;
-  r.elapsedTime = apib_Seconds(rawElapsed);
-  r.averageLatency = apib_Milliseconds(getAverageLatency());
+  r.elapsedTime = Seconds(rawElapsed);
+  r.averageLatency = Milliseconds(getAverageLatency());
   r.latencyStdDev = getLatencyStdDev();
   for (int i = 0; i < 101; i++) {
-    r.latencies[i] = apib_Milliseconds(getLatencyPercent(i));
+    r.latencies[i] = Milliseconds(getLatencyPercent(i));
   }
   r.averageThroughput = (double)completedRequests / r.elapsedTime;
   r.averageSendBandwidth = (totalBytesSent * 8.0 / 1048576.0) / r.elapsedTime;

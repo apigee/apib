@@ -24,6 +24,7 @@ limitations under the License.
 #include <sys/types.h>
 
 #include <cstring>
+#include <fstream>
 #include <iostream>
 #include <sstream>
 
@@ -220,43 +221,37 @@ bool URLInfo::IsSameServer(const URLInfo& u1, const URLInfo& u2, int index) {
 int URLInfo::InitFile(const std::string& fileName) {
   assert(!initialized_);
 
-  FILE* file;
-  char buf[URL_BUF_LEN];
-  LineState line;
-
-  file = fopen(fileName.c_str(), "r");
-  if (file == NULL) {
+  std::ifstream in(fileName);
+  if (in.fail()) {
     cerr << "Can't open \"" << fileName << '\"' << endl;
     return -1;
   }
 
-  linep_Start(&line, buf, URL_BUF_LEN, 0);
-  int rc = linep_ReadFile(&line, file);
+  LineState line(URL_BUF_LEN);
+
+  int rc = line.readStream(in);
   if (rc < 0) {
-    fclose(file);
     return -1;
   }
 
   do {
-    while (linep_NextLine(&line)) {
-      char* urlStr = linep_GetLine(&line);
+    while (line.next()) {
+      const auto urlStr = line.line();
       URLInfo u;
       int err = u.init(urlStr);
       if (err) {
         cerr << "Invalid URL \"" << urlStr << '\"' << endl;
-        fclose(file);
         return -1;
       }
       urls_.push_back(u);
     }
-    linep_Reset(&line);
-    rc = linep_ReadFile(&line, file);
+    line.consume();
+    rc = line.readStream(in);
   } while (rc > 0);
 
   cout << "Read " << urls_.size() << " URLs from \"" << fileName << '\"'
        << endl;
 
-  fclose(file);
   initialized_ = true;
   return 0;
 }

@@ -1,20 +1,18 @@
 cc_library(
     name = "testserver_lib",
-    srcs = ["test_server.c"],
+    srcs = ["test_server.cc"],
     hdrs = ["test_server.h"],
-    copts = [
-        "-std=gnu99",
-    ],
     deps = [
         "//src:common",
         "@boringssl//:ssl",
         "@httpparser",
+        "@libev",
     ],
 )
 
 cc_binary(
     name = "testserver",
-    srcs = ["test_server_main.c"],
+    srcs = ["test_server_main.cc"],
     deps = [
         ":testserver_lib",
     ],
@@ -23,13 +21,10 @@ cc_binary(
 cc_library(
     name = "keygen_lib",
     srcs = [
-        "test_keygen.c",
+        "test_keygen.cc",
     ],
     hdrs = [
         "test_keygen.h",
-    ],
-    copts = [
-        "-std=gnu99",
     ],
     deps = [
         "//src:common",
@@ -40,7 +35,7 @@ cc_library(
 cc_binary(
     name = "keygen",
     srcs = [
-        "test_keygen_main.c",
+        "test_keygen_main.cc",
     ],
     deps = [
         ":keygen_lib",
@@ -80,21 +75,21 @@ cc_test(
     ],
 )
 
-cc_test(
-    name = "message",
-    srcs = ["message_test.cc"],
-    data = [
-        ":data/bodyrequest.txt",
-        ":data/chunkedresponse.txt",
-        ":data/getrequest.txt",
-        ":data/response.txt",
-    ],
-    deps = [
-        "//src:common",
-        "@gtest",
-        "@gtest//:gtest_main",
-    ],
-)
+#cc_test(
+#    name = "message",
+#    srcs = ["message_test.cc"],
+#    data = [
+#        ":data/bodyrequest.txt",
+#        ":data/chunkedresponse.txt",
+#        ":data/getrequest.txt",
+#        ":data/response.txt",
+#    ],
+#    deps = [
+#        "//src:common",
+#        "@gtest",
+#        "@gtest//:gtest_main",
+#    ],
+#)
 
 cc_test(
     name = "cpu",
@@ -153,4 +148,14 @@ cc_test(
         "//src:mon_lib",
         "@gtest",
     ],
+)
+
+cc_test(
+    name = "util",
+    srcs = ["util_test.cc"],
+    deps = [
+        "//src:common",
+        "@gtest",
+        "@gtest//:gtest_main",
+    ]
 )

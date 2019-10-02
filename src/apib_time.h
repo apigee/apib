@@ -17,18 +17,16 @@ limitations under the License.
 #ifndef APIB_TIME_H
 #define APIB_TIME_H
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+#include <cstdint>
+
+namespace apib {
 
 // Time is always in 64-bit nanoseconds
 
-extern long long apib_GetTime();
-extern double apib_Seconds(long long t);
-extern double apib_Milliseconds(long long t);
+extern int64_t GetTime();
+extern double Seconds(int64_t t);
+extern double Milliseconds(int64_t t);
 
-#ifdef __cplusplus
-}
-#endif
+}  // namespace apib
 
 #endif  // APIB_TIME_H

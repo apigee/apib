@@ -20,9 +20,7 @@ limitations under the License.
 #include <openssl/rsa.h>
 #include <openssl/x509.h>
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+namespace apib {
 
 // Make a new RSA private key. Must be freed using RSA_free.
 // Return NULL in the event of failure.
@@ -38,8 +36,6 @@ extern int keygen_SignCertificate(RSA* key, X509* cert);
 extern int keygen_WriteRSAPrivateKey(RSA* k, const char* fileName);
 extern int keygen_WriteX509Certificate(X509* c, const char* fileName);
 
-#ifdef __cplusplus
-}
-#endif
+}  // namespace apib
 
 #endif  // TEST_KEYGEN_H

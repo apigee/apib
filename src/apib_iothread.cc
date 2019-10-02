@@ -99,7 +99,7 @@ void ConnectionState::writeRequest() {
 }
 
 void ConnectionState::ConnectAndSend() {
-  startTime_ = apib_GetTime();
+  startTime_ = GetTime();
   if (needsOpen_) {
     int err = Connect();
     mandatoryAssert(err == 0);
@@ -189,7 +189,7 @@ void ConnectionState::ReadDone(int err) {
   }
 
   RecordResult(parser_.status_code);
-  t_->recordLatency(apib_GetTime() - startTime_);
+  t_->recordLatency(GetTime() - startTime_);
   if (!http_should_keep_alive(&(parser_))) {
     io_Verbose(this, "Server does not want keep-alive\n");
     recycle(1);

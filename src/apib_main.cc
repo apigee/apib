@@ -482,7 +482,7 @@ int main(int argc, char *const *argv) {
     }
 
     if (NumThreads < 1) {
-      NumThreads = cpu_Count();
+      NumThreads = apib::cpu_Count();
     }
     if (NumThreads > NumConnections) {
       NumThreads = NumConnections;

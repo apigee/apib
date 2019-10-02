@@ -16,7 +16,6 @@ limitations under the License.
 
 #include "test/test_keygen.h"
 
-#include <assert.h>
 #include <netinet/in.h>
 #include <openssl/asn1t.h>
 #include <openssl/bn.h>
@@ -26,9 +25,10 @@ limitations under the License.
 #include <openssl/rsa.h>
 #include <openssl/x509.h>
 #include <openssl/x509v3.h>
-#include <stdio.h>
 
 #include "src/apib_util.h"
+
+namespace apib {
 
 #define DAY (60 * 60 * 24)
 
@@ -168,3 +168,5 @@ int keygen_WriteX509Certificate(X509* cert, const char* fileName) {
 
   return 0;
 }
+
+}  // namespace apib

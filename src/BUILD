@@ -17,13 +17,13 @@ config_setting(
 cc_library(
     name = "common",
     srcs = [
-        "apib_lines.c",
-        "apib_message.c",
+        "apib_lines.cc",
+        #"apib_message.c",
         "apib_rand.cc",
         "apib_reporting.cc",
-        "apib_time.c",
+        "apib_time.cc",
         "apib_url.cc",
-        "apib_util.c",
+        "apib_util.cc",
     ] + select({
         "apple": [
             "apib_cpu_generic.c",
@@ -32,7 +32,7 @@ cc_library(
             "apib_cpu_bsd.c",
         ],
         "//conditions:default": [
-            "apib_cpu_proc.c",
+            "apib_cpu_proc.cc",
         ],
     }),
     hdrs = [
@@ -67,9 +67,6 @@ cc_library(
         "apib_iothread.h",
         "apib_oauth.h",
     ],
-    copts = [
-        #"-std=gnu++14",
-    ],
     linkopts = [
         "-lpthread",
     ],
@@ -86,19 +83,17 @@ cc_library(
 cc_library(
     name = "mon_lib",
     srcs = [
-        "apib_mon.c",
+        "apib_mon.cc",
     ],
     hdrs = [
         "apib_mon.h",
     ],
-    copts = [
-        "-std=gnu99",
+    deps = [
+        ":common",
+        "@libev",
     ],
     linkopts = [
         "-lpthread",
-    ],
-    deps = [
-        ":common",
     ],
 )
 
@@ -119,10 +114,7 @@ cc_binary(
 cc_binary(
     name = "apibmon",
     srcs = [
-        "apib_mon_main.c",
-    ],
-    copts = [
-        "-std=gnu99",
+        "apib_mon_main.cc",
     ],
     deps = [
         ":mon_lib",

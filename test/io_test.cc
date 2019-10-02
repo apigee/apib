@@ -16,7 +16,6 @@ limitations under the License.
 
 #include "gtest/gtest.h"
 #include "src/apib_iothread.h"
-#include "src/apib_message.h"
 #include "src/apib_reporting.h"
 #include "src/apib_url.h"
 #include "test/test_server.h"
@@ -30,14 +29,14 @@ using apib::URLInfo;
 namespace {
 
 static int testServerPort;
-static TestServer* testServer;
+static apib::TestServer testServer;
 
 class IOTest : public ::testing::Test {
  protected:
   IOTest() {
     apib::RecordInit("", "");
     apib::RecordStart(true);
-    testserver_ResetStats(testServer);
+    testServer.resetStats();
   }
   ~IOTest() {
     // The "url_" family of functions use static data, so reset every time.
@@ -47,8 +46,7 @@ class IOTest : public ::testing::Test {
 };
 
 static void compareReporting() {
-  TestServerStats stats;
-  testserver_GetStats(testServer, &stats);
+  apib::TestServerStats stats = testServer.stats();
   BenchmarkResults results = ReportResults();
 
   EXPECT_LT(0, results.successfulRequests);
@@ -290,19 +288,16 @@ TEST_F(IOTest, OneThreadHeaders) {
 int main(int argc, char** argv) {
   ::testing::InitGoogleTest(&argc, argv);
 
-  testServer = (TestServer*)malloc(sizeof(TestServer));
-  int err = testserver_Start(testServer, "127.0.0.1", 0, NULL, NULL);
+  int err = testServer.start("127.0.0.1", 0, "", "");
   if (err != 0) {
     fprintf(stderr, "Can't start test server: %i\n", err);
     return 2;
   }
-  testServerPort = testserver_GetPort(testServer);
+  testServerPort = testServer.port();
 
   int r = RUN_ALL_TESTS();
 
-  testserver_Stop(testServer);
-  // testserver_Join(&svr);
-  free(testServer);
+  testServer.stop();
 
   return r;
 }

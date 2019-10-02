@@ -19,31 +19,31 @@ limitations under the License.
 #include "test/test_keygen.h"
 
 int main(int argc, char** argv) {
-  RSA* key = keygen_MakeRSAPrivateKey(2048);
+  RSA* key = apib::keygen_MakeRSAPrivateKey(2048);
   if (key == NULL) {
     printf("Error making private key\n");
     return 2;
   }
   
-  int err = keygen_WriteRSAPrivateKey(key, "/tmp/key.pem");
+  int err = apib::keygen_WriteRSAPrivateKey(key, "/tmp/key.pem");
   if (err != 0) {
     printf("Error generating private key: %i\n", err);
     return 2;
   }
 
-  X509* cert = keygen_MakeServerCertificate(key, 1, 100);
+  X509* cert = apib::keygen_MakeServerCertificate(key, 1, 100);
   if (cert == NULL) {
     printf("Error making certificate\n");
     return 3;
   }
 
-  err = keygen_SignCertificate(key, cert);
+  err = apib::keygen_SignCertificate(key, cert);
   if (err != 0) {
     printf("Error signing certificate: %i\n", err);
     return 4;
   }
 
-  err = keygen_WriteX509Certificate(cert, "/tmp/cert.pem");
+  err = apib::keygen_WriteX509Certificate(cert, "/tmp/cert.pem");
   X509_free(cert);
   RSA_free(key);
   if (err != 0) {

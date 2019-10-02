@@ -17,26 +17,45 @@ limitations under the License.
 #ifndef APIB_MON_H
 #define APIB_MON_H
 
-#include <pthread.h>
+#include <memory>
+#include <string>
+#include <thread>
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+#include "ev.h"
+#include "src/apib_cpu.h"
 
-typedef struct {
-  int listenfd;
-  pthread_t acceptThread;
-} MonServer;
+namespace apib {
 
-// Start the server in a background thread.
-// "address" must be numeric, as in "127.0.0.1".
-extern int mon_StartServer(MonServer* s, const char* address, int port);
-extern int mon_GetPort(const MonServer* s);
-extern void mon_StopServer(MonServer* s);
-extern void mon_JoinServer(MonServer* s);
+class MonServer {
+ public:
+  ~MonServer();
+  int start(const std::string& address, int port);
+  int port() const;
+  void stop();
+  void join();
+  void acceptOne();
 
-#ifdef __cplusplus
-}
-#endif
+ private:
+  void acceptLoop();
+
+  int listenfd_;
+  std::unique_ptr<std::thread> acceptThread_;
+  struct ev_loop* loop_ = nullptr;
+  ev_io listenev_;
+  ev_async shutdownev_;
+};
+
+class MonServerConnection {
+ public:
+  MonServerConnection(int fd);
+  void socketLoop();
+  bool processCommand(const std::string& cmd, CPUUsage* lastUsage);
+  size_t sendBack(const std::string& msg);
+
+ private:
+  int fd_;
+};
+
+}  // namespace apib
 
 #endif  // APIB_MON_H

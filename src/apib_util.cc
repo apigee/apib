@@ -16,16 +16,24 @@ limitations under the License.
 
 #include "src/apib_util.h"
 
-#include <stdarg.h>
-#include <string.h>
+#include <cassert>
+#include <locale>
 
-int safeSprintf(char* str, size_t size, const char* format, ...) {
-  va_list ap;
-  va_start(ap, format);
-  const int ret = vsnprintf(str, size, format, ap);
-  va_end(ap);
-  if (ret >= size) {
-    str[size - 1] = 0;
+namespace apib {
+
+bool eqcase(const std::string& s1, const std::string& s2) {
+  if (s1.size() != s2.size()) {
+    return false;
   }
-  return ret;
+  auto i2 = s2.cbegin();
+  for (auto i1 = s1.cbegin(); i1 != s1.cend(); i1++) {
+    assert(i2 != s2.cend());
+    if (tolower(*i1) != tolower(*i2)) {
+      return false;
+    }
+    i2++;
+  }
+  return true;
 }
+
+}  // namespace apib

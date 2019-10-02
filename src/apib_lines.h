@@ -17,120 +17,77 @@ limitations under the License.
 #ifndef APIB_LINEP_H
 #define APIB_LINEP_H
 
-#include <stdio.h>
-#include <stdarg.h>
+#include <istream>
+#include <ostream>
+#include <string>
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+namespace apib {
 
 /*
  * Code for managing line-oriented input, that must be broken into lines,
  * then tokenized, and which might come a little bit at a time.
  */
 
-typedef struct {
-  char*    buf;
-  int      httpMode; /* Lines are terminated by only a single CRLF. */
-  int      bufLen; /* The number of valid bytes in the buffer */
-  int      bufSize; /* Number of allocated bytes in case it is different */
-  int      lineStart;
-  int      lineEnd;
-  int      lineComplete;
-  int      tokStart;
-  int      tokEnd;
-} LineState;
-
-/* Initialize or reset a LineState with new data. "size" is the size
- * of the buffer, and "len" is the amount that's currently filled with real stuff */
-extern void linep_Start(LineState* l, char* line, int size,
-			int len);
-
-/* Free the initial buffer passed to linep_Start */
-extern void linep_Free(LineState* l);
-
-/* Reset the structure but keep the original buffer the same.
-   Does not reset HTTP mode. */
-extern void linep_Clear(LineState* l);
-
-/* If set to non-zero, then every line is terminated by a single CRLF. Otherwise
+class LineState {
+ public:
+  /* Initialize or reset a LineState with new data. "size" is the size
+   * of the buffer, and "len" is the amount that's currently filled with real stuff.
+   * This object takes over "line". */
+  LineState(char* line, int size, int len);
+  /* Initialize with an empty buffer. */
+  LineState(size_t len);
+  ~LineState();
+  /* Reset the structure but keep the original buffer the same.
+   Does not reset HTTP mode. This lets you re-use without reallocating. */
+  void clear();
+  /* If set to true, then every line is terminated by a single CRLF. Otherwise
    we eat them all up and return no blank lines. Http relies on blank lines! */
-extern void linep_SetHttpMode(LineState* l, int on);
-
-/* Read the first complete line -- return 0 if a complete line is not present. */
-extern int linep_NextLine(LineState* l);
-
-/* If NextLine returned non-zero, return a pointer to the entire line */
-extern char* linep_GetLine(LineState* l);
-
-/* If NextLine returned non-zero, return the next token delimited by "toks" like strtok */
-extern char* linep_NextToken(LineState* l, const char* toks);
-
-/* Move any data remaining in the line to the start. Used if we didn't
+  void setHttpMode(bool on);
+  /* Read the first complete line -- return false if a complete line is not present. */
+  bool next();
+  /* If NextLine returned non-zero, return a pointer to the entire line */
+  std::string line();
+  /* If NextLine returned non-zero, return the next token delimited by "toks" like strtok */
+  std::string nextToken(const std::string& toks);
+  /* Move any data remaining in the line to the start. Used if we didn't
    read a complete line and are still expecting more data. 
-   If we return non-zero, it means that the buffer is full and we don't
+   If we return false, it means that the buffer is full and we don't
    have a complete line. Implementations should know that means that the lines
    are too long and stop processing. */
-extern int linep_Reset(LineState* l);
+  bool consume();
+  /* Fill the line buffer with data from a file. Return what the read call did. */
+  int readStream(std::istream& in);
+  /* Fill the buffer with data from a socket */
+  int readFd(int fd);
+  /* Get info to fill the rest of the buffer directly. When done,
+    buf points to where to write more data, and remaining tells how much space
+    is left in the buffer. */
+  void getReadInfo(char** buf, int* remaining) const;
+  /* Find out how much data is left unprocessed */
+  int dataRemaining() const { return (bufLen_ - lineEnd_); }
+  /* Write data from the end of the last line to the end of the buffer */
+  void writeRemaining(std::ostream& out) const;
+  /* Skip forward to see if there's another line */
+  void skip(int toSkip) { lineEnd_ += toSkip; }
+  /* Report back how much we read */
+  void setReadLength(int len) { bufLen_ += len; }
+  /* Output the buffer to a stream */
+  void debug(std::ostream& out) const;
 
-/* Fill the line buffer with data from a file. Return what the read call did. */
-extern int linep_ReadFile(LineState* l, FILE* file);
+ private:
+  void nullLast();
 
-/* Fill the buffer with data from a socket */
-extern int linep_ReadFd(LineState* l, int fd);
+  char*    buf_;
+  bool     httpMode_; /* Lines are terminated by only a single CRLF. */
+  int      bufLen_; /* The number of valid bytes in the buffer */
+  int      bufSize_; /* Number of allocated bytes in case it is different */
+  int      lineStart_;
+  int      lineEnd_;
+  bool     lineComplete_;
+  int      tokStart_;
+  int      tokEnd_;
+};
 
-/* Get info to fill the rest of the buffer */
-extern void linep_GetReadInfo(const LineState* l, char** buf, 
-			      int* remaining);
-
-/* Find out how much data is left unprocessed */
-extern int linep_GetDataRemaining(const LineState* l);
-
-/* Write data from the end of the last line to the end of the buffer */
-extern void linep_WriteRemaining(const LineState* l, FILE* out);
-
-/* Skip forward to see if there's another line */
-extern void linep_Skip(LineState* l, int toSkip);
-
-/* Report back how much we read */
-extern void linep_SetReadLength(LineState* l, int len);
-
-extern void linep_Debug(const LineState* l, FILE* out);
-
-/*
-Code for managing buffered output. It's just an auto-resizing string buffer.
-*/
-typedef struct {
-  char* buf;
-  int size;
-  int pos;
-} StringBuf;
-
-#define DEFAULT_STRINGBUF_SIZE 128
-
-// Initialize a StringBuf
-extern void buf_New(StringBuf* b, int sizeHint);
-
-extern void buf_Free(StringBuf* b);
-
-// Append the specified null-terminated string,
-// expanding the buffer as necessary
-extern void buf_Append(StringBuf* b, const char* s);
-extern void buf_AppendChar(StringBuf* b, char c);
-extern void buf_AppendN(StringBuf* b, const char* s, size_t len);
-
-// buf_Append but supporting sprintf-like stuff
-extern void buf_Printf(StringBuf* b, const char* format, ...);
-
-// Get the null-terminated buff
-extern char* buf_Get(const StringBuf* b);
-
-extern int buf_Length(const StringBuf* b);
-
-extern void buf_Clear(StringBuf* b);
-
-#ifdef __cplusplus
-}
-#endif
+}  // namespace apib
 
 #endif  // APIB_LINEP_H

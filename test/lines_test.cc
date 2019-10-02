@@ -18,35 +18,35 @@ limitations under the License.
 
 #include "gtest/gtest.h"
 
+using apib::LineState;
+
+namespace {
+
 TEST(Lines, AllFull) {
-  LineState l;
 
   const char* const DATA =
       "Line one\nLine two\nLine three\n";
-  char* realData = strdup(DATA);
+  auto realData = strdup(DATA);
   auto realLen = strlen(DATA);
 
-  linep_Start(&l, realData, realLen, realLen);
-  ASSERT_NE(0, linep_NextLine(&l));
-  ASSERT_STREQ("Line one", linep_GetLine(&l));
-  ASSERT_NE(0, linep_NextLine(&l));
-  ASSERT_STREQ("Line two", linep_GetLine(&l));
-  ASSERT_NE(0, linep_NextLine(&l));
-  ASSERT_STREQ("Line three", linep_GetLine(&l));
-  ASSERT_EQ(0, linep_NextLine(&l));
-  free(realData);
+  LineState l(realData, realLen, realLen);
+  EXPECT_NE(false, l.next());
+  EXPECT_EQ("Line one", l.line());
+  EXPECT_NE(false, l.next());
+  EXPECT_EQ("Line two", l.line());
+  EXPECT_NE(false, l.next());
+  EXPECT_EQ("Line three", l.line());
+  EXPECT_EQ(false, l.next());
 }
 
 TEST(Lines, SlowFill) {
-  LineState l;
-
   // Empty buffer, no line
   const int bufLen = 100;
-  char* buf = (char*)malloc(bufLen);
-  linep_Start(&l, buf, bufLen, 0);
-  ASSERT_EQ(0, linep_NextLine(&l));
-  ASSERT_EQ(nullptr, linep_GetLine(&l));
-  ASSERT_EQ(0, linep_Reset(&l));
+  LineState l(bufLen);
+
+  EXPECT_EQ(false, l.next());
+  EXPECT_EQ(true, l.line().empty());
+  EXPECT_EQ(true, l.consume());
 
   // Add a line and a half
   const char* const CHUNK1 = "Line one\nLin";
@@ -55,48 +55,44 @@ TEST(Lines, SlowFill) {
 
   char* writePos;
   int spaceLeft;
-  linep_GetReadInfo(&l, &writePos, &spaceLeft);
-  ASSERT_LE(chunkLen, spaceLeft);
+  l.getReadInfo(&writePos, &spaceLeft);
+  EXPECT_LE(chunkLen, spaceLeft);
   memcpy(writePos, chunk, chunkLen);
-  linep_SetReadLength(&l, chunkLen);
+  l.setReadLength(chunkLen);
   free(chunk);
 
   // Now we can read the first line
-  ASSERT_NE(0, linep_NextLine(&l));
-  ASSERT_STREQ("Line one", linep_GetLine(&l));
-  ASSERT_EQ(0, linep_NextLine(&l));
+  EXPECT_NE(false, l.next());
+  EXPECT_EQ("Line one", l.line());
+  EXPECT_EQ(false, l.next());
 
   // And now we can add the rest
   const char* const CHUNK2 = "e two\r\n\r\nLast line\n";
   chunk = strdup(CHUNK2);
   chunkLen = strlen(CHUNK2);
-  ASSERT_EQ(0, linep_Reset(&l));
-  linep_GetReadInfo(&l, &writePos, &spaceLeft);
-  ASSERT_LE(chunkLen, spaceLeft);
+  EXPECT_EQ(true, l.consume());
+  l.getReadInfo(&writePos, &spaceLeft);
+  EXPECT_LE(chunkLen, spaceLeft);
   memcpy(writePos, chunk, chunkLen);
-  linep_SetReadLength(&l, chunkLen);
+  l.setReadLength(chunkLen);
   free(chunk);
 
   // Now we should have two more lines
-  ASSERT_NE(0, linep_NextLine(&l));
-  ASSERT_STREQ("Line two", linep_GetLine(&l));
-  ASSERT_NE(0, linep_NextLine(&l));
-  ASSERT_STREQ("Last line", linep_GetLine(&l));
-  ASSERT_EQ(0, linep_NextLine(&l));
-
-  free(buf);
+  EXPECT_NE(false, l.next());
+  EXPECT_EQ("Line two", l.line());
+  EXPECT_NE(false, l.next());
+  EXPECT_EQ("Last line", l.line());
+  EXPECT_EQ(false, l.next());
 }
 
 TEST(Lines, Tokens) {
-  LineState l;
-
   // Empty buffer, no line
   const int bufLen = 100;
-  char* buf = (char*)malloc(bufLen);
-  linep_Start(&l, buf, bufLen, 0);
-  ASSERT_EQ(0, linep_NextLine(&l));
-  ASSERT_EQ(nullptr, linep_GetLine(&l));
-  ASSERT_EQ(0, linep_Reset(&l));
+  LineState l(bufLen);
+
+  EXPECT_EQ(false, l.next());
+  EXPECT_EQ(true, l.line().empty());
+  EXPECT_EQ(true, l.consume());
 
   // Add half a line
   const char* const CHUNK1 = "Newval";
@@ -105,67 +101,59 @@ TEST(Lines, Tokens) {
 
   char* writePos;
   int spaceLeft;
-  linep_GetReadInfo(&l, &writePos, &spaceLeft);
-  ASSERT_LE(chunkLen, spaceLeft);
+  l.getReadInfo(&writePos, &spaceLeft);
+  EXPECT_LE(chunkLen, spaceLeft);
   memcpy(writePos, chunk, chunkLen);
-  linep_SetReadLength(&l, chunkLen);
+  l.setReadLength(chunkLen);
   free(chunk);
 
   // No line. Now we need to add the rest
-  ASSERT_EQ(0, linep_NextLine(&l));
-  ASSERT_EQ(0, linep_Reset(&l));
+  EXPECT_EQ(false, l.next());
+  EXPECT_EQ(true, l.consume());;
 
   const char* const CHUNK2 = "ue: Foobar\n";
   chunk = strdup(CHUNK2);
   chunkLen = strlen(CHUNK2);
-  linep_GetReadInfo(&l, &writePos, &spaceLeft);
-  ASSERT_LE(chunkLen, spaceLeft);
+  l.getReadInfo(&writePos, &spaceLeft);
+  EXPECT_LE(chunkLen, spaceLeft);
   memcpy(writePos, chunk, chunkLen);
-  linep_SetReadLength(&l, chunkLen);
+  l.setReadLength(chunkLen);
   free(chunk);
 
   // Now we have a line with a token in it
-  ASSERT_NE(0, linep_NextLine(&l));
-  ASSERT_STREQ("Newvalue", linep_NextToken(&l, ": "));
-  ASSERT_STREQ("Foobar", linep_NextToken(&l, ": "));
-  ASSERT_EQ(nullptr, linep_NextToken(&l, ": "));
-
-  free(buf);
+  EXPECT_EQ(true, l.next());
+  EXPECT_EQ("Newvalue", l.nextToken(": "));
+  EXPECT_EQ("Foobar", l.nextToken(": "));
+  EXPECT_EQ("", l.nextToken(": "));
 }
 
 TEST(Lines, HttpMode) {
-  LineState l;
-
   char* buf = strdup("One\r\nTwo\r\n\r\nThree\r\n\r\n");
   size_t len = strlen(buf);
-  linep_Start(&l, buf, len + 1, len);
-  linep_SetHttpMode(&l, 1);
+  LineState l(buf, len + 1, len);
+  l.setHttpMode(true);
 
-  ASSERT_NE(0, linep_NextLine(&l));
-  EXPECT_STREQ("One", linep_GetLine(&l));
-  ASSERT_NE(0, linep_NextLine(&l));
-  EXPECT_STREQ("Two", linep_GetLine(&l));
-  ASSERT_NE(0, linep_NextLine(&l));
-  EXPECT_STREQ("", linep_GetLine(&l));
-  ASSERT_NE(0, linep_NextLine(&l));
-  EXPECT_STREQ("Three", linep_GetLine(&l));
-  ASSERT_NE(0, linep_NextLine(&l));
-  EXPECT_STREQ("", linep_GetLine(&l));
-  ASSERT_EQ(0, linep_NextLine(&l));
-
-  free(buf);
+  EXPECT_EQ(true, l.next());
+  EXPECT_EQ("One", l.line());
+  EXPECT_EQ(true, l.next());
+  EXPECT_EQ("Two", l.line());
+  EXPECT_EQ(true, l.next());
+  EXPECT_EQ("", l.line());
+  EXPECT_EQ(true, l.next());
+  EXPECT_EQ("Three", l.line());
+  EXPECT_EQ(true, l.next());
+  EXPECT_EQ("", l.line());
+  EXPECT_EQ(false, l.next());
 }
 
 TEST(Lines, TooLong) {
-  LineState l;
-
   // Empty buffer, no line
   const int bufLen = 20;
-  char* buf = (char*)malloc(bufLen);
-  linep_Start(&l, buf, bufLen, 0);
-  ASSERT_EQ(0, linep_NextLine(&l));
-  ASSERT_EQ(nullptr, linep_GetLine(&l));
-  ASSERT_EQ(0, linep_Reset(&l));
+  LineState l(bufLen);
+
+  EXPECT_EQ(false, l.next());
+  EXPECT_EQ(true, l.line().empty());
+  EXPECT_EQ(true, l.consume());
 
   // Add half a line
   const char* const CHUNK1 = "0123456789";
@@ -174,77 +162,28 @@ TEST(Lines, TooLong) {
 
   char* writePos;
   int spaceLeft;
-  linep_GetReadInfo(&l, &writePos, &spaceLeft);
-  ASSERT_LE(chunkLen, spaceLeft);
+  l.getReadInfo(&writePos, &spaceLeft);
+  EXPECT_LE(chunkLen, spaceLeft);
   memcpy(writePos, chunk, chunkLen);
-  linep_SetReadLength(&l, chunkLen);
+  l.setReadLength(chunkLen);
   free(chunk);
 
   // No line. Now we need to add the rest
-  ASSERT_EQ(0, linep_NextLine(&l));
-  ASSERT_EQ(0, linep_Reset(&l));
+  EXPECT_EQ(false, l.next());
+  EXPECT_EQ(true, l.consume());
 
   const char* const CHUNK2 = "0123456789";
   chunk = strdup(CHUNK2);
   chunkLen = strlen(CHUNK2);
-  linep_GetReadInfo(&l, &writePos, &spaceLeft);
-  ASSERT_LE(chunkLen, spaceLeft);
+  l.getReadInfo(&writePos, &spaceLeft);
+  EXPECT_LE(chunkLen, spaceLeft);
   memcpy(writePos, chunk, chunkLen);
-  linep_SetReadLength(&l, chunkLen);
+  l.setReadLength(chunkLen);
   free(chunk);
 
   // We still don't have a line, and we can't add one
-  ASSERT_EQ(0, linep_NextLine(&l));
-  ASSERT_NE(0, linep_Reset(&l));
-
-  free(buf);
+  EXPECT_EQ(false, l.next());
+  EXPECT_EQ(false, l.consume());
 }
 
-TEST(Lines, StringBufEmpty) {
-  StringBuf b;
-  buf_New(&b, 10);
-  EXPECT_EQ(0, buf_Length(&b));
-  EXPECT_STREQ("", buf_Get(&b));
-  buf_Free(&b);
-}
-
-TEST(Lines, StringBufAppend) {
-  StringBuf b;
-  buf_New(&b, 10);
-  buf_Append(&b, "One");
-  EXPECT_STREQ("One", buf_Get(&b));
-  // Something more than 10 bytes long
-  buf_Append(&b, "TwoTwoTwoTwoTwo");
-  EXPECT_STREQ("OneTwoTwoTwoTwoTwo", buf_Get(&b));
-  // Something more than 10 bytes long
-  buf_Append(&b, "01234567890123456789012345");
-  EXPECT_STREQ("OneTwoTwoTwoTwoTwo01234567890123456789012345", buf_Get(&b));
-  buf_AppendChar(&b, 'x');
-  EXPECT_STREQ("OneTwoTwoTwoTwoTwo01234567890123456789012345x", buf_Get(&b));
-  buf_Free(&b);
-}
-
-TEST(Lines, StringBufAppendBoundary) {
-  StringBuf b;
-  buf_New(&b, 10);
-  buf_Append(&b, "0123456789");
-  EXPECT_STREQ("0123456789", buf_Get(&b));
-  // Something more than 10 bytes long
-  buf_Append(&b, "01234567890123456789");
-  EXPECT_STREQ("012345678901234567890123456789", buf_Get(&b));
-  // Something more than 10 bytes long
-  buf_Append(&b, "Foo");
-  EXPECT_STREQ("012345678901234567890123456789Foo", buf_Get(&b));
-  buf_Free(&b);
-}
-
-TEST(Lines, StringBufPrintf) {
-  StringBuf b;
-  buf_New(&b, 10);
-  buf_Printf(&b, "Foo %s ", "the");
-  EXPECT_STREQ("Foo the ", buf_Get(&b));
-  // Something more than 10 bytes long
-  buf_Printf(&b, "Bar has %i drinks, including %s", 99, "bourbon");
-  EXPECT_STREQ("Foo the Bar has 99 drinks, including bourbon", buf_Get(&b));
-  buf_Free(&b);
-}
+}  // namespace 

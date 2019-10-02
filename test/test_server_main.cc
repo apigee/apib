@@ -14,20 +14,21 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-#include <stdio.h>
-#include <stdlib.h>
+#include <cstdlib>
+#include <iostream>
+#include <string>
 
 #include "test/test_server.h"
 
 int main(int argc, char** argv) {
   if ((argc < 2) || (argc > 4)) {
-    fprintf(stderr, "Usage: testserver <port> [<key file> <cert file>]\n");
+    std::cerr << "Usage: testserver <port> [<key file> <cert file>]" << std::endl;
     return 1;
   }
 
   int port = atoi(argv[1]);
-  char* keyFile = NULL;
-  char* certFile = NULL;
+  std::string keyFile;
+  std::string certFile;
 
   if (argc > 2) {
     keyFile = argv[2];
@@ -36,14 +37,14 @@ int main(int argc, char** argv) {
     certFile = argv[3];
   }
 
-  TestServer svr;
-  int err = testserver_Start(&svr, "0.0.0.0", port, keyFile, certFile);
+  apib::TestServer svr;
+  int err = svr.start("0.0.0.0", port, keyFile, certFile);
   if (err != 0) {
     return 2;
   }
 
-  printf("Listening on port %i\n", testserver_GetPort(&svr));
+  std::cout << "Listening on port " << svr.port() << std::endl;
 
-  testserver_Join(&svr);
+  svr.join();
   return 0;
 }

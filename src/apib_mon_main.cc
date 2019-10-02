@@ -14,26 +14,25 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-#include <stdio.h>
-#include <stdlib.h>
+#include <iostream>
 
 #include "src/apib_mon.h"
 
 int main(int argc, char** argv) {
-  MonServer mon;
+  apib::MonServer mon;
 
   if (argc != 2) {
-    fprintf(stderr, "Usage: %s <port>\n", argv[0]);
+    std::cerr << "Usage: %s " << argv[0] << " <port>" << std::endl;
     return 2;
   }
 
-  int err = mon_StartServer(&mon, "0.0.0.0", atoi(argv[1]));
+  int err = mon.start("0.0.0.0", atoi(argv[1]));
   if (err != 0) {
-    fprintf(stderr, "Can't start monitoring server: %i\n", err);
+    std::cerr << "Can't start monitoring server: " << err << std::endl;
     return 2;
   }
-  printf("apibmon listening on port %i\n", mon_GetPort(&mon));
+  std::cout << "apibmon listening on port " << mon.port() << std::endl;
 
-  mon_JoinServer(&mon);
+  mon.join();
   return 0;
 }

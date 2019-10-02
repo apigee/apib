@@ -17,18 +17,19 @@ limitations under the License.
 #ifndef APIB_CPU_H
 #define APIB_CPU_H
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+#include <cstdint>
+
+namespace apib {
 
 /*
  * Code for managing CPU information.
  */
-typedef struct {
-  long long idle;
-  long long nonIdle;
-  long long timestamp;
-} CPUUsage;
+class CPUUsage {
+ public:
+  int64_t idle;
+  int64_t nonIdle;
+  int64_t timestamp;
+};
 
 /* Return the number of CPUs we have, or 1 if we're unable to determine */
 extern int cpu_Count();
@@ -51,8 +52,6 @@ extern double cpu_GetInterval(CPUUsage* usage);
 /* Return the percent of free RAM, or a negative number if we don't know */
 extern double cpu_GetMemoryUsage();
 
-#ifdef __cplusplus
-}
-#endif
+}  // namespace apib
 
 #endif  // APIB_CPU_H

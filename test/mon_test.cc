@@ -14,9 +14,12 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+#include <cstdio>
+#include <cstring>
+#include <iostream>
+
 #include <arpa/inet.h>
 #include <netinet/in.h>
-#include <stdio.h>
 #include <sys/socket.h>
 #include <sys/types.h>
 
@@ -26,7 +29,12 @@ limitations under the License.
 #include "src/apib_mon.h"
 #include "src/apib_util.h"
 
+using std::cout;
+using std::endl;
+
 static int ServerPort;
+
+namespace {
 
 class MonServerTest : public ::testing::Test {
  protected:
@@ -73,7 +81,7 @@ TEST_F(MonServerTest, Mem) {
   double mem = strtod(buf, &bufEnd);
   EXPECT_NE(buf, bufEnd);
   EXPECT_LT(0.0, mem);
-  printf("Memory is \"%lf\"", mem);
+  cout << "Memory is " << mem << endl;
 }
 
 TEST_F(MonServerTest, CPU) {
@@ -88,35 +96,33 @@ TEST_F(MonServerTest, CPU) {
   buf[rs] = 0;
   char* bufEnd;
   double c = strtod(buf, &bufEnd);
-  printf("CPU %s\n", buf);
+  cout << "CPU " << buf << endl;
   EXPECT_NE(buf, bufEnd);
   EXPECT_LE(0.0, c);
-  printf("CPU is \"%lf\"", c);
+  cout << "CPU is " << c << endl;
 }
 
 TEST_F(MonServerTest, Multi) {
   size_t ws = write(fd, "CPU\nCPU\nCPU\nBYE\n", 16);
   ASSERT_EQ(16, ws);
 
-  LineState line;
-  char buf[256];
-  linep_Start(&line, buf, 256, 0);
+  apib::LineState line(256);
 
   int rc;
   int cmd = 0;
   do {
-    rc = linep_ReadFd(&line, fd);
+    rc = line.readFd(fd);
     if (rc > 0) {
-      while (linep_NextLine(&line)) {
-        char* l = linep_GetLine(&line);
+      while (line.next()) {
+        const auto l = line.line();
         if (cmd < 3) {
           char* bufEnd;
-          double c = strtod(l, &bufEnd);
-          printf("CPU = %s\n", l);
+          double c = strtod(l.c_str(), &bufEnd);
+          cout << "CPU = " << l << endl;
           EXPECT_LE(0.0, c);
           EXPECT_NE(l, bufEnd);
         } else {
-          EXPECT_STREQ("BYE", l);
+          EXPECT_EQ("BYE", l);
         }
         cmd++;
       }
@@ -125,10 +131,12 @@ TEST_F(MonServerTest, Multi) {
   EXPECT_EQ(0, rc);
 }
 
+}  // namespace
+
 int main(int argc, char** argv) {
   ::testing::InitGoogleTest(&argc, argv);
 
-  int err = cpu_Init();
+  int err = apib::cpu_Init();
   if (err != 0) {
     fprintf(stderr,
             "Skipping monitoring tests: CPU monitoring not available on "
@@ -136,18 +144,18 @@ int main(int argc, char** argv) {
     return 0;
   }
 
-  MonServer mon;
-  err = mon_StartServer(&mon, "127.0.0.1", 0);
+  apib::MonServer mon;
+  err = mon.start("127.0.0.1", 0);
   if (err != 0) {
     fprintf(stderr, "Can't start server\n");
     return 2;
   }
 
-  ServerPort = mon_GetPort(&mon);
+  ServerPort = mon.port();
   printf("Mon server running on %i\n", ServerPort);
 
   int ret = RUN_ALL_TESTS();
 
-  mon_StopServer(&mon);
+  mon.stop();
   return ret;
 }

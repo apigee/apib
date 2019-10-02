@@ -222,7 +222,7 @@ std::string oauth_MakeQueryString(RandomGenerator* rand, const URLInfo& url,
                                   unsigned int sendDataSize,
                                   const OAuthInfo& oauth) {
   const auto nonce = makeNonce(rand);
-  const long timestamp = (long)floor(apib_Seconds(apib_GetTime()));
+  const long timestamp = (long)floor(Seconds(GetTime()));
   const auto baseString = oauth_buildBaseString(
       rand, url, method, timestamp, nonce, sendData, sendDataSize, oauth);
   const auto hmac = oauth_generateHmac(baseString, oauth);
@@ -248,7 +248,7 @@ std::string oauth_MakeHeader(RandomGenerator* rand, const URLInfo& url,
                              const std::string& method, const char* sendData,
                              unsigned int sendDataSize,
                              const OAuthInfo& oauth) {
-  long timestamp = (long)floor(apib_Seconds(apib_GetTime()));
+  long timestamp = (long)floor(Seconds(GetTime()));
   const auto nonce = makeNonce(rand);
 
   const auto baseString = oauth_buildBaseString(

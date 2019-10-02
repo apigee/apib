@@ -14,20 +14,21 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <sys/stat.h>
-#include <sys/sysctl.h>
-#include <sys/times.h>
+#include "src/apib_cpu.h"
+
+#include <cstring>
+#include <fstream>
+
 #include <sys/types.h>
+#include <sys/stat.h>
 #include <unistd.h>
 
-#include "src/apib_cpu.h"
 #include "src/apib_lines.h"
 #include "src/apib_time.h"
 
 #define PROC_BUF_LEN 8192
+
+namespace apib {
 
 static int CPUCount;
 static double TicksPerSecond;
@@ -35,31 +36,29 @@ static double TicksPerSecond;
 /* Count the CPUs in a simple way by counting "processor" lines in /proc/cpuinfo
  */
 int cpu_Count() {
-  FILE* cpuinfo = fopen("/proc/cpuinfo", "r");
-  if (cpuinfo == NULL) {
+  std::ifstream in("/proc/cpuinfo");
+  if (in.fail()) {
     return 1;
   }
 
-  LineState line;
-  char buf[PROC_BUF_LEN];
-  linep_Start(&line, buf, PROC_BUF_LEN, 0);
-
+  LineState line(PROC_BUF_LEN);
   int count = 0;
   int rc;
 
   do {
-    rc = linep_ReadFile(&line, cpuinfo);
+    rc = line.readStream(in);
     if (rc > 0) {
-      while (linep_NextLine(&line)) {
-        char* l = linep_GetLine(&line);
-        if (!strncmp(l, "processor ", 10) || !strncmp(l, "processor\t", 10)) {
+      while (line.next()) {
+        const auto l = line.line();
+        const auto ten = l.substr(0, 10);
+        if (("processor " == ten) || ("processor\t" == ten)) {
           count++;
         }
       }
-      linep_Reset(&line);
+      line.consume();
     }
   } while (rc > 0);
-  fclose(cpuinfo);
+  in.close();
 
   if (count < 1) {
     count = 1;
@@ -95,17 +94,15 @@ int cpu_Init() {
 }
 
 double cpu_GetMemoryUsage() {
-  FILE* meminfo = fopen("/proc/meminfo", "r");
-  if (meminfo == NULL) {
+  std::ifstream meminfo("/proc/meminfo");
+  if (meminfo.fail()) {
     return 0.0;
   }
 
   // PROC_BUF_LEN should be big enough to hold all of /proc/meminfo!
-  char buf[PROC_BUF_LEN];
-  LineState line;
-  linep_Start(&line, buf, PROC_BUF_LEN, 0);
-  int rc = linep_ReadFile(&line, meminfo);
-  fclose(meminfo);
+  LineState line(PROC_BUF_LEN);
+
+  int rc = line.readStream(meminfo);
   if (rc < 0) {
     return 0.0;
   }
@@ -115,18 +112,18 @@ double cpu_GetMemoryUsage() {
   long buffers = 0;
   long cache = 0;
 
-  while (linep_NextLine(&line)) {
-    char* n = linep_NextToken(&line, " ");
-    char* v = linep_NextToken(&line, " ");
+  while (line.next()) {
+    const auto n = line.nextToken(" ");
+    const auto v = line.nextToken(" ");
 
-    if (!strcmp(n, "MemTotal:")) {
-      totalMem = atol(v);
-    } else if (!strcmp(n, "MemFree:")) {
-      freeMem = atol(v);
-    } else if (!strcmp(n, "Buffers:")) {
-      buffers = atol(v);
-    } else if (!strcmp(n, "Cached:")) {
-      cache = atol(v);
+    if ("MemTotal:" == n) {
+      totalMem = std::stol(v);
+    } else if ("MemFree:" == n) {
+      freeMem = std::stol(v);
+    } else if ("Buffers:" == n) {
+      buffers = std::stol(v);
+    } else if ("Cached:" == n) {
+      cache = std::stol(v);
     }
   }
 
@@ -138,46 +135,43 @@ double cpu_GetMemoryUsage() {
 }
 
 static int getTicks(CPUUsage* cpu) {
-  FILE* stat = fopen("/proc/stat", "r");
-  if (stat == NULL) {
+  std::ifstream stat("/proc/stat");
+  if (stat.fail()) {
     return 0;
   }
 
-  char buf[PROC_BUF_LEN];
-  LineState line;
+  LineState line(PROC_BUF_LEN);
 
-  linep_Start(&line, buf, PROC_BUF_LEN, 0);
-  const int rc = linep_ReadFile(&line, stat);
-  fclose(stat);
+  const int rc = line.readStream(stat);
   if (rc < 0) {
     return 0;
   }
 
-  while (linep_NextLine(&line)) {
-    char* l = linep_GetLine(&line);
-    if (!strncmp(l, "cpu ", 4)) {
+  while (line.next()) {
+    const auto l = line.line();
+    if ("cpu " == l.substr(0, 4)) {
       // Read the "cpu" line, which is a sum of all CPUs
-      long long idleCount = 0LL;
-      long long nonIdleCount = 0LL;
+      int64_t idleCount = 0LL;
+      int64_t nonIdleCount = 0LL;
       int i = 0;
-      char* tok;
+      std::string tok;
 
-      linep_NextToken(&line, " \t");
+      line.nextToken(" \t");
       do {
-        tok = linep_NextToken(&line, " \t");
-        if (tok != NULL) {
+        tok = line.nextToken(" \t");
+        if (!tok.empty()) {
           if ((i == 3) || (i == 4) || (i == 7)) {
             /* The fourth and fifth columns are "idle" and "iowait".
                  We consider both to be idle CPU.
                The eigth is "steal", which is time lost to virtualization
                as a client -- that's idle two in our estimation */
-            idleCount += atoll(tok);
+            idleCount += std::stoll(tok);
           } else {
-            nonIdleCount += atoll(tok);
+            nonIdleCount += std::stoll(tok);
           }
           i++;
         }
-      } while (tok != NULL);
+      } while (!tok.empty());
       cpu->nonIdle = nonIdleCount;
       cpu->idle = idleCount;
       return 1;
@@ -189,7 +183,7 @@ static int getTicks(CPUUsage* cpu) {
 
 void cpu_GetUsage(CPUUsage* cpu) {
   getTicks(cpu);
-  cpu->timestamp = apib_GetTime();
+  cpu->timestamp = GetTime();
 }
 
 double cpu_GetInterval(CPUUsage* oldCpu) {
@@ -198,7 +192,7 @@ double cpu_GetInterval(CPUUsage* oldCpu) {
   if (!getTicks(&cpu)) {
     return 0;
   }
-  cpu.timestamp = apib_GetTime();
+  cpu.timestamp = GetTime();
 
   const long long idleTicks = cpu.idle - oldCpu->idle;
   const long long usageTicks = cpu.nonIdle - oldCpu->nonIdle;
@@ -211,3 +205,5 @@ double cpu_GetInterval(CPUUsage* oldCpu) {
   }
   return ((double)usageTicks / (double)allUsageTicks);
 }
+
+}  // namespace

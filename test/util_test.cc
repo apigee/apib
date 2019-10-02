@@ -14,19 +14,24 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-#ifndef APIB_UTIL_H
-#define APIB_UTIL_H
+#include "src/apib_util.h"
+#include "gtest/gtest.h"
 
-#include <cstdlib>
-#include <iostream>
-#include <string>
+using apib::eqcase;
 
-namespace apib {
+namespace {
 
-#define mandatoryAssert(e) if (!(e)) { std::cerr << "Assertion failed: " << __FILE__ << ':' << __LINE__ << std::endl; abort(); }
+TEST(Eqcase, Success) {
+  EXPECT_EQ(true, eqcase("", ""));
+  EXPECT_EQ(true, eqcase("Hello", "Hello"));
+  EXPECT_EQ(true, eqcase("Hello", "hello"));
+  EXPECT_EQ(true, eqcase("hello, world!", "HELLO, World!"));
+}
 
-extern bool eqcase(const std::string& s1, const std::string& s2);
+TEST(Eqcase, Failure) {
+  EXPECT_EQ(false, eqcase("Hello", "Hello, World!"));
+  EXPECT_EQ(false, eqcase("Hello", "ByeNo"));
+  EXPECT_EQ(false, eqcase(" ", ""));
+}
 
-}  // namespace apib
-
-#endif  // APIB_UTIL_H
+}  // namespace

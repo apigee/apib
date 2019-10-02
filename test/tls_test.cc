@@ -19,7 +19,6 @@ limitations under the License.
 
 #include "gtest/gtest.h"
 #include "src/apib_iothread.h"
-#include "src/apib_message.h"
 #include "src/apib_reporting.h"
 #include "src/apib_url.h"
 #include "test/test_keygen.h"
@@ -36,14 +35,14 @@ namespace {
 static char KeyPath[512];
 static char CertPath[512];
 static int testServerPort;
-static TestServer* testServer;
+static apib::TestServer testServer;
 
 class TLSTest : public ::testing::Test {
  protected:
   TLSTest() {
     apib::RecordInit("", "");
     apib::RecordStart(true);
-    testserver_ResetStats(testServer);
+    testServer.resetStats();
   }
   ~TLSTest() {
     // The "url_" family of functions use static data, so reset every time.
@@ -53,8 +52,7 @@ class TLSTest : public ::testing::Test {
 };
 
 static void compareReporting() {
-  TestServerStats stats;
-  testserver_GetStats(testServer, &stats);
+  apib::TestServerStats stats = testServer.stats();
   BenchmarkResults results = ReportResults();
 
   EXPECT_LT(0, results.successfulRequests);
@@ -90,7 +88,6 @@ TEST_F(TLSTest, Basic) {
   RecordStop();
 
   compareReporting();
-  SSL_CTX_free(t.sslCtx);
 }
 
 TEST_F(TLSTest, NoKeepAlive) {
@@ -111,7 +108,6 @@ TEST_F(TLSTest, NoKeepAlive) {
   RecordStop();
 
   compareReporting();
-  SSL_CTX_free(t.sslCtx);
 }
 
 TEST_F(TLSTest, Larger) {
@@ -131,7 +127,6 @@ TEST_F(TLSTest, Larger) {
   RecordStop();
 
   compareReporting();
-  SSL_CTX_free(t.sslCtx);
 }
 
 TEST_F(TLSTest, VerifyPeerFailing) {
@@ -154,8 +149,6 @@ TEST_F(TLSTest, VerifyPeerFailing) {
   BenchmarkResults results = ReportResults();
   EXPECT_EQ(0, results.successfulRequests);
   EXPECT_LT(0, results.socketErrors);
-
-  SSL_CTX_free(t.sslCtx);
 }
 
 TEST_F(TLSTest, VerifyPeerSuccess) {
@@ -177,7 +170,6 @@ TEST_F(TLSTest, VerifyPeerSuccess) {
   RecordStop();
 
   compareReporting();
-  SSL_CTX_free(t.sslCtx);
 }
 
 // TODO ciphers?
@@ -200,34 +192,29 @@ int main(int argc, char** argv) {
   printf("Key:  %s\n", KeyPath);
   printf("Cert: %s\n", CertPath);
 
-  RSA* key = keygen_MakeRSAPrivateKey(2048);
+  RSA* key = apib::keygen_MakeRSAPrivateKey(2048);
   assert(key != NULL);
-  X509* cert = keygen_MakeServerCertificate(key, 1, 1);
+  X509* cert = apib::keygen_MakeServerCertificate(key, 1, 1);
   assert(cert != NULL);
-  int err = keygen_SignCertificate(key, cert);
+  int err = apib::keygen_SignCertificate(key, cert);
   assert(err == 0);
-  err = keygen_WriteRSAPrivateKey(key, KeyPath);
+  err = apib::keygen_WriteRSAPrivateKey(key, KeyPath);
   assert(err == 0);
-  err = keygen_WriteX509Certificate(cert, CertPath);
+  err = apib::keygen_WriteX509Certificate(cert, CertPath);
   assert(err == 0);
   RSA_free(key);
   X509_free(cert);
 
-  testServer = (TestServer*)malloc(sizeof(TestServer));
-  memset(testServer, 0, sizeof(TestServer));
-
-  err = testserver_Start(testServer, "127.0.0.1", 0, KeyPath, CertPath);
+  err = testServer.start("127.0.0.1", 0, KeyPath, CertPath);
   if (err != 0) {
     fprintf(stderr, "Can't start test server: %i\n", err);
     return 2;
   }
-  testServerPort = testserver_GetPort(testServer);
+  testServerPort = testServer.port();
 
   int r = RUN_ALL_TESTS();
 
-  testserver_Stop(testServer);
-  // testserver_Join(&svr);
-  free(testServer);
+  testServer.stop();
 
   return r;
 }
