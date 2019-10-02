@@ -50,12 +50,12 @@ static const std::regex kHostPort("^([^:]+):([0-9]+)$");
 static std::mutex latch;
 static volatile bool reporting = 0;
 static bool cpuAvailable = false;
-static std::atomic_int32_t completedRequests = ATOMIC_VAR_INIT(0);
-static std::atomic_int32_t successfulRequests = ATOMIC_VAR_INIT(0);
-static std::atomic_int32_t intervalSuccessful = ATOMIC_VAR_INIT(0);
-static std::atomic_int32_t unsuccessfulRequests = ATOMIC_VAR_INIT(0);
-static std::atomic_int32_t socketErrors = ATOMIC_VAR_INIT(0);
-static std::atomic_int32_t connectionsOpened = ATOMIC_VAR_INIT(0);
+static std::atomic_int32_t completedRequests;
+static std::atomic_int32_t successfulRequests;
+static std::atomic_int32_t intervalSuccessful;
+static std::atomic_int32_t unsuccessfulRequests;
+static std::atomic_int32_t socketErrors;
+static std::atomic_int32_t connectionsOpened;
 
 static int64_t startTime;
 static int64_t stopTime;

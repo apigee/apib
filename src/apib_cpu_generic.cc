@@ -18,6 +18,8 @@ limitations under the License.
 
 #include "src/apib_cpu.h"
 
+namespace apib {
+
 int cpu_Init() { return -1; }
 
 int cpu_Count() { return (int)sysconf(_SC_NPROCESSORS_ONLN); }
@@ -31,3 +33,5 @@ void cpu_GetUsage(CPUUsage* usage) {
 double cpu_GetInterval(CPUUsage* usage) { return -1.0; }
 
 double cpu_GetMemoryUsage() { return -1.0; }
+
+}  // namespace apib

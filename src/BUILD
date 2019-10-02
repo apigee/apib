@@ -26,10 +26,10 @@ cc_library(
         "apib_util.cc",
     ] + select({
         "apple": [
-            "apib_cpu_generic.c",
+            "apib_cpu_generic.cc",
         ],
         "bsd": [
-            "apib_cpu_bsd.c",
+            "apib_cpu_bsd.cc",
         ],
         "//conditions:default": [
             "apib_cpu_proc.cc",

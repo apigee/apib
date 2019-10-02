@@ -44,10 +44,10 @@ class TestServerStats {
   TestServerStats(const TestServerStats& s);
   void reset();
 
-  std::atomic_int32_t connectionCount = ATOMIC_VAR_INIT(0);
-  std::atomic_int32_t socketErrorCount = ATOMIC_VAR_INIT(0);
-  std::atomic_int32_t errorCount = ATOMIC_VAR_INIT(0);
-  std::atomic_int32_t successCount = ATOMIC_VAR_INIT(0);
+  std::atomic_int32_t connectionCount;
+  std::atomic_int32_t socketErrorCount;
+  std::atomic_int32_t errorCount;
+  std::atomic_int32_t successCount;
   std::atomic_int32_t successes[NUM_OPS];
 };
 

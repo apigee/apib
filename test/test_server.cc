@@ -30,6 +30,7 @@ limitations under the License.
 #include <cstdlib>
 #include <functional>
 #include <regex>
+#include <sstream>
 
 #include "http_parser.h"
 #include "src/apib_lines.h"
@@ -331,6 +332,13 @@ void TestServer::acceptOne() {
     return;
   }
 
+  // Explicitly clear the blocking flag, because it might be inherited from
+  // the accept FD.
+  int flags = fcntl(fd, F_GETFL);
+  flags &= ~O_NONBLOCK;
+  int err = fcntl(fd, F_SETFL, flags);
+  assert(err == 0);
+
   TestConnection* c = new TestConnection(this, fd);
   std::thread ct(std::bind(&TestConnection::socketLoop, c));
   ct.detach();
@@ -461,7 +469,7 @@ void TestServer::join() { acceptThread_->join(); }
 
 TestServerStats::TestServerStats() {
   for (int i = 0; i < NUM_OPS; i++) {
-    successes[i] = ATOMIC_VAR_INIT(0);
+    successes[i] = 0;
   }
 }
 

@@ -14,14 +14,17 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-#include <string.h>
 #include <sys/sysctl.h>
 #include <sys/times.h>
 #include <sys/types.h>
 #include <unistd.h>
 
+#include <cstring>
+
 #include "src/apib_cpu.h"
 #include "src/apib_time.h"
+
+namespace apib {
 
 int cpu_Init() { return 0; }
 
@@ -72,7 +75,7 @@ double cpu_GetMemoryUsage() {
 
 void cpu_GetUsage(CPUUsage* cpu) {
   getTicks(cpu);
-  cpu->timestamp = apib_GetTime();
+  cpu->timestamp = GetTime();
 }
 
 double cpu_GetInterval(CPUUsage* oldCpu) {
@@ -81,7 +84,7 @@ double cpu_GetInterval(CPUUsage* oldCpu) {
   if (!getTicks(&cpu)) {
     return 0;
   }
-  cpu.timestamp = apib_GetTime();
+  cpu.timestamp = GetTime();
 
   const long long idleTicks = cpu.idle - oldCpu->idle;
   const long long usageTicks = cpu.nonIdle - oldCpu->nonIdle;
@@ -94,3 +97,5 @@ double cpu_GetInterval(CPUUsage* oldCpu) {
   }
   return ((double)usageTicks / (double)allUsageTicks);
 }
+
+}  // namespace apib

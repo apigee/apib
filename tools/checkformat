@@ -1,7 +1,7 @@
 #!/bin/bash
 
 exitCode=0
-for f in src/*.h src/*.c src/*.cc test/*.h test/*.cc
+for f in src/*.h src/*.cc test/*.h test/*.cc
 do
   replacements=`clang-format --style=google --output-replacements-xml ${f} | grep '<replacement ' | wc -l`
   if [ ${replacements} -gt 0 ]

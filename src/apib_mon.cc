@@ -117,6 +117,13 @@ void MonServer::acceptOne() {
     return;
   }
 
+  // Explicitly clear the blocking flag, because it might be inherited from
+  // the accept FD.
+  int flags = fcntl(fd, F_GETFL);
+  flags &= ~O_NONBLOCK;
+  int err = fcntl(fd, F_SETFL, flags);
+  assert(err == 0);
+
   MonServerConnection* c = new MonServerConnection(fd);
   std::thread ct(std::bind(&MonServerConnection::socketLoop, c));
   ct.detach();
