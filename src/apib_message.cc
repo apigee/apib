@@ -20,6 +20,7 @@ limitations under the License.
 #include <iostream>
 #include <regex>
 
+#include "absl/strings/match.h"
 #include "absl/strings/numbers.h"
 #include "src/apib_util.h"
 
@@ -44,8 +45,6 @@ static const std::regex requestLineRegex(
 static const int kRequestLineParts = 5;
 static const std::regex statusLineRegex("^HTTP/([0-9])\\.([0-9]) ([0-9]+) .*$");
 static const int kStatusLineParts = 4;
-static const std::regex headerLineRegex("^([^:]+):([ \\t]+)?(.*)$");
-static const int kHeaderLineParts = 4;
 
 HttpMessage::HttpMessage(MessageType t) : type(t) { clear(); }
 
@@ -75,16 +74,28 @@ int HttpMessage::parseStatus(LineState* buf) {
     return 1;
   }
 
-  const auto line = buf->line();
-  std::smatch matches;
-  const std::string lines(line);
-  if (!std::regex_match(lines, matches, statusLineRegex)) {
+  const char* line = buf->c_line();
+  std::cmatch matches;
+  if (!std::regex_match(line, matches, statusLineRegex)) {
     return -1;
   }
   assert(matches.size() == kStatusLineParts);
-  majorVersion = std::stol(matches[1]);
-  minorVersion = std::stol(matches[2]);
-  statusCode = std::stol(matches[3]);
+
+  if (!absl::SimpleAtoi(
+          absl::string_view(line + matches.position(1), matches.length(1)),
+          &majorVersion)) {
+    return -2;
+  }
+  if (!absl::SimpleAtoi(
+          absl::string_view(line + matches.position(2), matches.length(2)),
+          &minorVersion)) {
+    return -3;
+  }
+  if (!absl::SimpleAtoi(
+          absl::string_view(line + matches.position(3), matches.length(3)),
+          &statusCode)) {
+    return -4;
+  }
 
   state = kMessageStatus;
   return 0;
@@ -96,17 +107,25 @@ int HttpMessage::parseRequestLine(LineState* buf) {
     return 1;
   }
 
-  const auto line = buf->line();
-  std::smatch matches;
-  const std::string lines(line);
-  if (!std::regex_match(lines, matches, requestLineRegex)) {
+  const char* line = buf->c_line();
+  std::cmatch matches;
+  if (!std::regex_match(line, matches, requestLineRegex)) {
     return -1;
   }
   assert(matches.size() == kRequestLineParts);
   method = matches[1];
   path = matches[2];
-  majorVersion = std::stol(matches[3]);
-  minorVersion = std::stol(matches[4]);
+
+  if (!absl::SimpleAtoi(
+          absl::string_view(line + matches.position(3), matches.length(3)),
+          &majorVersion)) {
+    return -2;
+  }
+  if (!absl::SimpleAtoi(
+          absl::string_view(line + matches.position(4), matches.length(4)),
+          &minorVersion)) {
+    return -3;
+  }
 
   state = kMessageStatus;
   return 0;
@@ -161,16 +180,6 @@ int HttpMessage::parseHeaderLine(LineState* buf) {
     return 0;
   }
 
-  /*
-    std::smatch matches;
-    if (!std::regex_match(hl, matches, headerLineRegex)) {
-      cerr << "Invalid header line: \"" << hl << '\"' << endl;
-      return -2;
-    }
-    assert(matches.size() == kHeaderLineParts);
-    examineHeader(matches[1], matches[3]);
-    */
-
   const auto name = buf->nextToken(":");
   buf->skipMatches(" \t");
   const auto value = buf->nextToken("");
@@ -211,7 +220,7 @@ int HttpMessage::parseChunkHeader(LineState* buf) {
   }
 
   // TODO regular expression for extra chunk header stuff like encoding!
-  const long len = std::stol(std::string(buf->line()), 0, 16);
+  const long len = std::stol(std::string(buf->c_line()), 0, 16);
   if (len == 0) {
     chunkState_ = kChunkEnd;
   } else {
@@ -273,13 +282,11 @@ int HttpMessage::parseTrailerLine(LineState* buf) {
     return 0;
   }
 
-  std::smatch matches;
-  const std::string hls(hl);
-  if (!std::regex_match(hls, matches, headerLineRegex)) {
+  if (!absl::StrContains(hl, ":")) {
     cerr << "Invalid trailer line: \"" << hl << '\"' << endl;
     return -2;
   }
-  // We don't process trailer lines right now.
+
   return 0;
 }
 

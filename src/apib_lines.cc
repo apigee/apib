@@ -120,11 +120,18 @@ bool LineState::next() {
   return true;
 }
 
-absl::string_view LineState::line() {
+absl::string_view LineState::line() const {
   if (!lineComplete_) {
     return "";
   }
   return absl::string_view(buf_ + lineStart_);
+}
+
+const char* LineState::c_line() const {
+  if (!lineComplete_) {
+    return "";
+  }
+  return (buf_ + lineStart_);
 }
 
 absl::string_view LineState::nextToken(const std::string& toks) {

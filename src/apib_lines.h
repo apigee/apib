@@ -51,7 +51,9 @@ class LineState {
    * present. */
   bool next();
   /* If NextLine returned non-zero, return a pointer to the entire line */
-  absl::string_view line();
+  absl::string_view line() const;
+  /* Similarly, return a const pointer to a null-terminated string. */
+  const char* c_line() const;
   /* If NextLine returned non-zero, return the next token delimited by "toks"
    * like strtok. If "toks" is zn empty string, return everything until the end
    * of the current line. */
