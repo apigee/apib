@@ -27,6 +27,7 @@ limitations under the License.
 #include <sys/types.h>
 #include <unistd.h>
 
+#include <cassert>
 #include <functional>
 #include <iomanip>
 #include <iostream>
