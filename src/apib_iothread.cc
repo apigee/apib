@@ -70,9 +70,8 @@ void ConnectionState::writeRequest() {
     }
   }
   if (t_->oauth != NULL) {
-    const auto authHdr =
-        oauth_MakeHeader(t_->rand(), *url_, "", t_->httpVerb.c_str(), NULL,
-                         0, *(t_->oauth));
+    const auto authHdr = oauth_MakeHeader(
+        t_->rand(), *url_, "", t_->httpVerb.c_str(), NULL, 0, *(t_->oauth));
     writeBuf_ << authHdr << "\r\n";
   }
   if (t_->noKeepAlive && !(t_->headersSet & IOThread::kConnectionSet)) {

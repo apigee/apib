@@ -24,7 +24,7 @@ int main(int argc, char** argv) {
     printf("Error making private key\n");
     return 2;
   }
-  
+
   int err = apib::keygen_WriteRSAPrivateKey(key, "/tmp/key.pem");
   if (err != 0) {
     printf("Error generating private key: %i\n", err);

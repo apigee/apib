@@ -14,18 +14,15 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-#include "src/apib_lines.h"
-
 #include "gtest/gtest.h"
+#include "src/apib_lines.h"
 
 using apib::LineState;
 
 namespace {
 
 TEST(Lines, AllFull) {
-
-  const char* const DATA =
-      "Line one\nLine two\nLine three\n";
+  const char* const DATA = "Line one\nLine two\nLine three\n";
   auto realData = strdup(DATA);
   auto realLen = strlen(DATA);
 
@@ -109,7 +106,8 @@ TEST(Lines, Tokens) {
 
   // No line. Now we need to add the rest
   EXPECT_EQ(false, l.next());
-  EXPECT_EQ(true, l.consume());;
+  EXPECT_EQ(true, l.consume());
+  ;
 
   const char* const CHUNK2 = "ue: Foobar\n";
   chunk = strdup(CHUNK2);
@@ -186,4 +184,4 @@ TEST(Lines, TooLong) {
   EXPECT_EQ(false, l.consume());
 }
 
-}  // namespace 
+}  // namespace

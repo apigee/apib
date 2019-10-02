@@ -14,10 +14,11 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+#include "src/apib_time.h"
+
 #include <cassert>
 #include <ctime>
 
-#include "src/apib_time.h"
 #include "src/apib_util.h"
 
 namespace apib {

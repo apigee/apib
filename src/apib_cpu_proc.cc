@@ -14,15 +14,14 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-#include "src/apib_cpu.h"
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <unistd.h>
 
 #include <cstring>
 #include <fstream>
 
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <unistd.h>
-
+#include "src/apib_cpu.h"
 #include "src/apib_lines.h"
 #include "src/apib_time.h"
 
@@ -206,4 +205,4 @@ double cpu_GetInterval(CPUUsage* oldCpu) {
   return ((double)usageTicks / (double)allUsageTicks);
 }
 
-}  // namespace
+}  // namespace apib

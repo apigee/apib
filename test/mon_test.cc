@@ -14,14 +14,14 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-#include <cstdio>
-#include <cstring>
-#include <iostream>
-
 #include <arpa/inet.h>
 #include <netinet/in.h>
 #include <sys/socket.h>
 #include <sys/types.h>
+
+#include <cstdio>
+#include <cstring>
+#include <iostream>
 
 #include "gtest/gtest.h"
 #include "src/apib_cpu.h"

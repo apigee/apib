@@ -22,8 +22,8 @@ limitations under the License.
 
 using apib::BenchmarkResults;
 using apib::IOThread;
-using apib::ReportResults;
 using apib::RecordStop;
+using apib::ReportResults;
 using apib::URLInfo;
 
 namespace {

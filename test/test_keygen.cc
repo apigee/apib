@@ -122,17 +122,17 @@ X509* keygen_MakeServerCertificate(RSA* key, int serial, int days) {
 }
 
 int keygen_SignCertificate(RSA* key, X509* cert) {
-    EVP_PKEY* pkey = EVP_PKEY_new();
-    int err = EVP_PKEY_set1_RSA(pkey, key);
-    mandatoryAssert(err == 1);
+  EVP_PKEY* pkey = EVP_PKEY_new();
+  int err = EVP_PKEY_set1_RSA(pkey, key);
+  mandatoryAssert(err == 1);
 
-    err = X509_sign(cert, pkey, EVP_sha256());
-    EVP_PKEY_free(pkey);
-    if (err == 0) {
-      printError("Error signing certificate");
-      return -1;
-    }
-    return 0;
+  err = X509_sign(cert, pkey, EVP_sha256());
+  EVP_PKEY_free(pkey);
+  if (err == 0) {
+    printError("Error signing certificate");
+    return -1;
+  }
+  return 0;
 }
 
 int keygen_WriteRSAPrivateKey(RSA* key, const char* fileName) {

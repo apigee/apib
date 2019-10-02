@@ -22,7 +22,8 @@ limitations under the License.
 
 int main(int argc, char** argv) {
   if ((argc < 2) || (argc > 4)) {
-    std::cerr << "Usage: testserver <port> [<key file> <cert file>]" << std::endl;
+    std::cerr << "Usage: testserver <port> [<key file> <cert file>]"
+              << std::endl;
     return 1;
   }
 

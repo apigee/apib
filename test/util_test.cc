@@ -14,8 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-#include "src/apib_util.h"
 #include "gtest/gtest.h"
+#include "src/apib_util.h"
 
 using apib::eqcase;
 

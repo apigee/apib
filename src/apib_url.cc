@@ -42,7 +42,7 @@ using std::endl;
 namespace apib {
 
 std::vector<URLInfo> URLInfo::urls_;
-bool URLInfo::initialized_ = false; 
+bool URLInfo::initialized_ = false;
 const std::string URLInfo::kHttp = "http";
 const std::string URLInfo::kHttps = "https";
 

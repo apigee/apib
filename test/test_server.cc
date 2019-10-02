@@ -16,11 +16,6 @@ limitations under the License.
 
 #include "test/test_server.h"
 
-#include <cassert>
-#include <cstdlib>
-#include <functional>
-#include <regex>
-
 #include <arpa/inet.h>
 #include <fcntl.h>
 #include <netinet/in.h>
@@ -30,6 +25,11 @@ limitations under the License.
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <unistd.h>
+
+#include <cassert>
+#include <cstdlib>
+#include <functional>
+#include <regex>
 
 #include "http_parser.h"
 #include "src/apib_lines.h"
@@ -72,43 +72,39 @@ void TestServer::success(int op) {
   stats_.successCount++;
 }
 
-void TestServer::failure() {
-  stats_.errorCount++;
-}
+void TestServer::failure() { stats_.errorCount++; }
 
-void TestServer::socketError() {
-  stats_.socketErrorCount++;
-}
+void TestServer::socketError() { stats_.socketErrorCount++; }
 
-void TestServer::newConnection() {
-  stats_.connectionCount++;
-}
+void TestServer::newConnection() { stats_.connectionCount++; }
 
-int TestConnection::write(const std::string& s) { 
+int TestConnection::write(const std::string& s) {
   if (ssl_ == NULL) {
     return ::write(fd_, s.data(), s.size());
   }
   return SSL_write(ssl_, s.data(), s.size());
 }
 
-void TestConnection::sendText(int code, const std::string& codestr, const std::string& msg) {
+void TestConnection::sendText(int code, const std::string& codestr,
+                              const std::string& msg) {
   std::ostringstream out;
   out << "HTTP/1.1 " << code << ' ' << codestr << "\r\n"
-  << "Server: apib test server\r\n"
-  << "Content-Type: text/plain\r\n"
-  << "Content-Length: " << msg.size() << "\r\n"
-  << "\r\n"
-  << msg;
+      << "Server: apib test server\r\n"
+      << "Content-Type: text/plain\r\n"
+      << "Content-Length: " << msg.size() << "\r\n"
+      << "\r\n"
+      << msg;
   write(out.str());
 }
 
 void TestConnection::sendData(const std::string& msg) {
   std::ostringstream out;
   out << "HTTP/1.1 200 OK\r\n"
-  << "Server: apib test server\r\n"
-  << "Content-Type: text/plain\r\n"
-  << "Content-Length: " << msg.size() << "\r\n"
-  << "\r\n" << msg;
+      << "Server: apib test server\r\n"
+      << "Content-Type: text/plain\r\n"
+      << "Content-Length: " << msg.size() << "\r\n"
+      << "\r\n"
+      << msg;
   write(out.str());
 }
 
@@ -119,9 +115,7 @@ static int parsedBody(http_parser* p, const char* buf, size_t len) {
   return 0;
 }
 
-void TestConnection::setBody(const std::string& bs) {
-  body_ = bs;
-}
+void TestConnection::setBody(const std::string& bs) { body_ = bs; }
 
 // Called by http_parser when we get the URL.
 static int parsedUrl(http_parser* p, const char* buf, size_t len) {
@@ -131,7 +125,8 @@ static int parsedUrl(http_parser* p, const char* buf, size_t len) {
 }
 
 void TestConnection::setQuery(const std::string& qs) {
-  auto questionIt = std::sregex_token_iterator(qs.cbegin(), qs.cend(), kQuestion, -1);
+  auto questionIt =
+      std::sregex_token_iterator(qs.cbegin(), qs.cend(), kQuestion, -1);
   if (questionIt == std::sregex_token_iterator()) {
     // Invalid input!
     return;
@@ -145,10 +140,12 @@ void TestConnection::setQuery(const std::string& qs) {
   }
 
   const std::string queryString = *questionIt;
-  for (auto queries = std::sregex_token_iterator(queryString.cbegin(), queryString.cend(), kAmpersand, -1);
-    queries != std::sregex_token_iterator(); queries++) {
+  for (auto queries = std::sregex_token_iterator(
+           queryString.cbegin(), queryString.cend(), kAmpersand, -1);
+       queries != std::sregex_token_iterator(); queries++) {
     const std::string query = *queries;
-    auto nv = std::sregex_token_iterator(query.cbegin(), query.cend(), kEquals, -1);
+    auto nv =
+        std::sregex_token_iterator(query.cbegin(), query.cend(), kEquals, -1);
     if (nv != std::sregex_token_iterator()) {
       const std::string name = *nv;
       std::string value;
@@ -157,7 +154,7 @@ void TestConnection::setQuery(const std::string& qs) {
         value = *nv;
       }
       query_[name] = value;
-    }  
+    }
   }
 }
 
@@ -180,8 +177,7 @@ static int parsedHeaderValue(http_parser* p, const char* buf, size_t len) {
 }
 
 void TestConnection::setHeaderValue(const std::string& v) {
-  if (eqcase("Connection", nextHeader_) &&
-      eqcase("close", v)) {
+  if (eqcase("Connection", nextHeader_) && eqcase("close", v)) {
     shouldClose_ = true;
   } else if (eqcase("Authorization", nextHeader_) &&
              ("Basic dGVzdDp2ZXJ5dmVyeXNlY3JldA==" != v)) {
@@ -215,7 +211,7 @@ void TestConnection::handleRequest() {
     if (parser_.method == HTTP_GET) {
       int size = 1024;
       if (!query_["size"].empty()) {
-          size = stoi(query_["size"]);
+        size = stoi(query_["size"]);
       }
       sendData(makeData(size));
       server_->success(OP_DATA);
@@ -325,24 +321,23 @@ finish:
   delete this;
 }
 
-void TestServer::acceptLoop() {
-  ev_run(loop_, 0);
-}
+void TestServer::acceptLoop() { ev_run(loop_, 0); }
 
 void TestServer::acceptOne() {
-    const int fd = accept(listenfd_, nullptr, nullptr);
-    if (fd < 0) {
-      // This could be because the socket was closed.
-      perror("Error accepting socket");
-      return;
-    }
+  const int fd = accept(listenfd_, nullptr, nullptr);
+  if (fd < 0) {
+    // This could be because the socket was closed.
+    perror("Error accepting socket");
+    return;
+  }
 
-    TestConnection* c = new TestConnection(this, fd);
-    std::thread ct(std::bind(&TestConnection::socketLoop, c));
-    ct.detach();
+  TestConnection* c = new TestConnection(this, fd);
+  std::thread ct(std::bind(&TestConnection::socketLoop, c));
+  ct.detach();
 }
 
-int TestServer::initializeSsl(const std::string& keyFile, const std::string& certFile) {
+int TestServer::initializeSsl(const std::string& keyFile,
+                              const std::string& certFile) {
   sslCtx_ = SSL_CTX_new(TLS_server_method());
 
   int err = SSL_CTX_use_certificate_chain_file(sslCtx_, certFile.c_str());
@@ -371,8 +366,8 @@ static void handleShutdown(struct ev_loop* loop, ev_async* a, int e) {
   ev_unref(loop);
 }
 
-int TestServer::start(const std::string& address, int port, const std::string& keyFile,
-                     const std::string& certFile) {
+int TestServer::start(const std::string& address, int port,
+                      const std::string& keyFile, const std::string& certFile) {
   int err = regcomp(&sizeParameter, SIZE_PARAMETER_REGEX, REG_EXTENDED);
   assert(err == 0);
 
@@ -430,7 +425,8 @@ int TestServer::start(const std::string& address, int port, const std::string& k
   listenev_.data = this;
   ev_io_start(loop_, &listenev_);
 
-  acceptThread_.reset(new std::thread(std::bind(&TestServer::acceptLoop, this)));
+  acceptThread_.reset(
+      new std::thread(std::bind(&TestServer::acceptLoop, this)));
   return 0;
 }
 
@@ -451,23 +447,17 @@ int TestServer::port() const {
   return ntohs(addr.sin_port);
 }
 
-void TestServer::resetStats() {
-  stats_.reset();
-}
+void TestServer::resetStats() { stats_.reset(); }
 
-TestServerStats TestServer::stats() const {
-  return stats_;
-}
+TestServerStats TestServer::stats() const { return stats_; }
 
 void TestServer::stop() {
   ev_async_send(loop_, &shutdownev_);
   acceptThread_->join();
-  close(listenfd_); 
+  close(listenfd_);
 }
 
-void TestServer::join() {
-  acceptThread_->join();
-}
+void TestServer::join() { acceptThread_->join(); }
 
 TestServerStats::TestServerStats() {
   for (int i = 0; i < NUM_OPS; i++) {

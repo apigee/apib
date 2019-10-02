@@ -17,6 +17,8 @@ limitations under the License.
 #ifndef APIB_TEST_SERVER_H
 #define APIB_TEST_SERVER_H
 
+#include <openssl/ssl.h>
+
 #include <atomic>
 #include <cstdint>
 #include <memory>
@@ -29,8 +31,6 @@ limitations under the License.
 #include "ev.h"
 #include "http_parser.h"
 
-#include <openssl/ssl.h>
-
 namespace apib {
 
 #define OP_HELLO 0
@@ -42,7 +42,7 @@ class TestServerStats {
  public:
   TestServerStats();
   TestServerStats(const TestServerStats& s);
-  void reset(); 
+  void reset();
 
   std::atomic_int32_t connectionCount = ATOMIC_VAR_INIT(0);
   std::atomic_int32_t socketErrorCount = ATOMIC_VAR_INIT(0);
@@ -55,8 +55,8 @@ class TestServer {
  public:
   ~TestServer();
   /* Start a simple and dumb thread-per-socket HTTP server on a thread. */
-  int start(const std::string& address, int port,
-            const std::string& keyFile, const std::string& certFile);
+  int start(const std::string& address, int port, const std::string& keyFile,
+            const std::string& certFile);
   int port() const;
   TestServerStats stats() const;
   void resetStats();
@@ -68,6 +68,7 @@ class TestServer {
   void newConnection();
   SSL_CTX* ssl() const { return sslCtx_; }
   void acceptOne();
+
  private:
   int initializeSsl(const std::string& keyFile, const std::string& certFile);
   void acceptLoop();
@@ -92,6 +93,7 @@ class TestConnection {
   void setNextHeaderName(const std::string& n) { nextHeader_ = n; }
   void setHeaderValue(const std::string& v);
   std::string body() { return body_; }
+
  private:
   int write(const std::string& s);
   void sendText(int code, const std::string& codestr, const std::string& msg);

@@ -107,9 +107,7 @@ void MonServerConnection::socketLoop() {
   delete this;
 }
 
-void MonServer::acceptLoop() {
-  ev_run(loop_, 0);
-}
+void MonServer::acceptLoop() { ev_run(loop_, 0); }
 
 void MonServer::acceptOne() {
   const int fd = accept(listenfd_, nullptr, nullptr);

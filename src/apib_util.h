@@ -23,7 +23,12 @@ limitations under the License.
 
 namespace apib {
 
-#define mandatoryAssert(e) if (!(e)) { std::cerr << "Assertion failed: " << __FILE__ << ':' << __LINE__ << std::endl; abort(); }
+#define mandatoryAssert(e)                                           \
+  if (!(e)) {                                                        \
+    std::cerr << "Assertion failed: " << __FILE__ << ':' << __LINE__ \
+              << std::endl;                                          \
+    abort();                                                         \
+  }
 
 extern bool eqcase(const std::string& s1, const std::string& s2);
 

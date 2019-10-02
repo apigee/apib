@@ -15,12 +15,12 @@ limitations under the License.
 */
 
 #include <fcntl.h>
+#include <netdb.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>
 #include <openssl/err.h>
 #include <sys/socket.h>
 #include <sys/types.h>
-#include <netdb.h>
 #include <unistd.h>
 
 #include <cassert>
@@ -64,13 +64,13 @@ int ConnectionState::Connect() {
   io_Verbose(this, "Made new TCP connection %i\n", fd_);
 
   size_t addrLen;
-  const struct sockaddr* addr =
-    url_->address(t_->threadIndex(), &addrLen);
-  
+  const struct sockaddr* addr = url_->address(t_->threadIndex(), &addrLen);
+
   if (t_->verbose) {
     char hostName[512];
     getnameinfo(addr, addrLen, hostName, 512, nullptr, 0, NI_NUMERICHOST);
-    io_Verbose(this, "Connecting to %s:%i\n", hostName, ntohs(((struct sockaddr_in*)addr)->sin_port));
+    io_Verbose(this, "Connecting to %s:%i\n", hostName,
+               ntohs(((struct sockaddr_in*)addr)->sin_port));
   }
 
   err = connect(fd_, addr, addrLen);

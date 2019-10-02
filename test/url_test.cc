@@ -14,17 +14,17 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+#include <netdb.h>
+#include <netinet/in.h>
+#include <sys/socket.h>
+#include <sys/types.h>
+
 #include <iostream>
 #include <memory>
-#include <netinet/in.h>
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <netdb.h>
-
-#include "src/apib_rand.h"
-#include "src/apib_url.h"
 
 #include "gtest/gtest.h"
+#include "src/apib_rand.h"
+#include "src/apib_url.h"
 
 using apib::URLInfo;
 
@@ -156,4 +156,4 @@ TEST(URL, ParseFile) {
   }
 }
 
-} // namespace
+}  // namespace
