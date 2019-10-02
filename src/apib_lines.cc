@@ -16,14 +16,13 @@ limitations under the License.
 
 #include "apib_lines.h"
 
-#include <cstring>
-
 #include <unistd.h>
+
+#include <cstring>
 
 namespace apib {
 
-static int isChar(const char c, const char* match)
-{
+static int isChar(const char c, const char* match) {
   unsigned int m = 0;
 
   while (match[m] != 0) {
@@ -45,6 +44,17 @@ LineState::LineState(char* line, int size, int len) {
   lineComplete_ = false;
 }
 
+LineState::LineState(const std::string& s) {
+  httpMode_ = false;
+  buf_ = (char*)malloc(s.size());
+  bufSize_ = s.size();
+  bufLen_ = s.size();
+  lineStart_ = lineEnd_ = 0;
+  tokStart_ = tokEnd_ = 0;
+  lineComplete_ = false;
+  memcpy(buf_, s.data(), bufSize_);
+}
+
 LineState::LineState(size_t len) {
   httpMode_ = false;
   buf_ = (char*)malloc(len);
@@ -55,9 +65,7 @@ LineState::LineState(size_t len) {
   lineComplete_ = false;
 }
 
-LineState::~LineState() {
-  free(buf_);
-}
+LineState::~LineState() { free(buf_); }
 
 void LineState::clear() {
   bufLen_ = 0;
@@ -66,9 +74,7 @@ void LineState::clear() {
   lineComplete_ = false;
 }
 
-void LineState::setHttpMode(bool on) {
-  httpMode_ = on;
-}
+void LineState::setHttpMode(bool on) { httpMode_ = on; }
 
 void LineState::nullLast() {
   buf_[lineEnd_] = 0;
@@ -83,10 +89,9 @@ bool LineState::next() {
     lineComplete_ = false;
     return false;
   }
-  
+
   /* Move to the first newline character */
-  while ((lineEnd_ < bufLen_) &&
-	 !isChar(buf_[lineEnd_], "\r\n")) {
+  while ((lineEnd_ < bufLen_) && !isChar(buf_[lineEnd_], "\r\n")) {
     lineEnd_++;
   }
   if (lineEnd_ >= bufLen_) {
@@ -99,15 +104,14 @@ bool LineState::next() {
     if (buf_[lineEnd_] == '\r') {
       nullLast();
       if (buf_[lineEnd_] == '\n') {
-	nullLast();
+        nullLast();
       }
     } else {
       nullLast();
-    }      
+    }
   } else {
     /* Overwrite all newlines with nulls */
-    while ((lineEnd_ < bufLen_) &&
-	   isChar(buf_[lineEnd_], "\r\n")) {
+    while ((lineEnd_ < bufLen_) && isChar(buf_[lineEnd_], "\r\n")) {
       nullLast();
     }
   }
@@ -135,12 +139,10 @@ std::string LineState::nextToken(const std::string& toks) {
 
   tokStart_ = tokEnd_;
 
-  while ((tokEnd_ < lineEnd_) &&
-	 !isChar(buf_[tokEnd_], toks.c_str())) {
+  while ((tokEnd_ < lineEnd_) && !isChar(buf_[tokEnd_], toks.c_str())) {
     tokEnd_++;
   }
-  while ((tokEnd_ < lineEnd_) &&
-	 isChar(buf_[tokEnd_], toks.c_str())) {
+  while ((tokEnd_ < lineEnd_) && isChar(buf_[tokEnd_], toks.c_str())) {
     buf_[tokEnd_] = 0;
     tokEnd_++;
   }
@@ -195,9 +197,9 @@ void LineState::writeRemaining(std::ostream& out) const {
 }
 
 void LineState::debug(std::ostream& out) const {
-  out << "buf len = " << bufLen_ << " line start = " << lineStart_ <<
-    " end = " << lineEnd_ << " tok start = " << tokStart_ <<
-    " tok end = " << tokEnd_ << std::endl;
+  out << "buf len = " << bufLen_ << " line start = " << lineStart_
+      << " end = " << lineEnd_ << " tok start = " << tokStart_
+      << " tok end = " << tokEnd_ << std::endl;
 }
 
 }  // namespace apib

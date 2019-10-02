@@ -75,21 +75,21 @@ cc_test(
     ],
 )
 
-#cc_test(
-#    name = "message",
-#    srcs = ["message_test.cc"],
-#    data = [
-#        ":data/bodyrequest.txt",
-#        ":data/chunkedresponse.txt",
-#        ":data/getrequest.txt",
-#        ":data/response.txt",
-#    ],
-#    deps = [
-#        "//src:common",
-#        "@gtest",
-#        "@gtest//:gtest_main",
-#    ],
-#)
+cc_test(
+    name = "message",
+    srcs = ["message_test.cc"],
+    data = [
+        ":data/bodyrequest.txt",
+        ":data/chunkedresponse.txt",
+        ":data/getrequest.txt",
+        ":data/response.txt",
+    ],
+    deps = [
+        "//src:common",
+        "@gtest",
+        "@gtest//:gtest_main",
+    ],
+)
 
 cc_test(
     name = "cpu",

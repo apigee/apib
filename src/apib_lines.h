@@ -31,9 +31,11 @@ namespace apib {
 class LineState {
  public:
   /* Initialize or reset a LineState with new data. "size" is the size
-   * of the buffer, and "len" is the amount that's currently filled with real stuff.
-   * This object takes over "line". */
+   * of the buffer, and "len" is the amount that's currently filled with real
+   * stuff. This object takes over "line". */
   LineState(char* line, int size, int len);
+  /* Initialize the same, but make a copy of what's in the string. */
+  LineState(const std::string& s);
   /* Initialize with an empty buffer. */
   LineState(size_t len);
   ~LineState();
@@ -43,19 +45,22 @@ class LineState {
   /* If set to true, then every line is terminated by a single CRLF. Otherwise
    we eat them all up and return no blank lines. Http relies on blank lines! */
   void setHttpMode(bool on);
-  /* Read the first complete line -- return false if a complete line is not present. */
+  /* Read the first complete line -- return false if a complete line is not
+   * present. */
   bool next();
   /* If NextLine returned non-zero, return a pointer to the entire line */
   std::string line();
-  /* If NextLine returned non-zero, return the next token delimited by "toks" like strtok */
+  /* If NextLine returned non-zero, return the next token delimited by "toks"
+   * like strtok */
   std::string nextToken(const std::string& toks);
   /* Move any data remaining in the line to the start. Used if we didn't
-   read a complete line and are still expecting more data. 
+   read a complete line and are still expecting more data.
    If we return false, it means that the buffer is full and we don't
    have a complete line. Implementations should know that means that the lines
    are too long and stop processing. */
   bool consume();
-  /* Fill the line buffer with data from a file. Return what the read call did. */
+  /* Fill the line buffer with data from a file. Return what the read call did.
+   */
   int readStream(std::istream& in);
   /* Fill the buffer with data from a socket */
   int readFd(int fd);
@@ -77,15 +82,15 @@ class LineState {
  private:
   void nullLast();
 
-  char*    buf_;
-  bool     httpMode_; /* Lines are terminated by only a single CRLF. */
-  int      bufLen_; /* The number of valid bytes in the buffer */
-  int      bufSize_; /* Number of allocated bytes in case it is different */
-  int      lineStart_;
-  int      lineEnd_;
-  bool     lineComplete_;
-  int      tokStart_;
-  int      tokEnd_;
+  char* buf_;
+  bool httpMode_; /* Lines are terminated by only a single CRLF. */
+  int bufLen_;    /* The number of valid bytes in the buffer */
+  int bufSize_;   /* Number of allocated bytes in case it is different */
+  int lineStart_;
+  int lineEnd_;
+  bool lineComplete_;
+  int tokStart_;
+  int tokEnd_;
 };
 
 }  // namespace apib

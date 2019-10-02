@@ -18,7 +18,7 @@ cc_library(
     name = "common",
     srcs = [
         "apib_lines.cc",
-        #"apib_message.c",
+        "apib_message.cc",
         "apib_rand.cc",
         "apib_reporting.cc",
         "apib_time.cc",
