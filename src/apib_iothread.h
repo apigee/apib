@@ -195,6 +195,7 @@ class ConnectionState {
   ev_io io_;
   ev_timer thinkTimer_;
   URLInfo* url_ = nullptr;
+  bool writeDirty_ = true;
   std::ostringstream writeBuf_;
   std::string fullWrite_;
   size_t fullWritePos_ = 0;

@@ -51,7 +51,14 @@ int ConnectionState::httpComplete(http_parser* p) {
 }
 
 void ConnectionState::writeRequest() {
-  // TODO if we didn't change URL, then don't do this every time!
+  if (!writeDirty_ && (t_->oauth == nullptr)) {
+    // If we're reusing the same connection with the same URL,
+    // then we can re-use the write buffer
+    fullWritePos_ = 0;
+    return;
+  }
+
+  // Reset read buffer so that we can avoid re-allocation on every re-write
   writeBuf_.rdbuf()->pubseekpos(0, std::ios_base::in);
   writeBuf_.rdbuf()->pubseekpos(0, std::ios_base::out);
   writeBuf_ << t_->httpVerb << " " << url_->path() << " HTTP/1.1\r\n";
@@ -95,6 +102,7 @@ void ConnectionState::writeRequest() {
   }
   fullWrite_ = writeBuf_.str();
   fullWritePos_ = 0;
+  writeDirty_ = false;
 }
 
 void ConnectionState::ConnectAndSend() {
@@ -197,8 +205,13 @@ void ConnectionState::ReadDone(int err) {
     url_ = URLInfo::GetNext(t_->rand());
     if (!URLInfo::IsSameServer(*oldUrl, *url_, t_->index)) {
       io_Verbose(this, "Switching to a different server\n");
+      writeDirty_ = true;
       recycle(1);
     } else {
+      // URLs are static throughout the run, so we can just compare pointer here
+      if (url_ != oldUrl) {
+        writeDirty_ = true;
+      }
       recycle(0);
     }
   }
