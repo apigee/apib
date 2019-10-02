@@ -43,42 +43,47 @@ class HttpMessage {
   HttpMessage(MessageType t);
 
   /*
-Add data to a response object. The data should consist of a valid
-HTTP response. Returns 0 on success and non-zero on error.
-Callers should check the "state" parameter and keep feeding data
-until the state is kMessageDone. An error means that we got
-invalid HTTP data. The passed "LineState" MUST be in "HTTP" mode.
-*/
+  Add data to a response object. The data should consist of a valid
+  HTTP response. Returns 0 on success and non-zero on error.
+  Callers should check the "state" parameter and keep feeding data
+  until the state is kMessageDone. An error means that we got
+  invalid HTTP data. The passed "LineState" MUST be in "HTTP" mode.
+  */
   int fill(LineState* buf);
+
+  // Clear the state of the message, except for "type," so that
+  // it may be reused without being reallocated.
+  void clear();
+
+  // If state > kMessageHeaders, tells us whether we should
+  // close the connection when done.
+  bool shouldClose() const { return (shouldClose_ > 0); }
 
   // Public things so that you can easily query them
 
   const MessageType type;
-  int state = kMessageInit;
+  int state;
 
-  // Available when state >= MESSAGE_STATUS
-  int majorVersion = -1;
-  int minorVersion = -1;
+  // Available when state >= kMessageStatus
+  int majorVersion;
+  int minorVersion;
 
   // Only available for a response
-  int statusCode = -1;
+  int statusCode;
 
   // Only available for a request
   std::string method;
   std::string path;
 
-  // Available when state >= MESSAGE_HEADERS
-  int32_t contentLength = -1;
-  int chunked = -1;
-  int shouldClose = -1;
+  // Available when state >= kMessageHeaders
+  //   The value of the "content-length" header, if set
+  int32_t contentLength;
+  int chunked;
 
-  // Available when state >= MESSAGE_BODY
-  int32_t bodyLength = -1;
-
-  // Internal stuff for chunked encoding.
-  int chunkState = kChunkInit;
-  int32_t chunkLength = -1;
-  int32_t chunkPosition = -1;
+  // Available when state >= kMessageBody
+  //    The total length of the message body that we read,
+  //    whether content-length was set or chunked encoding was used.
+  int32_t bodyLength;
 
  private:
   int parseStatus(LineState* buf);
@@ -92,6 +97,11 @@ invalid HTTP data. The passed "LineState" MUST be in "HTTP" mode.
   int parseChunkEnd(LineState* buf);
   int parseTrailerLine(LineState* buf);
   int fillChunk(LineState* buf);
+
+  int shouldClose_;
+  int chunkState_;
+  int32_t chunkLength_;
+  int32_t chunkPosition_;
 };
 
 }  // namespace apib

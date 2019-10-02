@@ -44,15 +44,18 @@ class LineState {
   void clear();
   /* If set to true, then every line is terminated by a single CRLF. Otherwise
    we eat them all up and return no blank lines. Http relies on blank lines! */
-  void setHttpMode(bool on);
+  void setHttpMode(bool on) { httpMode_ = on; }
   /* Read the first complete line -- return false if a complete line is not
    * present. */
   bool next();
   /* If NextLine returned non-zero, return a pointer to the entire line */
   std::string line();
   /* If NextLine returned non-zero, return the next token delimited by "toks"
-   * like strtok */
+   * like strtok. If "toks" is zn empty string, return everything until the end
+   * of the current line. */
   std::string nextToken(const std::string& toks);
+  /* Move the token position to skip anything that's not whitespace */
+  void skipMatches(const std::string& toks);
   /* Move any data remaining in the line to the start. Used if we didn't
    read a complete line and are still expecting more data.
    If we return false, it means that the buffer is full and we don't
@@ -73,7 +76,7 @@ class LineState {
   /* Write data from the end of the last line to the end of the buffer */
   void writeRemaining(std::ostream& out) const;
   /* Skip forward to see if there's another line */
-  void skip(int toSkip) { lineEnd_ += toSkip; }
+  void skip(int toSkip);
   /* Report back how much we read */
   void setReadLength(int len) { bufLen_ += len; }
   /* Output the buffer to a stream */

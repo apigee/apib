@@ -53,7 +53,7 @@ TEST(Message, GoodHeaders) {
   EXPECT_EQ(1, r.minorVersion);
   EXPECT_EQ(100, r.contentLength);
   EXPECT_EQ(0, r.chunked);
-  EXPECT_EQ(0, r.shouldClose);
+  EXPECT_EQ(false, r.shouldClose());
 }
 
 TEST(Message, CompleteResponse) {
@@ -66,7 +66,24 @@ TEST(Message, CompleteResponse) {
   do {
     l.readStream(rf);
     ASSERT_EQ(0, r.fill(&l));
-    l.consume();
+    ASSERT_TRUE(l.consume());
+  } while (r.state != apib::kMessageDone);
+
+  EXPECT_EQ(200, r.statusCode);
+  EXPECT_EQ(r.contentLength, r.bodyLength);
+}
+
+TEST(Message, LargerResponse) {
+  std::ifstream rf("./test/data/largeresponse.txt");
+  ASSERT_NE(true, rf.fail());
+  LineState l(100);
+  l.setHttpMode(true);
+  HttpMessage r(Response);
+
+  do {
+    l.readStream(rf);
+    ASSERT_EQ(0, r.fill(&l));
+    ASSERT_TRUE(l.consume());
   } while (r.state != apib::kMessageDone);
 
   EXPECT_EQ(200, r.statusCode);
@@ -85,7 +102,7 @@ TEST(Message, ChunkedResponse) {
     // Expect us to be done reading before the file is empty
     ASSERT_GT(rc, 0);
     ASSERT_EQ(0, r.fill(&l));
-    l.consume();
+    ASSERT_TRUE(l.consume());
   } while (r.state != apib::kMessageDone);
 
   EXPECT_EQ(200, r.statusCode);
@@ -102,7 +119,7 @@ TEST(Message, LengthRequest) {
   do {
     l.readStream(rf);
     ASSERT_EQ(0, r.fill(&l));
-    l.consume();
+    ASSERT_TRUE(l.consume());
   } while (r.state != apib::kMessageDone);
 
   EXPECT_EQ("GET", r.method);
@@ -120,7 +137,7 @@ TEST(Message, GetRequest) {
   do {
     l.readStream(rf);
     ASSERT_EQ(0, r.fill(&l));
-    l.consume();
+    ASSERT_TRUE(l.consume());
   } while (r.state != apib::kMessageDone);
   EXPECT_EQ("GET", r.method);
   EXPECT_EQ("/foo?bar=baz&true=123", r.path);

@@ -74,8 +74,6 @@ void LineState::clear() {
   lineComplete_ = false;
 }
 
-void LineState::setHttpMode(bool on) { httpMode_ = on; }
-
 void LineState::nullLast() {
   buf_[lineEnd_] = 0;
   lineEnd_++;
@@ -139,15 +137,28 @@ std::string LineState::nextToken(const std::string& toks) {
 
   tokStart_ = tokEnd_;
 
-  while ((tokEnd_ < lineEnd_) && !isChar(buf_[tokEnd_], toks.c_str())) {
-    tokEnd_++;
-  }
-  while ((tokEnd_ < lineEnd_) && isChar(buf_[tokEnd_], toks.c_str())) {
-    buf_[tokEnd_] = 0;
-    tokEnd_++;
+  if (!toks.empty()) {
+    while ((tokEnd_ < lineEnd_) && !isChar(buf_[tokEnd_], toks.c_str())) {
+      tokEnd_++;
+    }
+    while ((tokEnd_ < lineEnd_) && isChar(buf_[tokEnd_], toks.c_str())) {
+      buf_[tokEnd_] = 0;
+      tokEnd_++;
+    }
   }
 
   return std::string(buf_ + tokStart_);
+}
+
+void LineState::skipMatches(const std::string& toks) {
+  while ((tokEnd_ < lineEnd_) && isChar(buf_[tokEnd_], toks.c_str())) {
+    tokEnd_++;
+  }
+}
+
+void LineState::skip(int toSkip) {
+  lineStart_ += toSkip;
+  lineEnd_ += toSkip;
 }
 
 bool LineState::consume() {
@@ -200,6 +211,8 @@ void LineState::debug(std::ostream& out) const {
   out << "buf len = " << bufLen_ << " line start = " << lineStart_
       << " end = " << lineEnd_ << " tok start = " << tokStart_
       << " tok end = " << tokEnd_ << std::endl;
+  out.write(buf_, bufLen_);
+  out << std::endl;
 }
 
 }  // namespace apib

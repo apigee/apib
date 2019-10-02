@@ -46,38 +46,22 @@ static const int kStatusLineParts = 4;
 static const std::regex headerLineRegex("^([^:]+):([ \\t]+)?(.*)$");
 static const int kHeaderLineParts = 4;
 
-HttpMessage::HttpMessage(MessageType t) : type(t) {}
+HttpMessage::HttpMessage(MessageType t) : type(t) { clear(); }
 
-/*
-static char* getPart(const char* s, const regmatch_t* matches, const int ix) {
-  const regmatch_t* match = &(matches[ix]);
-  if (match->rm_so < 0) {
-    return NULL;
-  }
-  assert(match->rm_eo >= match->rm_so);
-  return strndup(s + match->rm_so, match->rm_eo - match->rm_so);
+void HttpMessage::clear() {
+  state = kMessageInit;
+  minorVersion = majorVersion = -1;
+  statusCode = -1;
+  method.clear();
+  path.clear();
+  contentLength = -1;
+  chunked = -1;
+  shouldClose_ = -1;
+  bodyLength = -1;
+  chunkState_ = kChunkInit;
+  chunkLength_ = -1;
+  chunkPosition_ = -1;
 }
-
-static int getIntPart(const char* s, const regmatch_t* matches, const int ix) {
-  char* ps = getPart(s, matches, ix);
-  if (ps == NULL) {
-    return 0;
-  }
-  int val = atoi(ps);
-  free(ps);
-  return val;
-}
-
-static int comparePart(const char* expected, const char* s,
-                       const regmatch_t* matches, const int ix) {
-  const regmatch_t* match = &(matches[ix]);
-  if (match->rm_so < 0) {
-    return -1;
-  }
-  assert(match->rm_eo >= match->rm_so);
-  return strncasecmp(expected, s + match->rm_so, match->rm_eo - match->rm_so);
-}
-*/
 
 // These functions return an int:
 // < 0 : Error
@@ -133,8 +117,8 @@ void HttpMessage::finishHeaders() {
     contentLength = 0;
   }
   bodyLength = 0;
-  if (shouldClose < 0) {
-    shouldClose = 0;
+  if (shouldClose_ < 0) {
+    shouldClose_ = 0;
   }
 
   if (contentLength == 0) {
@@ -151,7 +135,7 @@ void HttpMessage::examineHeader(const std::string& name,
   } else if (eqcase("Transfer-Encoding", name)) {
     chunked = eqcase("chunked", value) ? 1 : 0;
   } else if (eqcase("Connection", name)) {
-    shouldClose = eqcase("close", value) ? 1 : 0;
+    shouldClose_ = eqcase("close", value) ? 1 : 0;
   }
 }
 
@@ -171,13 +155,21 @@ int HttpMessage::parseHeaderLine(LineState* buf) {
     return 0;
   }
 
-  std::smatch matches;
-  if (!std::regex_match(hl, matches, headerLineRegex)) {
-    cerr << "Invalid header line: \"" << hl << '\"' << endl;
-    return -2;
-  }
-  assert(matches.size() == kHeaderLineParts);
-  examineHeader(matches[1], matches[3]);
+  /*
+    std::smatch matches;
+    if (!std::regex_match(hl, matches, headerLineRegex)) {
+      cerr << "Invalid header line: \"" << hl << '\"' << endl;
+      return -2;
+    }
+    assert(matches.size() == kHeaderLineParts);
+    examineHeader(matches[1], matches[3]);
+    */
+
+  const std::string name = buf->nextToken(":");
+  buf->skipMatches(" \t");
+  const std::string value = buf->nextToken("");
+  examineHeader(name, value);
+
   return 0;
 }
 
@@ -215,11 +207,11 @@ int HttpMessage::parseChunkHeader(LineState* buf) {
   // TODO regular expression for extra chunk header stuff like encoding!
   const long len = std::stol(buf->line(), 0, 16);
   if (len == 0) {
-    chunkState = kChunkEnd;
+    chunkState_ = kChunkEnd;
   } else {
-    chunkLength = len;
-    chunkPosition = 0;
-    chunkState = kChunkLength;
+    chunkLength_ = len;
+    chunkPosition_ = 0;
+    chunkState_ = kChunkLength;
   }
   return 0;
 }
@@ -231,18 +223,18 @@ int HttpMessage::parseChunkBody(LineState* buf) {
     return 1;
   }
 
-  const int32_t toRead = chunkLength - chunkPosition;
+  const int32_t toRead = chunkLength_ - chunkPosition_;
   if (bufLeft <= toRead) {
-    chunkPosition += bufLeft;
+    chunkPosition_ += bufLeft;
     buf->skip(bufLeft);
   } else {
-    chunkPosition += toRead;
+    chunkPosition_ += toRead;
     buf->skip(toRead);
   }
 
-  if (chunkLength == chunkPosition) {
-    bodyLength += chunkLength;
-    chunkState = kChunkChunk;
+  if (chunkLength_ == chunkPosition_) {
+    bodyLength += chunkLength_;
+    chunkState_ = kChunkChunk;
   }
   return 0;
 }
@@ -255,7 +247,7 @@ int HttpMessage::parseChunkEnd(LineState* buf) {
   if (!buf->line().empty()) {
     return -3;
   }
-  chunkState = kChunkInit;
+  chunkState_ = kChunkInit;
   return 0;
 }
 
@@ -288,7 +280,7 @@ int HttpMessage::fillChunk(LineState* buf) {
   assert(chunked == 1);
   for (;;) {
     int s;
-    switch (chunkState) {
+    switch (chunkState_) {
       case kChunkInit:
         s = parseChunkHeader(buf);
         break;

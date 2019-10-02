@@ -82,6 +82,7 @@ cc_test(
         ":data/bodyrequest.txt",
         ":data/chunkedresponse.txt",
         ":data/getrequest.txt",
+        ":data/largeresponse.txt",
         ":data/response.txt",
     ],
     deps = [
