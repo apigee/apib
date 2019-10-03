@@ -37,7 +37,7 @@ TEST(CPU, Usage) {
 
   double newUsage = apib::cpu_GetInterval(&cpu);
   printf("Last second: %lf\n", newUsage);
-  EXPECT_LE(0.0, newUsage);
+  EXPECT_LT(0.0, newUsage);
   EXPECT_GE(1.0, newUsage);
 }
 

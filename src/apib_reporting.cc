@@ -50,12 +50,12 @@ static const std::regex kHostPort("^([^:]+):([0-9]+)$");
 static std::mutex latch;
 static volatile bool reporting = 0;
 static bool cpuAvailable = false;
-static std::atomic_int32_t completedRequests;
-static std::atomic_int32_t successfulRequests;
-static std::atomic_int32_t intervalSuccessful;
-static std::atomic_int32_t unsuccessfulRequests;
-static std::atomic_int32_t socketErrors;
-static std::atomic_int32_t connectionsOpened;
+static std::atomic_int_fast32_t completedRequests;
+static std::atomic_int_fast32_t successfulRequests;
+static std::atomic_int_fast32_t intervalSuccessful;
+static std::atomic_int_fast32_t unsuccessfulRequests;
+static std::atomic_int_fast32_t socketErrors;
+static std::atomic_int_fast32_t connectionsOpened;
 
 static int64_t startTime;
 static int64_t stopTime;
@@ -157,12 +157,12 @@ void RecordResult(int code) {
     return;
   }
 
-  completedRequests++;
+  completedRequests.fetch_add(1, std::memory_order_relaxed);
   if ((code >= 200) && (code < 300)) {
-    successfulRequests++;
-    intervalSuccessful++;
+    successfulRequests.fetch_add(1, std::memory_order_relaxed);
+    intervalSuccessful.fetch_add(1, std::memory_order_relaxed);
   } else {
-    unsuccessfulRequests++;
+    unsuccessfulRequests.fetch_add(1, std::memory_order_relaxed);
   }
 }
 
@@ -255,7 +255,7 @@ void RecordStop(void) {
 BenchmarkIntervalResults ReportIntervalResults() {
   BenchmarkIntervalResults r;
   const int64_t now = GetTime();
-  r.successfulRequests = intervalSuccessful.exchange(0);
+  r.successfulRequests = intervalSuccessful.exchange(0, std::memory_order_relaxed);
   r.intervalTime = Seconds(now - intervalStartTime);
   r.elapsedTime = Seconds(now - startTime);
   r.averageThroughput = (double)r.successfulRequests / r.intervalTime;

@@ -20,6 +20,7 @@ limitations under the License.
 
 #include <cstring>
 #include <fstream>
+#include <iostream>
 
 #include "absl/strings/numbers.h"
 #include "src/apib_cpu.h"
@@ -168,18 +169,18 @@ static int getTicks(CPUUsage* cpu) {
       do {
         tok = line.nextToken(" \t");
         if (!tok.empty()) {
+          int64_t c;
+          if (!absl::SimpleAtoi(tok, &c)) {
+            return 0;
+          }
           if ((i == 3) || (i == 4) || (i == 7)) {
             /* The fourth and fifth columns are "idle" and "iowait".
                  We consider both to be idle CPU.
                The eigth is "steal", which is time lost to virtualization
-               as a client -- that's idle two in our estimation */
-            if (!absl::SimpleAtoi(tok, &idleCount)) {
-              return 0;
-            }
+               as a client -- that's idle too in our estimation */
+            idleCount += c;
           } else {
-            if (!absl::SimpleAtoi(tok, &nonIdleCount)) {
-              return 0;
-            }
+            nonIdleCount += c;
           }
           i++;
         }
