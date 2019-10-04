@@ -34,16 +34,15 @@ namespace apib {
 http_parser_settings IOThread::parserSettings_;
 static std::once_flag parserInitalized;
 
-ConnectionState::ConnectionState(int index, IOThread* t) {
-  index_ = index;
+ConnectionState::ConnectionState(int index, IOThread* t) : index_(index) {
   keepRunning_ = 1;
   t_ = t;
-  readBuf_ = (char*)malloc(readBufSize);
+  readBuf_ = new char[kReadBufSize];
 }
 
 // TODO memory leak -- COnnectionStates are freed when threads exit but not
 // when they just close. Think of a way to handle this...
-ConnectionState::~ConnectionState() { free(readBuf_); }
+ConnectionState::~ConnectionState() { delete[] readBuf_; }
 
 int ConnectionState::httpComplete(http_parser* p) {
   ConnectionState* c = (ConnectionState*)p->data;

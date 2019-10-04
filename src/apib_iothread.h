@@ -173,8 +173,13 @@ class ConnectionState {
   static int httpComplete(http_parser* p);
 
  private:
-  static constexpr int readBufSize = 512;
-  static constexpr int writeBufSize = 1024;
+  // The size of the buffer to read from when calling read()
+  // or SSL_read()
+  static constexpr int kReadBufSize = 8192;
+  // In the event that connecting a socket fails, we will wait
+  // for this time, in seconds, before trying again.
+  // Nevertheless, if this ever gets used then the benchmark
+  // is pretty much ruined anyway...
   static constexpr double kConnectFailureDelay = 0.25;
 
   void addThinkTime();
@@ -195,7 +200,7 @@ class ConnectionState {
   static void writeReady(struct ev_loop* loop, ev_io* w, int revents);
   static void thinkingDone(struct ev_loop* loop, ev_timer* t, int revents);
 
-  int index_ = 0;
+  const int index_ = 0;
   bool keepRunning_ = 0;
   IOThread* t_ = nullptr;
   int fd_ = 0;

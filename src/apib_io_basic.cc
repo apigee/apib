@@ -256,7 +256,7 @@ void ConnectionState::SendWrite() {
 
 int ConnectionState::singleRead(struct ev_loop* loop, ev_io* w, int revents) {
   io_Verbose(this, "I/O ready on read path: %i\n", revents);
-  const size_t len = readBufSize - readBufPos_;
+  const size_t len = kReadBufSize - readBufPos_;
   assert(len > 0);
 
   size_t readCount;
