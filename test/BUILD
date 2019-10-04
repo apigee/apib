@@ -105,7 +105,7 @@ cc_test(
     name = "reporting",
     srcs = ["reporting_test.cc"],
     deps = [
-        "//src:common",
+        "//src:io",
         "@gtest",
         "@gtest//:gtest_main",
     ],

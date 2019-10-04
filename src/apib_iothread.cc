@@ -18,6 +18,7 @@ limitations under the License.
 
 #include <cassert>
 #include <functional>
+#include <iostream>
 #include <thread>
 
 #include "ev.h"
@@ -108,11 +109,15 @@ void ConnectionState::writeRequest() {
 void ConnectionState::ConnectAndSend() {
   startTime_ = GetTime();
   if (needsOpen_) {
-    int err = Connect();
-    mandatoryAssert(err == 0);
-    // Should only fail if we can't create a new socket --
-    // errors actually connecting will be handled during write.
-    RecordConnectionOpen();
+    const int err = Connect();
+    if (err == 0) {
+      RecordConnectionOpen();
+    } else {
+      std::cerr << "Error opening TCP connection: " << err << std::endl;
+      RecordSocketError();
+      sendAfterDelay(kConnectFailureDelay);
+      return;
+    }
   }
   writeRequest();
   SendWrite();
@@ -127,22 +132,26 @@ void ConnectionState::thinkingDone(struct ev_loop* loop, ev_timer* t,
 
 void ConnectionState::addThinkTime() {
   const double thinkTime = (double)(t_->thinkTime) / 1000.0;
-  io_Verbose(this, "Thinking for %.4lf seconds\n", thinkTime);
-  ev_timer_init(&thinkTimer_, thinkingDone, thinkTime, 0);
+  sendAfterDelay(thinkTime);
+}
+
+void ConnectionState::sendAfterDelay(double seconds) {
+  io_Verbose(this, "Thinking for %.4lf seconds\n", seconds);
+  ev_timer_init(&thinkTimer_, thinkingDone, seconds, 0);
   thinkTimer_.data = this;
   ev_timer_start(t_->loop(), &thinkTimer_);
 }
 
-void ConnectionState::recycle(int closeConn) {
+void ConnectionState::recycle(bool closeConn) {
   if (closeConn || t_->noKeepAlive || !t_->shouldKeepRunning()) {
-    needsOpen_ = 1;
+    needsOpen_ = true;
     // Close is async, especially for TLS. So we will
     // reconnect later...
     Close();
     return;
   }
 
-  needsOpen_ = 0;
+  needsOpen_ = false;
   if (t_->thinkTime > 0) {
     addThinkTime();
   } else {
@@ -152,7 +161,7 @@ void ConnectionState::recycle(int closeConn) {
 
 int ConnectionState::StartConnect() {
   url_ = URLInfo::GetNext(t_->rand());
-  needsOpen_ = 1;
+  needsOpen_ = true;
   ConnectAndSend();
   return 0;
 }
@@ -174,7 +183,7 @@ void ConnectionState::WriteDone(int err) {
   if (err != 0) {
     RecordSocketError();
     io_Verbose(this, "Error on write: %i\n", err);
-    recycle(1);
+    recycle(true);
   } else {
     io_Verbose(this, "Write complete. Starting to read\n");
     // Prepare to read.
@@ -191,31 +200,44 @@ void ConnectionState::ReadDone(int err) {
   if (err != 0) {
     io_Verbose(this, "Error on read: %i\n", err);
     RecordSocketError();
-    recycle(1);
+    recycle(true);
     return;
   }
 
-  RecordResult(parser_.status_code);
-  t_->recordLatency(GetTime() - startTime_);
+  t_->recordResult(parser_.status_code, GetTime() - startTime_);
   if (!http_should_keep_alive(&(parser_))) {
     io_Verbose(this, "Server does not want keep-alive\n");
-    recycle(1);
+    recycle(true);
   } else {
     const URLInfo* oldUrl = url_;
     url_ = URLInfo::GetNext(t_->rand());
     if (!URLInfo::IsSameServer(*oldUrl, *url_, t_->index)) {
       io_Verbose(this, "Switching to a different server\n");
       writeDirty_ = true;
-      recycle(1);
+      recycle(true);
     } else {
       // URLs are static throughout the run, so we can just compare pointer here
       if (url_ != oldUrl) {
         writeDirty_ = true;
       }
-      recycle(0);
+      recycle(false);
     }
   }
 }
+
+void IOThread::recordResult(int statusCode, int_fast64_t latency) {
+  Counters* c = getCounters();
+  if ((statusCode >= 200) && (statusCode < 300)) {
+    c->successfulRequests++;
+  } else {
+    c->failedRequests++;
+  }
+  c->latencies.push_back(latency);
+}
+
+void IOThread::recordRead(size_t c) { getCounters()->bytesRead += c; }
+
+void IOThread::recordWrite(size_t c) { getCounters()->bytesWritten += c; }
 
 void IOThread::setNumConnections(size_t newVal) {
   iothread_Verbose(this, "Current connections = %zu. New connections = %zu\n",
@@ -277,10 +299,6 @@ void IOThread::processCommands(struct ev_loop* loop, ev_async* a, int revents) {
 
 void IOThread::threadLoop() {
   int ret = 0;
-  readCount_ = 0;
-  writeCount_ = 0;
-  readBytes_ = 0;
-  writeBytes_ = 0;
 
   iothread_Verbose(this, "Starting new event loop %i for %i connection\n",
                    index, numConnections);
@@ -311,8 +329,6 @@ void IOThread::threadLoop() {
   }
   ret = ev_run(loop_, 0);
   iothread_Verbose(this, "ev_run finished: %i\n", ret);
-  RecordByteCounts(writeBytes_, readBytes_);
-  RecordLatencies(latencies_);
 
 finish:
   iothread_Verbose(this, "Cleaning up event loop %i\n", index);
@@ -322,6 +338,11 @@ finish:
   ev_loop_destroy(loop_);
 }
 
+IOThread::IOThread() {
+  Counters* c = new Counters();
+  counterPtr_.store(reinterpret_cast<uintptr_t>(c));
+}
+
 IOThread::~IOThread() {
   if (sslCtx != nullptr) {
     SSL_CTX_free(sslCtx);
@@ -329,6 +350,14 @@ IOThread::~IOThread() {
   if (thread_ != nullptr) {
     delete thread_;
   }
+  Counters* c = reinterpret_cast<Counters*>(counterPtr_.load());
+  delete c;
+}
+
+Counters* IOThread::exchangeCounters() {
+  Counters* newCounters = new Counters();
+  return reinterpret_cast<Counters*>(
+      counterPtr_.exchange(reinterpret_cast<uintptr_t>(newCounters)));
 }
 
 void IOThread::initializeParser() {
@@ -381,16 +410,6 @@ void IOThread::SetNumConnections(int newConnections) {
   commands_.Add(cmd);
   // Wake up the loop and cause the callback to be called.
   ev_async_send(loop_, &async_);
-}
-
-void IOThread::recordRead(size_t c) {
-  readCount_++;
-  readBytes_ += c;
-}
-
-void IOThread::recordWrite(size_t c) {
-  writeCount_++;
-  writeBytes_ += c;
 }
 
 }  // namespace apib

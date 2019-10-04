@@ -65,6 +65,10 @@ int ConnectionState::Connect() {
 
   size_t addrLen;
   const struct sockaddr* addr = url_->address(t_->threadIndex(), &addrLen);
+  if (addr == nullptr) {
+    io_Verbose(this, "No addresses to look up\n");
+    return -2;
+  }
 
   if (t_->verbose) {
     char hostName[512];

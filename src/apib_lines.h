@@ -57,9 +57,9 @@ class LineState {
   /* If NextLine returned non-zero, return the next token delimited by "toks"
    * like strtok. If "toks" is zn empty string, return everything until the end
    * of the current line. */
-  absl::string_view nextToken(const std::string& toks);
+  absl::string_view nextToken(const absl::string_view toks);
   /* Move the token position to skip anything that's not whitespace */
-  void skipMatches(const std::string& toks);
+  void skipMatches(const absl::string_view toks);
   /* Move any data remaining in the line to the start. Used if we didn't
    read a complete line and are still expecting more data.
    If we return false, it means that the buffer is full and we don't

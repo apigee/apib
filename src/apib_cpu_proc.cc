@@ -171,16 +171,21 @@ static int getTicks(CPUUsage* cpu) {
         if (!tok.empty()) {
           int64_t c;
           if (!absl::SimpleAtoi(tok, &c)) {
-            return 0;
+            continue;
           }
-          if ((i == 3) || (i == 4) || (i == 7)) {
-            /* The fourth and fifth columns are "idle" and "iowait".
+          switch (i) {
+            case 3:
+            case 4:
+            case 7:
+              /* The fourth and fifth columns are "idle" and "iowait".
                  We consider both to be idle CPU.
                The eigth is "steal", which is time lost to virtualization
                as a client -- that's idle too in our estimation */
-            idleCount += c;
-          } else {
-            nonIdleCount += c;
+              idleCount += c;
+              break;
+            default:
+              nonIdleCount += c;
+              break;
           }
           i++;
         }

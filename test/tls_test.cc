@@ -26,8 +26,10 @@ limitations under the License.
 
 using apib::BenchmarkResults;
 using apib::IOThread;
+using apib::RecordStart;
 using apib::RecordStop;
 using apib::ReportResults;
+using apib::ThreadList;
 using apib::URLInfo;
 
 namespace {
@@ -41,7 +43,6 @@ class TLSTest : public ::testing::Test {
  protected:
   TLSTest() {
     apib::RecordInit("", "");
-    apib::RecordStart(true);
     testServer.resetStats();
   }
   ~TLSTest() {
@@ -49,6 +50,8 @@ class TLSTest : public ::testing::Test {
     URLInfo::Reset();
     apib::EndReporting();
   }
+
+  ThreadList threads;
 };
 
 static void compareReporting() {
@@ -76,16 +79,18 @@ TEST_F(TLSTest, Basic) {
   sprintf(url, "https://localhost:%i/hello", testServerPort);
   URLInfo::InitOne(url);
 
-  IOThread t;
-  t.numConnections = 1;
-  // t.verbose = 1;
-  t.httpVerb = "GET";
-  t.sslCtx = setUpTLS();
+  IOThread* t = new IOThread();
+  threads.push_back(std::unique_ptr<IOThread>(t));
+  t->numConnections = 1;
+  // t->verbose = 1;
+  t->httpVerb = "GET";
+  t->sslCtx = setUpTLS();
 
-  t.Start();
+  RecordStart(true, threads);
+  t->Start();
   sleep(1);
-  t.Stop();
-  RecordStop();
+  t->Stop();
+  RecordStop(threads);
 
   compareReporting();
 }
@@ -95,17 +100,19 @@ TEST_F(TLSTest, NoKeepAlive) {
   sprintf(url, "https://localhost:%i/hello", testServerPort);
   URLInfo::InitOne(url);
 
-  IOThread t;
-  t.numConnections = 1;
-  // t.verbose = 1;
-  t.noKeepAlive = 1;
-  t.httpVerb = "GET";
-  t.sslCtx = setUpTLS();
+  IOThread* t = new IOThread();
+  threads.push_back(std::unique_ptr<IOThread>(t));
+  t->numConnections = 1;
+  // t->verbose = 1;
+  t->noKeepAlive = 1;
+  t->httpVerb = "GET";
+  t->sslCtx = setUpTLS();
 
-  t.Start();
+  RecordStart(true, threads);
+  t->Start();
   sleep(1);
-  t.Stop();
-  RecordStop();
+  t->Stop();
+  RecordStop(threads);
 
   compareReporting();
 }
@@ -115,16 +122,18 @@ TEST_F(TLSTest, Larger) {
   sprintf(url, "https://localhost:%i/data?size=8000", testServerPort);
   URLInfo::InitOne(url);
 
-  IOThread t;
-  t.numConnections = 1;
-  // t.verbose = 1;
-  t.httpVerb = "GET";
-  t.sslCtx = setUpTLS();
+  IOThread* t = new IOThread();
+  threads.push_back(std::unique_ptr<IOThread>(t));
+  t->numConnections = 1;
+  // t->verbose = 1;
+  t->httpVerb = "GET";
+  t->sslCtx = setUpTLS();
 
-  t.Start();
+  RecordStart(true, threads);
+  t->Start();
   sleep(1);
-  t.Stop();
-  RecordStop();
+  t->Stop();
+  RecordStop(threads);
 
   compareReporting();
 }
@@ -134,17 +143,19 @@ TEST_F(TLSTest, VerifyPeerFailing) {
   sprintf(url, "https://localhost:%i/hello", testServerPort);
   URLInfo::InitOne(url);
 
-  IOThread t;
-  t.numConnections = 1;
-  // t.verbose = 1;
-  t.httpVerb = "GET";
-  t.sslCtx = setUpTLS();
-  SSL_CTX_set_verify(t.sslCtx, SSL_VERIFY_PEER, NULL);
+  IOThread* t = new IOThread();
+  threads.push_back(std::unique_ptr<IOThread>(t));
+  t->numConnections = 1;
+  // t->verbose = 1;
+  t->httpVerb = "GET";
+  t->sslCtx = setUpTLS();
+  SSL_CTX_set_verify(t->sslCtx, SSL_VERIFY_PEER, NULL);
 
-  t.Start();
+  RecordStart(true, threads);
+  t->Start();
   sleep(1);
-  t.Stop();
-  RecordStop();
+  t->Stop();
+  RecordStop(threads);
 
   BenchmarkResults results = ReportResults();
   EXPECT_EQ(0, results.successfulRequests);
@@ -156,18 +167,20 @@ TEST_F(TLSTest, VerifyPeerSuccess) {
   sprintf(url, "https://localhost:%i/hello", testServerPort);
   URLInfo::InitOne(url);
 
-  IOThread t;
-  t.numConnections = 1;
-  // t.verbose = 1;
-  t.httpVerb = "GET";
-  t.sslCtx = setUpTLS();
-  SSL_CTX_set_verify(t.sslCtx, SSL_VERIFY_PEER, NULL);
-  ASSERT_EQ(1, SSL_CTX_load_verify_locations(t.sslCtx, CertPath, NULL));
+  IOThread* t = new IOThread();
+  threads.push_back(std::unique_ptr<IOThread>(t));
+  t->numConnections = 1;
+  // t->verbose = 1;
+  t->httpVerb = "GET";
+  t->sslCtx = setUpTLS();
+  SSL_CTX_set_verify(t->sslCtx, SSL_VERIFY_PEER, NULL);
+  ASSERT_EQ(1, SSL_CTX_load_verify_locations(t->sslCtx, CertPath, NULL));
 
-  t.Start();
+  RecordStart(true, threads);
+  t->Start();
   sleep(1);
-  t.Stop();
-  RecordStop();
+  t->Stop();
+  RecordStop(threads);
 
   compareReporting();
 }

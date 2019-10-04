@@ -18,11 +18,25 @@ limitations under the License.
 #define APIB_REPORTING_H
 
 #include <cstdint>
+#include <memory>
 #include <ostream>
 #include <string>
 #include <vector>
 
+#include "src/apib_iothread.h"
+
 namespace apib {
+
+// Per-thread counters. We swap these in and out of IOThreads so that we can
+// efficiently count with a minimum of global synchronization
+class Counters {
+ public:
+  int_fast32_t successfulRequests = 0LL;
+  int_fast32_t failedRequests = 0LL;
+  int_fast64_t bytesRead = 0LL;
+  int_fast64_t bytesWritten = 0LL;
+  std::vector<int_fast64_t> latencies;
+};
 
 class BenchmarkResults {
  public:
@@ -65,34 +79,30 @@ extern void RecordInit(const std::string& monitorHost,
                        const std::string& monitor2Host);
 
 // Start a reporting run
-extern void RecordStart(bool startReporting);
+extern void RecordStart(bool startReporting, const ThreadList& threads);
 // Stop it
-extern void RecordStop();
+extern void RecordStop(const ThreadList& threads);
 
 // Get results since last interval -- may be called while running
-extern BenchmarkIntervalResults ReportIntervalResults();
+extern BenchmarkIntervalResults ReportIntervalResults(
+    const ThreadList& threads);
 // Get total results -- must be called after stop
 extern BenchmarkResults ReportResults();
 // And clean it up. Don't call before reporting.
 extern void EndReporting();
 
-// Record an HTTP response and response code
-extern void RecordResult(int code);
 // Record an error connecting
 extern void RecordSocketError();
 // Report any time we open a connection
 extern void RecordConnectionOpen();
-// Add to the total number of bytes processed
-extern void RecordByteCounts(int64_t sent, int64_t received);
-// Add to the collection of latency counts
-extern void RecordLatencies(const std::vector<int64_t>& l);
 
 // Call ReportResults and print to a file
 extern void PrintShortResults(std::ostream& out, const std::string& runName,
-                              int threads, int connections);
+                              size_t numThreads, int connections);
 extern void PrintFullResults(std::ostream& out);
 // Call ReportIntervalResults and print to a file
-extern void ReportInterval(std::ostream& out, int totalDuration, int warmup);
+extern void ReportInterval(std::ostream& out, const ThreadList& threads,
+                           int totalDuration, bool warmup);
 // Print a CSV header for the "short" reporting format
 extern void PrintReportingHeader(std::ostream& out);
 

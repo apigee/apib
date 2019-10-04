@@ -231,7 +231,8 @@ static int readFile(const std::string &name, IOThread *t) {
   return 0;
 }
 
-static void waitAndReport(int duration, int warmup) {
+static void waitAndReport(const apib::ThreadList &threads, int duration,
+                          bool warmup) {
   int durationLeft = duration;
   int toSleep;
 
@@ -244,7 +245,7 @@ static void waitAndReport(int duration, int warmup) {
 
     sleep(toSleep);
     if (!ShortOutput) {
-      ReportInterval(std::cout, duration, warmup);
+      ReportInterval(std::cout, threads, duration, warmup);
     }
     durationLeft -= toSleep;
   }
@@ -490,42 +491,42 @@ int main(int argc, char *const *argv) {
 
     RecordInit(monitorHost, monitor2Host);
 
+    apib::ThreadList threads;
     if (JustOnce) {
-      IOThread thread;
-      int err = initializeThread(0, &thread);
+      threads.push_back(std::unique_ptr<IOThread>(new IOThread()));
+      int err = initializeThread(0, threads[0].get());
       if (err != 0) {
         goto finished;
       }
-      RecordStart(true);
-      thread.Start();
-      thread.Join();
-      RecordStop();
+      RecordStart(true, threads);
+      threads[0]->Start();
+      threads[0]->Join();
+      RecordStop(threads);
 
     } else {
-      IOThread *threads = new IOThread[NumThreads];
       for (int i = 0; i < NumThreads; i++) {
-        int err = initializeThread(i, &(threads[i]));
+        threads.push_back(std::unique_ptr<IOThread>(new IOThread()));
+        int err = initializeThread(i, threads[i].get());
         if (err != 0) {
           goto finished;
         }
-        threads[i].Start();
+        threads[i]->Start();
       }
 
       if (warmupTime > 0) {
-        RecordStart(true);
-        waitAndReport(warmupTime, 1);
+        RecordStart(true, threads);
+        waitAndReport(threads, warmupTime, true);
       }
-      RecordStart(true);
-      waitAndReport(duration, 0);
-      RecordStop();
+      RecordStart(true, threads);
+      waitAndReport(threads, duration, false);
+      RecordStop(threads);
 
-      for (int i = 0; (i < NumThreads); i++) {
-        threads[i].RequestStop(2);
+      for (auto it = threads.begin(); it != threads.end(); it++) {
+        (*it)->RequestStop(2);
       }
-      for (int i = 0; i < NumThreads; i++) {
-        threads[i].Join();
+      for (auto it = threads.begin(); it != threads.end(); it++) {
+        (*it)->Join();
       }
-      delete[] threads;
     }
   } else {
     printUsage();

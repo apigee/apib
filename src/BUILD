@@ -20,7 +20,6 @@ cc_library(
         "apib_lines.cc",
         "apib_message.cc",
         "apib_rand.cc",
-        "apib_reporting.cc",
         "apib_time.cc",
         "apib_url.cc",
         "apib_util.cc",
@@ -62,6 +61,7 @@ cc_library(
         "apib_io_socket.cc",
         "apib_iothread.cc",
         "apib_oauth.cc",
+        "apib_reporting.cc",
     ],
     hdrs = [
         "apib_commandqueue.h",
@@ -103,9 +103,6 @@ cc_binary(
     name = "apib",
     srcs = [
         "apib_main.cc",
-    ],
-    copts = [
-        "-std=gnu++14",
     ],
     deps = [
         ":io",

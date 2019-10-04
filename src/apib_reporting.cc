@@ -50,18 +50,17 @@ static const std::regex kHostPort("^([^:]+):([0-9]+)$");
 static std::mutex latch;
 static volatile bool reporting = 0;
 static bool cpuAvailable = false;
-static std::atomic_int_fast32_t completedRequests;
-static std::atomic_int_fast32_t successfulRequests;
-static std::atomic_int_fast32_t intervalSuccessful;
-static std::atomic_int_fast32_t unsuccessfulRequests;
 static std::atomic_int_fast32_t socketErrors;
 static std::atomic_int_fast32_t connectionsOpened;
+
+static int_fast32_t successfulRequests;
+static int_fast32_t unsuccessfulRequests;
 
 static int64_t startTime;
 static int64_t stopTime;
 static int64_t intervalStartTime;
 
-static std::vector<int64_t> latencies;
+static std::vector<std::unique_ptr<Counters>> accumulatedResults;
 
 static std::vector<double> clientSamples;
 static std::vector<double> remoteSamples;
@@ -152,20 +151,6 @@ failure:
   return 0.0;
 }
 
-void RecordResult(int code) {
-  if (!reporting) {
-    return;
-  }
-
-  completedRequests.fetch_add(1, std::memory_order_relaxed);
-  if ((code >= 200) && (code < 300)) {
-    successfulRequests.fetch_add(1, std::memory_order_relaxed);
-    intervalSuccessful.fetch_add(1, std::memory_order_relaxed);
-  } else {
-    unsuccessfulRequests.fetch_add(1, std::memory_order_relaxed);
-  }
-}
-
 void RecordSocketError(void) {
   if (!reporting) {
     return;
@@ -185,11 +170,6 @@ void RecordByteCounts(int64_t sent, int64_t received) {
   totalBytesReceived += received;
 }
 
-void RecordLatencies(const std::vector<int64_t>& l) {
-  std::lock_guard<std::mutex> lock(latch);
-  latencies.insert(latencies.end(), l.cbegin(), l.cend());
-}
-
 void RecordInit(const std::string& monitorHost, const std::string& host2) {
   int err = cpu_Init();
   cpuAvailable = (err == 0);
@@ -197,18 +177,23 @@ void RecordInit(const std::string& monitorHost, const std::string& host2) {
   remote2MonitorHost = host2;
 }
 
-void RecordStart(bool startReporting) {
+void RecordStart(bool startReporting, const ThreadList& threads) {
   /* When we warm up we want to zero these out before continuing */
   std::lock_guard<std::mutex> lock(latch);
-  completedRequests = 0;
   successfulRequests = 0;
-  intervalSuccessful = 0;
   unsuccessfulRequests = 0;
   socketErrors = 0;
   connectionsOpened = 0;
   totalBytesSent = 0;
   totalBytesReceived = 0;
-  latencies.clear();
+  accumulatedResults.clear();
+
+  // We also want to zero out each thread's counters
+  // since they may have started already!
+  for (auto it = threads.cbegin(); it != threads.cend(); it++) {
+    Counters* c = (*it)->exchangeCounters();
+    delete c;
+  }
 
   reporting = startReporting;
   cpu_GetUsage(&cpuUsage);
@@ -238,7 +223,7 @@ void RecordStart(bool startReporting) {
   remote2Samples.clear();
 }
 
-void RecordStop(void) {
+void RecordStop(const ThreadList& threads) {
   clientMem = cpu_GetMemoryUsage();
 
   if (remoteCpuSocket != 0) {
@@ -248,14 +233,39 @@ void RecordStop(void) {
     remote2Mem = getRemoteStat(kMemCmd, &remote2CpuSocket);
   }
 
-  reporting = 0;
+  reporting = false;
+  for (auto it = threads.cbegin(); it != threads.cend(); it++) {
+    Counters* c = (*it)->exchangeCounters();
+    totalBytesReceived += c->bytesRead;
+    totalBytesSent += c->bytesWritten;
+    successfulRequests += c->successfulRequests;
+    unsuccessfulRequests += c->failedRequests;
+    accumulatedResults.push_back(std::unique_ptr<Counters>(c));
+  }
   stopTime = GetTime();
 }
 
-BenchmarkIntervalResults ReportIntervalResults() {
-  BenchmarkIntervalResults r;
+BenchmarkIntervalResults ReportIntervalResults(const ThreadList& threads) {
+  int_fast32_t intervalSuccesses = 0LL;
+  int_fast32_t intervalFailures = 0LL;
   const int64_t now = GetTime();
-  r.successfulRequests = intervalSuccessful.exchange(0, std::memory_order_relaxed);
+
+  for (auto it = threads.cbegin(); it != threads.cend(); it++) {
+    Counters* c = (*it)->exchangeCounters();
+    totalBytesReceived += c->bytesRead;
+    totalBytesSent += c->bytesWritten;
+    intervalSuccesses += c->successfulRequests;
+    intervalFailures += c->failedRequests;
+    accumulatedResults.push_back(std::unique_ptr<Counters>(c));
+  }
+
+  // "exchangeCounters" clears thread-specific counters. Transfer new totals
+  // to the grand total for an accurate result.
+  successfulRequests += intervalSuccesses;
+  unsuccessfulRequests += intervalFailures;
+
+  BenchmarkIntervalResults r;
+  r.successfulRequests = intervalSuccesses;
   r.intervalTime = Seconds(now - intervalStartTime);
   r.elapsedTime = Seconds(now - startTime);
   r.averageThroughput = (double)r.successfulRequests / r.intervalTime;
@@ -263,7 +273,8 @@ BenchmarkIntervalResults ReportIntervalResults() {
   return r;
 }
 
-void ReportInterval(std::ostream& out, int totalDuration, int warmup) {
+void ReportInterval(std::ostream& out, const ThreadList& threads,
+                    int totalDuration, bool warmup) {
   double cpu = 0.0;
   double remoteCpu = 0.0;
   double remote2Cpu = 0.0;
@@ -279,7 +290,7 @@ void ReportInterval(std::ostream& out, int totalDuration, int warmup) {
   cpu = cpu_GetInterval(&cpuUsage);
   clientSamples.push_back(cpu);
 
-  const BenchmarkIntervalResults r = ReportIntervalResults();
+  const BenchmarkIntervalResults r = ReportIntervalResults(threads);
   const std::string warm = (warmup ? "Warming up: " : "");
 
   out << std::fixed;
@@ -294,11 +305,8 @@ void ReportInterval(std::ostream& out, int totalDuration, int warmup) {
   out << endl;
 }
 
-static bool compareLLongs(const int64_t& l1, const int64_t& l2) {
-  return l1 < l2;
-}
-
-static int64_t getLatencyPercent(int percent) {
+static int64_t getLatencyPercent(const std::vector<int_fast64_t>& latencies,
+                                 int percent) {
   if (latencies.empty()) {
     return 0;
   }
@@ -309,7 +317,7 @@ static int64_t getLatencyPercent(int percent) {
   return latencies[index];
 }
 
-static int64_t getAverageLatency(void) {
+static int64_t getAverageLatency(const std::vector<int_fast64_t>& latencies) {
   if (latencies.empty()) {
     return 0LL;
   }
@@ -317,15 +325,15 @@ static int64_t getAverageLatency(void) {
          (int64_t)latencies.size();
 }
 
-static double getLatencyStdDev(void) {
+static double getLatencyStdDev(const std::vector<int_fast64_t>& latencies) {
   if (latencies.empty()) {
     return 0.0;
   }
-  unsigned long avg = Milliseconds(getAverageLatency());
+  unsigned long avg = Milliseconds(getAverageLatency(latencies));
   double differences = 0.0;
 
   std::for_each(latencies.begin(), latencies.end(),
-                [&differences, avg](int64_t& l) {
+                [&differences, avg](const int_fast64_t& l) {
                   differences += pow(Milliseconds(l) - avg, 2.0);
                 });
 
@@ -346,10 +354,20 @@ static double getMaxCpu(const std::vector<double>& s) {
 }
 
 BenchmarkResults ReportResults() {
+  std::vector<int_fast64_t> allLatencies;
+  for (auto it = accumulatedResults.begin(); it != accumulatedResults.end();
+       it++) {
+    for (auto lit = (*it)->latencies.begin(); lit != (*it)->latencies.end();
+         lit++) {
+      allLatencies.push_back(*lit);
+    }
+  }
+  std::sort(allLatencies.begin(), allLatencies.end());
+
   BenchmarkResults r;
   std::lock_guard<std::mutex> lock(latch);
-  std::sort(latencies.begin(), latencies.end(), compareLLongs);
-  r.completedRequests = completedRequests;
+
+  r.completedRequests = successfulRequests + unsuccessfulRequests;
   r.successfulRequests = successfulRequests;
   r.unsuccessfulRequests = unsuccessfulRequests;
   r.socketErrors = socketErrors;
@@ -359,12 +377,12 @@ BenchmarkResults ReportResults() {
 
   const int64_t rawElapsed = stopTime - startTime;
   r.elapsedTime = Seconds(rawElapsed);
-  r.averageLatency = Milliseconds(getAverageLatency());
-  r.latencyStdDev = getLatencyStdDev();
+  r.averageLatency = Milliseconds(getAverageLatency(allLatencies));
+  r.latencyStdDev = getLatencyStdDev(allLatencies);
   for (int i = 0; i < 101; i++) {
-    r.latencies[i] = Milliseconds(getLatencyPercent(i));
+    r.latencies[i] = Milliseconds(getLatencyPercent(allLatencies, i));
   }
-  r.averageThroughput = (double)completedRequests / r.elapsedTime;
+  r.averageThroughput = (double)r.completedRequests / r.elapsedTime;
   r.averageSendBandwidth = (totalBytesSent * 8.0 / 1048576.0) / r.elapsedTime;
   r.averageReceiveBandwidth =
       (totalBytesReceived * 8.0 / 1048576.0) / r.elapsedTime;
@@ -430,7 +448,7 @@ void PrintFullResults(std::ostream& out) {
 }
 
 void PrintShortResults(std::ostream& out, const std::string& runName,
-                       int threads, int connections) {
+                       size_t numThreads, int connections) {
   const BenchmarkResults r = ReportResults();
 
   /*
@@ -439,7 +457,7 @@ void PrintShortResults(std::ostream& out, const std::string& runName,
   latency,max. latency,50%,90%,98%,99%
    */
   out << std::fixed << std::setprecision(3) << runName << ','
-      << r.averageThroughput << ',' << r.averageLatency << threads << ','
+      << r.averageThroughput << ',' << r.averageLatency << numThreads << ','
       << connections << ',' << r.elapsedTime << ',' << r.completedRequests
       << ',' << r.successfulRequests << ',' << r.unsuccessfulRequests << ','
       << r.connectionsOpened << ',' << r.latencies[0] << ',' << r.latencies[100]
@@ -464,7 +482,7 @@ void PrintReportingHeader(std::ostream& out) {
       << endl;
 }
 
-void EndReporting(void) {
+void EndReporting() {
   if (remoteCpuSocket != 0) {
     close(remoteCpuSocket);
   }

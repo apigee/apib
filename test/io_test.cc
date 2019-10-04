@@ -14,6 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+#include <iostream>
+
 #include "gtest/gtest.h"
 #include "src/apib_iothread.h"
 #include "src/apib_reporting.h"
@@ -22,8 +24,10 @@ limitations under the License.
 
 using apib::BenchmarkResults;
 using apib::IOThread;
+using apib::RecordStart;
 using apib::RecordStop;
 using apib::ReportResults;
+using apib::ThreadList;
 using apib::URLInfo;
 
 namespace {
@@ -35,7 +39,6 @@ class IOTest : public ::testing::Test {
  protected:
   IOTest() {
     apib::RecordInit("", "");
-    apib::RecordStart(true);
     testServer.resetStats();
   }
   ~IOTest() {
@@ -43,6 +46,7 @@ class IOTest : public ::testing::Test {
     URLInfo::Reset();
     apib::EndReporting();
   }
+  apib::ThreadList threads;
 };
 
 static void compareReporting() {
@@ -64,15 +68,16 @@ TEST_F(IOTest, OneThread) {
   sprintf(url, "http://localhost:%i/hello", testServerPort);
   URLInfo::InitOne(url);
 
-  IOThread t;
-  t.numConnections = 1;
-  t.httpVerb = "GET";
+  IOThread* t = new IOThread();
+  threads.push_back(std::unique_ptr<IOThread>(t));
+  t->numConnections = 1;
+  t->httpVerb = "GET";
 
-  t.Start();
+  RecordStart(true, threads);
+  t->Start();
   sleep(1);
-  t.Stop();
-  RecordStop();
-
+  t->Stop();
+  RecordStop(threads);
   compareReporting();
 }
 
@@ -81,15 +86,17 @@ TEST_F(IOTest, OneRequest) {
   sprintf(url, "http://localhost:%i/hello", testServerPort);
   URLInfo::InitOne(url);
 
-  IOThread t;
-  t.numConnections = 1;
+  IOThread* t = new IOThread();
+  threads.push_back(std::unique_ptr<IOThread>(t));
+  t->numConnections = 1;
   // t.verbose = 1;
-  t.httpVerb = "GET";
-  t.keepRunning = -1;
+  t->httpVerb = "GET";
+  t->keepRunning = -1;
 
-  t.Start();
-  t.Join();
-  RecordStop();
+  RecordStart(true, threads);
+  t->Start();
+  t->Join();
+  RecordStop(threads);
 
   BenchmarkResults results = ReportResults();
 
@@ -103,16 +110,18 @@ TEST_F(IOTest, OneThreadNoKeepAlive) {
   sprintf(url, "http://localhost:%i/hello", testServerPort);
   URLInfo::InitOne(url);
 
-  IOThread t;
-  t.numConnections = 1;
+  IOThread* t = new IOThread();
+  threads.push_back(std::unique_ptr<IOThread>(t));
+  t->numConnections = 1;
   // t.verbose = 1;
-  t.httpVerb = "GET";
-  t.noKeepAlive = 1;
+  t->httpVerb = "GET";
+  t->noKeepAlive = 1;
 
-  t.Start();
+  RecordStart(true, threads);
+  t->Start();
   sleep(1);
-  t.Stop();
-  RecordStop();
+  t->Stop();
+  RecordStop(threads);
 
   compareReporting();
   BenchmarkResults results = ReportResults();
@@ -125,16 +134,18 @@ TEST_F(IOTest, OneThreadThinkTime) {
   sprintf(url, "http://localhost:%i/hello", testServerPort);
   URLInfo::InitOne(url);
 
-  IOThread t;
-  t.numConnections = 1;
+  IOThread* t = new IOThread();
+  threads.push_back(std::unique_ptr<IOThread>(t));
+  t->numConnections = 1;
   // t.verbose = 1;
-  t.httpVerb = "GET";
-  t.thinkTime = 100;
+  t->httpVerb = "GET";
+  t->thinkTime = 100;
 
-  t.Start();
+  RecordStart(true, threads);
+  t->Start();
   sleep(1);
-  t.Stop();
-  RecordStop();
+  t->Stop();
+  RecordStop(threads);
 
   compareReporting();
 }
@@ -144,17 +155,19 @@ TEST_F(IOTest, OneThreadThinkTimeNoKeepAlive) {
   sprintf(url, "http://localhost:%i/hello", testServerPort);
   URLInfo::InitOne(url);
 
-  IOThread t;
-  t.numConnections = 1;
-  // t.verbose = 1;
-  t.httpVerb = "GET";
-  t.thinkTime = 100;
-  t.noKeepAlive = 1;
+  IOThread* t = new IOThread();
+  threads.push_back(std::unique_ptr<IOThread>(t));
+  t->numConnections = 1;
+  // t->verbose = 1;
+  t->httpVerb = "GET";
+  t->thinkTime = 100;
+  t->noKeepAlive = 1;
 
-  t.Start();
+  RecordStart(true, threads);
+  t->Start();
   sleep(1);
-  t.Stop();
-  RecordStop();
+  t->Stop();
+  RecordStop(threads);
 
   compareReporting();
 }
@@ -164,15 +177,17 @@ TEST_F(IOTest, OneThreadLarge) {
   sprintf(url, "http://localhost:%i/data?size=4000", testServerPort);
   URLInfo::InitOne(url);
 
-  IOThread t;
-  t.numConnections = 1;
-  // t.verbose = 1;
-  t.httpVerb = "GET";
+  IOThread* t = new IOThread();
+  threads.push_back(std::unique_ptr<IOThread>(t));
+  t->numConnections = 1;
+  // t->verbose = 1;
+  t->httpVerb = "GET";
 
-  t.Start();
+  RecordStart(true, threads);
+  t->Start();
   sleep(1);
-  t.Stop();
-  RecordStop();
+  t->Stop();
+  RecordStop(threads);
 
   compareReporting();
 }
@@ -182,15 +197,17 @@ TEST_F(IOTest, MoreConnections) {
   sprintf(url, "http://localhost:%i/hello", testServerPort);
   URLInfo::InitOne(url);
 
-  IOThread t;
-  t.numConnections = 10;
-  // t.verbose = 1;
-  t.httpVerb = "GET";
+  IOThread* t = new IOThread();
+  threads.push_back(std::unique_ptr<IOThread>(t));
+  t->numConnections = 10;
+  // t->verbose = 1;
+  t->httpVerb = "GET";
 
-  t.Start();
+  RecordStart(true, threads);
+  t->Start();
   sleep(1);
-  t.Stop();
-  RecordStop();
+  t->Stop();
+  RecordStop(threads);
 
   compareReporting();
 }
@@ -200,21 +217,23 @@ TEST_F(IOTest, ResizeCommand) {
   sprintf(url, "http://localhost:%i/hello", testServerPort);
   URLInfo::InitOne(url);
 
-  IOThread t;
-  t.numConnections = 1;
-  // t.verbose = 1;
-  t.httpVerb = "GET";
+  IOThread* t = new IOThread();
+  threads.push_back(std::unique_ptr<IOThread>(t));
+  t->numConnections = 1;
+  // t->verbose = 1;
+  t->httpVerb = "GET";
 
-  t.Start();
+  RecordStart(true, threads);
+  t->Start();
   usleep(250000);
-  t.SetNumConnections(5);
+  t->SetNumConnections(5);
   usleep(250000);
-  t.SetNumConnections(2);
-  t.SetNumConnections(3);
-  t.SetNumConnections(1);
+  t->SetNumConnections(2);
+  t->SetNumConnections(3);
+  t->SetNumConnections(1);
   usleep(250000);
-  t.Stop();
-  RecordStop();
+  t->Stop();
+  RecordStop(threads);
 
   compareReporting();
 }
@@ -224,17 +243,19 @@ TEST_F(IOTest, ResizeFromZero) {
   sprintf(url, "http://localhost:%i/hello", testServerPort);
   URLInfo::InitOne(url);
 
-  IOThread t;
-  t.numConnections = 0;
-  // t.verbose = true;
-  t.httpVerb = "GET";
+  IOThread* t = new IOThread();
+  threads.push_back(std::unique_ptr<IOThread>(t));
+  t->numConnections = 0;
+  // t->verbose = true;
+  t->httpVerb = "GET";
 
-  t.Start();
+  RecordStart(true, threads);
+  t->Start();
   usleep(250000);
-  t.SetNumConnections(5);
+  t->SetNumConnections(5);
   usleep(250000);
-  t.Stop();
-  RecordStop();
+  t->Stop();
+  RecordStop(threads);
 
   compareReporting();
 }
@@ -246,18 +267,20 @@ TEST_F(IOTest, OneThreadBigPost) {
   sprintf(url, "http://localhost:%i/echo", testServerPort);
   URLInfo::InitOne(url);
 
-  IOThread t;
-  t.numConnections = 1;
-  // t.verbose = 1;
-  t.httpVerb = "POST";
+  IOThread* t = new IOThread();
+  threads.push_back(std::unique_ptr<IOThread>(t));
+  t->numConnections = 1;
+  // t->verbose = 1;
+  t->httpVerb = "POST";
   for (int p = 0; p < POST_LEN; p += 10) {
-    t.sendData.append("abcdefghij");
+    t->sendData.append("abcdefghij");
   }
 
-  t.Start();
+  RecordStart(true, threads);
+  t->Start();
   sleep(1);
-  t.Stop();
-  RecordStop();
+  t->Stop();
+  RecordStop(threads);
 
   compareReporting();
 }
@@ -267,20 +290,22 @@ TEST_F(IOTest, OneThreadHeaders) {
   sprintf(url, "http://localhost:%i/hello", testServerPort);
   URLInfo::InitOne(url);
 
-  IOThread t;
-  t.numConnections = 1;
-  // t.verbose = 1;
-  t.httpVerb = "GET";
-  t.headers = new std::vector<std::string>();
-  t.headers->push_back("Authorization: Basic dGVzdDp2ZXJ5dmVyeXNlY3JldA==");
+  IOThread* t = new IOThread();
+  threads.push_back(std::unique_ptr<IOThread>(t));
+  t->numConnections = 1;
+  // t->verbose = 1;
+  t->httpVerb = "GET";
+  t->headers = new std::vector<std::string>();
+  t->headers->push_back("Authorization: Basic dGVzdDp2ZXJ5dmVyeXNlY3JldA==");
 
-  t.Start();
+  RecordStart(true, threads);
+  t->Start();
   sleep(1);
-  t.Stop();
-  RecordStop();
+  t->Stop();
+  RecordStop(threads);
 
   compareReporting();
-  delete t.headers;
+  delete t->headers;
 }
 
 }  // namespace

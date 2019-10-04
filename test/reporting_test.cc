@@ -14,20 +14,22 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+#include <memory>
+
 #include "gtest/gtest.h"
+#include "src/apib_iothread.h"
 #include "src/apib_reporting.h"
 
 using apib::BenchmarkIntervalResults;
 using apib::BenchmarkResults;
-using apib::RecordByteCounts;
+using apib::IOThread;
 using apib::RecordConnectionOpen;
-using apib::RecordLatencies;
-using apib::RecordResult;
 using apib::RecordSocketError;
 using apib::RecordStart;
 using apib::RecordStop;
 using apib::ReportIntervalResults;
 using apib::ReportResults;
+using apib::ThreadList;
 
 namespace {
 
@@ -35,11 +37,13 @@ class Reporting : public ::testing::Test {
  protected:
   Reporting() { apib::RecordInit("", ""); }
   ~Reporting() { apib::EndReporting(); }
+  ThreadList threads;
 };
 
 TEST_F(Reporting, ReportingZero) {
-  RecordStart(true);
-  RecordStop();
+  // "threads" list will be empty here.
+  RecordStart(true, threads);
+  RecordStop(threads);
   BenchmarkResults r = ReportResults();
   EXPECT_EQ(0, r.completedRequests);
   EXPECT_EQ(0, r.successfulRequests);
@@ -51,20 +55,21 @@ TEST_F(Reporting, ReportingZero) {
 }
 
 TEST_F(Reporting, ReportingCount) {
-  RecordStart(1);
+  threads.push_back(std::unique_ptr<IOThread>(new IOThread()));
+  RecordStart(true, threads);
   RecordConnectionOpen();
-  RecordResult(200);
-  RecordResult(201);
-  RecordResult(204);
-  RecordResult(403);
-  RecordResult(401);
-  RecordResult(500);
+  threads[0]->recordResult(200, 120000000);
+  threads[0]->recordResult(201, 110000000);
+  threads[0]->recordResult(204, 100000000);
+  threads[0]->recordResult(403, 110000000);
+  threads[0]->recordResult(401, 100000000);
+  threads[0]->recordResult(500, 100000000);
+  threads[0]->recordRead(100);
+  threads[0]->recordWrite(100);
+  threads[0]->recordRead(100);
   RecordSocketError();
   RecordConnectionOpen();
-  RecordByteCounts(100, 200);
-  RecordLatencies(std::vector<int64_t>({120000000, 110000000}));
-  RecordLatencies(std::vector<int64_t>({100000000, 110000000, 100000000}));
-  RecordStop();
+  RecordStop(threads);
 
   BenchmarkResults r = ReportResults();
 
@@ -80,27 +85,28 @@ TEST_F(Reporting, ReportingCount) {
 }
 
 TEST_F(Reporting, ReportingInterval) {
-  RecordStart(1);
+  threads.push_back(std::unique_ptr<IOThread>(new IOThread()));
+  RecordStart(true, threads);
   RecordConnectionOpen();
-  RecordResult(200);
-  RecordResult(201);
-  RecordResult(400);
+  threads[0]->recordResult(200, 120000000);
+  threads[0]->recordResult(201, 120000000);
+  threads[0]->recordResult(400, 120000000);
 
-  BenchmarkIntervalResults ri = ReportIntervalResults();
+  BenchmarkIntervalResults ri = ReportIntervalResults(threads);
   EXPECT_EQ(2, ri.successfulRequests);
   EXPECT_LT(0.0, ri.averageThroughput);
 
-  RecordResult(204);
-  RecordResult(403);
-  RecordResult(401);
-  RecordResult(500);
-  RecordResult(200);
+  threads[0]->recordResult(204, 120000000);
+  threads[0]->recordResult(403, 120000000);
+  threads[0]->recordResult(401, 120000000);
+  threads[0]->recordResult(500, 120000000);
+  threads[0]->recordResult(200, 120000000);
 
-  ri = ReportIntervalResults();
+  ri = ReportIntervalResults(threads);
   EXPECT_EQ(2, ri.successfulRequests);
   EXPECT_LT(0.0, ri.averageThroughput);
 
-  RecordStop();
+  RecordStop(threads);
   BenchmarkResults r = ReportResults();
 
   EXPECT_EQ(8, r.completedRequests);

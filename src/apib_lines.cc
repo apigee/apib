@@ -22,16 +22,13 @@ limitations under the License.
 
 namespace apib {
 
-static int isChar(const char c, const char* match) {
-  unsigned int m = 0;
-
-  while (match[m] != 0) {
-    if (c == match[m]) {
-      return 1;
+static bool isChar(const char c, const absl::string_view match) {
+  for (auto it = match.cbegin(); it != match.cend(); it++) {
+    if (c == *it) {
+      return true;
     }
-    m++;
   }
-  return 0;
+  return false;
 }
 
 LineState::LineState(char* line, int size, int len) {
@@ -134,7 +131,7 @@ const char* LineState::c_line() const {
   return (buf_ + lineStart_);
 }
 
-absl::string_view LineState::nextToken(const std::string& toks) {
+absl::string_view LineState::nextToken(const absl::string_view toks) {
   if (!lineComplete_) {
     return "";
   }
@@ -145,10 +142,10 @@ absl::string_view LineState::nextToken(const std::string& toks) {
   tokStart_ = tokEnd_;
 
   if (!toks.empty()) {
-    while ((tokEnd_ < lineEnd_) && !isChar(buf_[tokEnd_], toks.c_str())) {
+    while ((tokEnd_ < lineEnd_) && !isChar(buf_[tokEnd_], toks)) {
       tokEnd_++;
     }
-    while ((tokEnd_ < lineEnd_) && isChar(buf_[tokEnd_], toks.c_str())) {
+    while ((tokEnd_ < lineEnd_) && isChar(buf_[tokEnd_], toks)) {
       buf_[tokEnd_] = 0;
       tokEnd_++;
     }
@@ -157,8 +154,8 @@ absl::string_view LineState::nextToken(const std::string& toks) {
   return absl::string_view(buf_ + tokStart_);
 }
 
-void LineState::skipMatches(const std::string& toks) {
-  while ((tokEnd_ < lineEnd_) && isChar(buf_[tokEnd_], toks.c_str())) {
+void LineState::skipMatches(const absl::string_view toks) {
+  while ((tokEnd_ < lineEnd_) && isChar(buf_[tokEnd_], toks)) {
     tokEnd_++;
   }
 }

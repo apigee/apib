@@ -19,6 +19,8 @@ limitations under the License.
 
 #include <openssl/ssl.h>
 
+#include <atomic>
+#include <memory>
 #include <sstream>
 #include <string>
 #include <thread>
@@ -38,6 +40,7 @@ namespace apib {
 // already set
 
 class ConnectionState;
+class Counters;
 
 // This structure represents a single thread that runs a benchmark
 // across multiple connections.
@@ -67,6 +70,7 @@ class IOThread {
   static constexpr int kConnectionSet = (1 << 4);
   static constexpr int kUserAgentSet = (1 << 5);
 
+  IOThread();
   ~IOThread();
 
   // Start the thread. It's up to the caller to initialize everything
@@ -99,7 +103,11 @@ class IOThread {
 
   void recordRead(size_t c);
   void recordWrite(size_t c);
-  void recordLatency(int64_t l) { latencies_.push_back(l); }
+  void recordResult(int statusCode, int64_t latency);
+
+  // Swap the current set of performance counters and start new ones.
+  // The caller must free the result.
+  Counters* exchangeCounters();
 
  private:
   void threadLoop();
@@ -107,21 +115,20 @@ class IOThread {
   static void processCommands(struct ev_loop* loop, ev_async* a, int revents);
   static void hardShutdown(struct ev_loop* loop, ev_timer* timer, int revents);
   void setNumConnections(size_t newVal);
+  Counters* getCounters() {
+    return reinterpret_cast<Counters*>(counterPtr_.load());
+  }
 
   static http_parser_settings parserSettings_;
 
-  long readCount_;
-  long writeCount_;
-  long long readBytes_;
-  long long writeBytes_;
   std::vector<ConnectionState*> connections_;
-  std::thread* thread_;
+  std::thread* thread_ = nullptr;
   RandomGenerator rand_;
-  struct ev_loop* loop_;
+  struct ev_loop* loop_ = nullptr;
   ev_async async_;
   CommandQueue commands_;
   ev_timer shutdownTimer_;
-  std::vector<int64_t> latencies_;
+  std::atomic_uintptr_t counterPtr_;
 };
 
 typedef enum {
@@ -166,11 +173,13 @@ class ConnectionState {
   static int httpComplete(http_parser* p);
 
  private:
-  static const int readBufSize = 512;
-  static const int writeBufSize = 1024;
+  static constexpr int readBufSize = 512;
+  static constexpr int writeBufSize = 1024;
+  static constexpr double kConnectFailureDelay = 0.25;
 
   void addThinkTime();
-  void recycle(int closeConn);
+  void sendAfterDelay(double seconds);
+  void recycle(bool closeConn);
   void writeRequest();
   void printSslError(const std::string& msg, int err) const;
 
@@ -206,6 +215,9 @@ class ConnectionState {
   bool needsOpen_ = false;
   long long startTime_ = 0LL;
 };
+
+// A typedef used to clean up some messy interfaces
+typedef std::vector<std::unique_ptr<IOThread>> ThreadList;
 
 // Debugging macro
 #define io_Verbose(c, ...) \
