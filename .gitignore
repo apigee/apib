@@ -1,5 +1,6 @@
 apib
 apibmon
+testserver
 *.o
 bazel-*
 .vscode
