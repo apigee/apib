@@ -22,11 +22,13 @@ limitations under the License.
 #include <ctime>
 #include <fstream>
 #include <iostream>
-#include <regex>
 #include <sstream>
 #include <string>
 #include <vector>
 
+#include "absl/strings/numbers.h"
+#include "absl/strings/str_cat.h"
+#include "absl/strings/str_split.h"
 #include "src/apib_cpu.h"
 #include "src/apib_iothread.h"
 #include "src/apib_oauth.h"
@@ -35,6 +37,7 @@ limitations under the License.
 #include "src/apib_util.h"
 #include "third_party/base64.h"
 
+using apib::eqcase;
 using apib::IOThread;
 using apib::OAuthInfo;
 using apib::RecordInit;
@@ -69,10 +72,9 @@ static int ThinkTime = 0;
 static std::vector<std::string> Headers;
 static int SetHeaders = 0;
 
-static const std::regex kColon(":");
 static OAuthInfo *OAuth = nullptr;
 
-#define OPTIONS "c:d:f:hk:t:u:vw:x:C:F:H:O:K:M:X:N:STVW:1"
+static const char *const OPTIONS = "c:d:f:hk:t:u:vw:x:C:F:H:O:K:M:X:N:STVW:1";
 
 static const struct option Options[] = {
     {"concurrency", required_argument, NULL, 'c'},
@@ -99,47 +101,47 @@ static const struct option Options[] = {
     {"one", no_argument, NULL, '1'},
     {"think-time", required_argument, NULL, 'W'}};
 
-#define USAGE_DOCS                                                             \
-  "-1 --one                Send just one request and exit\n"                   \
-  "-c --concurrency        Number of concurrent requests (default 1)\n"        \
-  "-d --duration           Test duration in seconds\n"                         \
-  "-f --input-file         File name to send on PUT and POST requests\n"       \
-  "-h --help               Display this message\n"                             \
-  "-k --keep-alive         Keep-alive duration:\n"                             \
-  "      0 to disable, non-zero for timeout\n"                                 \
-  "-t --content-type       Value of the Content-Type header\n"                 \
-  "-u --username-password  Credentials for HTTP Basic authentication\n"        \
-  "       in username:password format\n"                                       \
-  "-v --verbose            Verbose output\n"                                   \
-  "-w --warmup             Warm-up duration, in seconds (default 0)\n"         \
-  "-x --method             HTTP request method (default GET)\n"                \
-  "-C --cipherlist         Cipher list offered to server for HTTPS\n"          \
-  "-F --certificate        PEM file containing CA certificates to trust\n"     \
-  "-H --header             HTTP header line in Name: Value format\n"           \
-  "-K --iothreads          Number of I/O threads to spawn\n"                   \
-  "       default == number of CPU cores\n"                                    \
-  "-N --name               Name to put in CSV output to identify test run\n"   \
-  "-O --oauth              OAuth 1.0 signature\n"                              \
-  "       in format consumerkey:secret:token:secret\n"                         \
-  "-S --csv-output         Output all test results in a single CSV line\n"     \
-  "-T --header-line        Do not run, but output a single CSV header line\n"  \
-  "-V --verify             Verify TLS peer\n"                                  \
-  "-W --think-time         Think time to wait in between requests\n"           \
-  "        in milliseconds\n"                                                  \
-  "-M --monitor            Host name and port number of apibmon\n"             \
-  "-X --monitor2           Second host name and port number of apibmon\n"      \
-  "\n"                                                                         \
-  "The last argument may be an http or https URL, or an \"@\" symbol\n"        \
-  "followed by a file name. If a file name, then apib will read the file\n"    \
-  "as a list of URLs, one per line, and randomly test each one.\n"             \
-  "\n"                                                                         \
-  "  if -S is used then output is CSV-separated on one line:\n"                \
-  "  name,throughput,avg. "                                                    \
-  "latency,threads,connections,duration,completed,successful,errors,sockets,"  \
-  "min. latency,max. latency,50%,90%,98%,99%\n"                                \
-  "\n"                                                                         \
-  "  if -O is used then the value is four parameters, separated by a colon:\n" \
-  "  consumer key:secret:token:secret. You may omit the last two.\n"
+static const char *const USAGE_DOCS =
+    "-1 --one                Send just one request and exit\n"
+    "-c --concurrency        Number of concurrent requests (default 1)\n"
+    "-d --duration           Test duration in seconds\n"
+    "-f --input-file         File name to send on PUT and POST requests\n"
+    "-h --help               Display this message\n"
+    "-k --keep-alive         Keep-alive duration:\n"
+    "      0 to disable, non-zero for timeout\n"
+    "-t --content-type       Value of the Content-Type header\n"
+    "-u --username-password  Credentials for HTTP Basic authentication\n"
+    "       in username:password format\n"
+    "-v --verbose            Verbose output\n"
+    "-w --warmup             Warm-up duration, in seconds (default 0)\n"
+    "-x --method             HTTP request method (default GET)\n"
+    "-C --cipherlist         Cipher list offered to server for HTTPS\n"
+    "-F --certificate        PEM file containing CA certificates to trust\n"
+    "-H --header             HTTP header line in Name: Value format\n"
+    "-K --iothreads          Number of I/O threads to spawn\n"
+    "       default == number of CPU cores\n"
+    "-N --name               Name to put in CSV output to identify test run\n"
+    "-O --oauth              OAuth 1.0 signature\n"
+    "       in format consumerkey:secret:token:secret\n"
+    "-S --csv-output         Output all test results in a single CSV line\n"
+    "-T --header-line        Do not run, but output a single CSV header line\n"
+    "-V --verify             Verify TLS peer\n"
+    "-W --think-time         Think time to wait in between requests\n"
+    "        in milliseconds\n"
+    "-M --monitor            Host name and port number of apibmon\n"
+    "-X --monitor2           Second host name and port number of apibmon\n"
+    "\n"
+    "The last argument may be an http or https URL, or an \"@\" symbol\n"
+    "followed by a file name. If a file name, then apib will read the file\n"
+    "as a list of URLs, one per line, and randomly test each one.\n"
+    "\n"
+    "  if -S is used then output is CSV-separated on one line:\n"
+    "  name,throughput,avg. "
+    "latency,threads,connections,duration,completed,successful,errors,sockets,"
+    "min. latency,max. latency,50%,90%,98%,99%\n"
+    "\n"
+    "  if -O is used then the value is four parameters, separated by a colon:\n"
+    "  consumer key:secret:token:secret. You may omit the last two.\n";
 
 static void printUsage() {
   cerr << "Usage: apib [options] [URL | @file]" << endl;
@@ -262,50 +264,47 @@ static void waitAndReport(const apib::ThreadList &threads, int duration,
   }
 }
 
-static void processOAuth(const std::string &arg) {
+static void processOAuth(const absl::string_view arg) {
+  const std::vector<std::string> parts = absl::StrSplit(arg, ':');
   OAuth = new OAuthInfo();
-  auto part = std::sregex_token_iterator(arg.cbegin(), arg.cend(), kColon, -1);
-  if (part != std::sregex_token_iterator()) {
-    OAuth->consumerKey = *part;
-    part++;
+  if (parts.size() > 0) {
+    OAuth->consumerKey = parts[0];
   }
-  if (part != std::sregex_token_iterator()) {
-    OAuth->consumerSecret = *part;
-    part++;
+  if (parts.size() > 1) {
+    OAuth->consumerSecret = parts[1];
   }
-  if (part != std::sregex_token_iterator()) {
-    OAuth->accessToken = *part;
-    part++;
+  if (parts.size() > 2) {
+    OAuth->accessToken = parts[2];
   }
-  if (part != std::sregex_token_iterator()) {
-    OAuth->tokenSecret = *part;
-    part++;
+  if (parts.size() > 3) {
+    OAuth->tokenSecret = parts[3];
   }
   SetHeaders |= IOThread::kAuthorizationSet;
 }
 
-static void addHeader(const std::string &val) {
-  const auto colon = val.find(':');
-  if (colon >= 0) {
-    const auto n = val.substr(0, colon);
-    const char *name = n.c_str();
-    // This is the easiest way for non-case-sensitive comparison in C++
-    if (!strcasecmp(name, "Host")) {
-      SetHeaders |= IOThread::kHostSet;
-    } else if (!strcasecmp(name, "Content-Length")) {
-      SetHeaders |= IOThread::kContentLengthSet;
-    } else if (!strcasecmp(name, "Content-Type")) {
-      SetHeaders |= IOThread::kContentTypeSet;
-    } else if (!strcasecmp(name, "Authorization")) {
-      SetHeaders |= IOThread::kAuthorizationSet;
-    } else if (!strcasecmp(name, "Connection")) {
-      SetHeaders |= IOThread::kConnectionSet;
-    } else if (!strcasecmp(name, "User-Agent")) {
-      SetHeaders |= IOThread::kUserAgentSet;
-    }
+static void addHeader(const absl::string_view val) {
+  const std::vector<std::string> parts = absl::StrSplit(val, ':');
+  if (parts.empty()) {
+    cerr << "Invalid header: " << val << endl;
+    return;
   }
 
-  Headers.push_back(val);
+  const std::string name = parts[0];
+  if (eqcase(name, "Host")) {
+    SetHeaders |= IOThread::kHostSet;
+  } else if (eqcase(name, "Content-Length")) {
+    SetHeaders |= IOThread::kContentLengthSet;
+  } else if (eqcase(name, "Content-Type")) {
+    SetHeaders |= IOThread::kContentTypeSet;
+  } else if (eqcase(name, "Authorization")) {
+    SetHeaders |= IOThread::kAuthorizationSet;
+  } else if (eqcase(name, "Connection")) {
+    SetHeaders |= IOThread::kConnectionSet;
+  } else if (eqcase(name, "User-Agent")) {
+    SetHeaders |= IOThread::kUserAgentSet;
+  }
+
+  Headers.push_back(std::string(val));
 }
 
 static void processBasic(const std::string &arg) {
@@ -314,10 +313,7 @@ static void processBasic(const std::string &arg) {
   char *b64 = new char[encLen + 1];
   Base64encode(b64, arg.c_str(), arg.size());
 
-  std::ostringstream hdr;
-  hdr << "Authorization: Basic " << b64;
-  delete[] b64;
-  addHeader(hdr.str());
+  addHeader(absl::StrCat("Authorization: Basic ", b64));
 }
 
 static int initializeThread(int ix, IOThread *t) {
@@ -371,19 +367,25 @@ int main(int argc, char *const *argv) {
     arg = getopt_long(argc, argv, OPTIONS, Options, NULL);
     switch (arg) {
       case 'c':
-        NumConnections = std::stoi(optarg);
+        if (!absl::SimpleAtoi(optarg, &NumConnections)) {
+          failed = true;
+        }
         break;
       case 'd':
-        duration = std::stoi(optarg);
+        if (!absl::SimpleAtoi(optarg, &duration)) {
+          failed = true;
+        }
         break;
       case 'f':
         FileName = optarg;
         break;
       case 'h':
-        doHelp = 1;
+        doHelp = true;
         break;
       case 'k':
-        KeepAlive = std::stoi(optarg);
+        if (!absl::SimpleAtoi(optarg, &KeepAlive)) {
+          failed = true;
+        }
         break;
       case 't':
         ContentType = optarg;
@@ -392,10 +394,12 @@ int main(int argc, char *const *argv) {
         processBasic(optarg);
         break;
       case 'v':
-        Verbose = 1;
+        Verbose = true;
         break;
       case 'w':
-        warmupTime = std::stoi(optarg);
+        if (!absl::SimpleAtoi(optarg, &warmupTime)) {
+          failed = true;
+        }
         break;
       case 'x':
         Verb = optarg;
@@ -410,7 +414,9 @@ int main(int argc, char *const *argv) {
         addHeader(optarg);
         break;
       case 'K':
-        NumThreads = std::stoi(optarg);
+        if (!absl::SimpleAtoi(optarg, &NumThreads)) {
+          failed = true;
+        }
         break;
       case 'M':
         monitorHost = optarg;
@@ -425,25 +431,27 @@ int main(int argc, char *const *argv) {
         processOAuth(optarg);
         break;
       case 'S':
-        ShortOutput = 1;
+        ShortOutput = true;
         break;
       case 'T':
         apib::PrintReportingHeader(std::cout);
         return 0;
         break;
       case 'V':
-        SslVerify = 1;
+        SslVerify = true;
         break;
       case 'W':
-        ThinkTime = std::stoi(optarg);
+        if (!absl::SimpleAtoi(optarg, &ThinkTime)) {
+          failed = true;
+        }
         break;
       case '1':
-        JustOnce = 1;
+        JustOnce = true;
         break;
       case '?':
       case ':':
         // Unknown. Error was printed.
-        failed = 1;
+        failed = true;
         break;
       case -1:
         // Done!
