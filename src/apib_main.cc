@@ -146,6 +146,17 @@ static void printUsage() {
   cerr << USAGE_DOCS << endl;
 }
 
+static void printLibraryInfo() {
+  cout << "Using Libev " << ev_version_major() << '.' << ev_version_minor()
+       << endl;
+  cout << "  Supported backends: "
+       << IOThread::GetEvBackends(ev_supported_backends()) << endl;
+  cout << "  Recommended backends: "
+       << IOThread::GetEvBackends(ev_recommended_backends()) << endl;
+  cout << "Using " << OpenSSL_version(OPENSSL_VERSION) << ' '
+       << OPENSSL_VERSION_TEXT << endl;
+}
+
 static int setProcessLimits(int numConnections) {
   struct rlimit limits;
   int err;
@@ -487,6 +498,10 @@ int main(int argc, char *const *argv) {
     }
     if (NumThreads > NumConnections) {
       NumThreads = NumConnections;
+    }
+
+    if (Verbose) {
+      printLibraryInfo();
     }
 
     RecordInit(monitorHost, monitor2Host);

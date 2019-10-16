@@ -21,6 +21,7 @@ limitations under the License.
 #include <iostream>
 #include <thread>
 
+#include "absl/strings/str_join.h"
 #include "ev.h"
 #include "src/apib_lines.h"
 #include "src/apib_rand.h"
@@ -296,14 +297,17 @@ void IOThread::processCommands(struct ev_loop* loop, ev_async* a, int revents) {
   }
 }
 
-void IOThread::threadLoop() {
-  int ret = 0;
+void IOThread::threadLoopBody() {
+  int loopFlags = EVFLAG_AUTO;
+  if ((numConnections < kMaxSelectFds) &&
+      (ev_recommended_backends() & EVBACKEND_SELECT)) {
+    loopFlags |= EVBACKEND_SELECT;
+  }
 
-  iothread_Verbose(this, "Starting new event loop %i for %i connection\n",
-                   index, numConnections);
+  loop_ = ev_loop_new(loopFlags);
+  iothread_Verbose(this, "libev backend = %s\n",
+                   GetEvBackends(ev_backend(loop_)).c_str());
 
-  loop_ = ev_loop_new(EVFLAG_AUTO);
-  iothread_Verbose(this, "libev backend = %i\n", ev_backend(loop_));
   // Prepare to receive async events, and be sure that we don't block if there
   // are none.
   ev_async_init(&async_, processCommands);
@@ -317,8 +321,8 @@ void IOThread::threadLoop() {
     connections_.push_back(c);
     int err = c->StartConnect();
     if (err != 0) {
-      perror("Error creating non-blocking socket");
-      goto finish;
+      perror("Fatal error creating non-blocking socket");
+      return;
     }
   }
 
@@ -326,10 +330,18 @@ void IOThread::threadLoop() {
   if (keepRunning) {
     ev_ref(loop_);
   }
-  ret = ev_run(loop_, 0);
+  const int ret = ev_run(loop_, 0);
   iothread_Verbose(this, "ev_run finished: %i\n", ret);
+}
 
-finish:
+void IOThread::threadLoop() {
+  int ret = 0;
+
+  iothread_Verbose(this, "Starting new event loop %i for %i connection\n",
+                   index, numConnections);
+
+  threadLoopBody();
+
   iothread_Verbose(this, "Cleaning up event loop %i\n", index);
   for (auto it = connections_.cbegin(); it != connections_.cend(); it++) {
     delete *it;
@@ -409,6 +421,32 @@ void IOThread::SetNumConnections(int newConnections) {
   commands_.Add(cmd);
   // Wake up the loop and cause the callback to be called.
   ev_async_send(loop_, &async_);
+}
+
+std::string IOThread::GetEvBackends(int b) {
+  std::vector<std::string> formats;
+  if (b & EVBACKEND_SELECT) {
+    formats.push_back("select");
+  }
+  if (b & EVBACKEND_POLL) {
+    formats.push_back("poll");
+  }
+  if (b & EVBACKEND_EPOLL) {
+    formats.push_back("epoll");
+  }
+  if (b & EVBACKEND_LINUXAIO) {
+    formats.push_back("linux AIO");
+  }
+  if (b & EVBACKEND_KQUEUE) {
+    formats.push_back("kqueue");
+  }
+  if (b & EVBACKEND_DEVPOLL) {
+    formats.push_back("/dev/poll");
+  }
+  if (b & EVBACKEND_PORT) {
+    formats.push_back("Solaris event port");
+  }
+  return absl::StrJoin(formats, ", ");
 }
 
 }  // namespace apib

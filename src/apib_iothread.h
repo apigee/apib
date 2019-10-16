@@ -109,8 +109,16 @@ class IOThread {
   // The caller must free the result.
   Counters* exchangeCounters();
 
+  // A utility function to print out the back ends for Libev
+  static std::string GetEvBackends(int mask);
+
  private:
+  // We will manually choose "select", if available, if the number
+  // if connections in this thread is below this limit. This is faster.
+  static constexpr int kMaxSelectFds = 100;
+
   void threadLoop();
+  void threadLoopBody();
   static void initializeParser();
   static void processCommands(struct ev_loop* loop, ev_async* a, int revents);
   static void hardShutdown(struct ev_loop* loop, ev_timer* timer, int revents);
