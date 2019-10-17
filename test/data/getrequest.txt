@@ -1,4 +1,0 @@
-GET /foo?bar=baz&true=123 HTTP/1.1
-User-Agent: Greg's Test Client
-Content-Type: text/plain
-

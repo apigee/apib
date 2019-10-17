@@ -18,7 +18,6 @@ cc_library(
     name = "common",
     srcs = [
         "apib_lines.cc",
-        "apib_message.cc",
         "apib_rand.cc",
         "apib_time.cc",
         "apib_url.cc",
@@ -37,7 +36,6 @@ cc_library(
     hdrs = [
         "apib_cpu.h",
         "apib_lines.h",
-        "apib_message.h",
         "apib_rand.h",
         "apib_reporting.h",
         "apib_time.h",
