@@ -335,8 +335,6 @@ void IOThread::threadLoopBody() {
 }
 
 void IOThread::threadLoop() {
-  int ret = 0;
-
   iothread_Verbose(this, "Starting new event loop %i for %i connection\n",
                    index, numConnections);
 
