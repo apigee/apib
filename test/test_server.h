@@ -28,6 +28,7 @@ limitations under the License.
 #include <unordered_map>
 #include <vector>
 
+#include "absl/strings/string_view.h"
 #include "ev.h"
 #include "http_parser.h"
 
@@ -87,17 +88,20 @@ class TestConnection {
  public:
   TestConnection(TestServer* s, int fd);
   void socketLoop();
-  void setBody(const std::string& bs);
-  void setQuery(const std::string& qs);
+  void setBody(const absl::string_view bs);
+  void setQuery(const absl::string_view qs);
   void setParseComplete() { done_ = true; }
-  void setNextHeaderName(const std::string& n) { nextHeader_ = n; }
-  void setHeaderValue(const std::string& v);
+  void setNextHeaderName(const absl::string_view n) {
+    nextHeader_ = std::string(n);
+  }
+  void setHeaderValue(const absl::string_view v);
   std::string body() { return body_; }
 
  private:
-  int write(const std::string& s);
-  void sendText(int code, const std::string& codestr, const std::string& msg);
-  void sendData(const std::string& msg);
+  int write(const absl::string_view s);
+  void sendText(int code, const absl::string_view codestr,
+                const absl::string_view msg);
+  void sendData(const absl::string_view msg);
   ssize_t httpTransaction(char* buf, ssize_t bufPos);
   void handleRequest();
 

@@ -23,9 +23,11 @@ limitations under the License.
 
 #include <algorithm>
 #include <cmath>
-#include <regex>
 #include <sstream>
+#include <vector>
 
+#include "absl/strings/str_split.h"
+#include "absl/strings/string_view.h"
 #include "src/apib_rand.h"
 #include "src/apib_time.h"
 #include "src/apib_url.h"
@@ -35,15 +37,12 @@ limitations under the License.
 
 namespace apib {
 
-static const std::regex kAmpersand("&");
-static const std::regex kEquals("=");
-
 typedef std::pair<std::string, std::string> Param;
 typedef std::vector<Param> ParamList;
 
 /* Encode a string as described by the OAuth 1.0a spec, specifically
  * RFC5849. */
-static void appendEncoded(std::ostream& o, const std::string& str) {
+static void appendEncoded(std::ostream& o, const absl::string_view str) {
   size_t p = 0;
   while (str[p] != 0) {
     if (isalnum(str[p]) || (str[p] == '-') || (str[p] == '.') ||
@@ -59,7 +58,7 @@ static void appendEncoded(std::ostream& o, const std::string& str) {
   }
 }
 
-static std::string reEncode(const std::string& str) {
+static std::string reEncode(const absl::string_view str) {
   std::ostringstream s;
   appendEncoded(s, str);
   return s.str();
@@ -67,7 +66,7 @@ static std::string reEncode(const std::string& str) {
 
 /*
  * Decode a string as described by the HTML spec and as commonly implemented. */
-static std::string decode(const std::string& str) {
+static std::string decode(const absl::string_view str) {
   std::ostringstream decoded;
   char tmp[3];
 
@@ -93,20 +92,17 @@ static std::string decode(const std::string& str) {
   return decoded.str();
 }
 
-static void readParams(ParamList& params, const std::string& str) {
-  for (auto amp =
-           std::sregex_token_iterator(str.cbegin(), str.cend(), kAmpersand, -1);
-       amp != std::sregex_token_iterator(); amp++) {
-    const std::string pp = *amp;
-    auto eq = std::sregex_token_iterator(pp.begin(), pp.end(), kEquals, -1);
-    if (eq != std::sregex_token_iterator()) {
-      const std::string name = decode(*eq);
+static void readParams(ParamList& paramSrc, const absl::string_view str) {
+  const std::vector<std::string> params = absl::StrSplit(str, '&');
+  for (auto it = params.cbegin(); it != params.cend(); it++) {
+    const std::vector<std::string> nv = absl::StrSplit(*it, '=');
+    if (nv.size() > 0) {
+      const std::string name = decode(nv[0]);
       std::string val;
-      eq++;
-      if (eq != std::sregex_token_iterator()) {
-        val = decode(*eq);
+      if (nv.size() > 1) {
+        val = decode(nv[1]);
       }
-      params.push_back(std::make_pair(name, val));
+      paramSrc.push_back(std::make_pair(name, val));
     }
   }
 }

@@ -29,12 +29,18 @@ limitations under the License.
 #include <cassert>
 #include <cstdlib>
 #include <functional>
-#include <regex>
+#include <iostream>
 #include <sstream>
 
+#include "absl/strings/numbers.h"
+#include "absl/strings/str_split.h"
 #include "http_parser.h"
 #include "src/apib_lines.h"
 #include "src/apib_util.h"
+
+using std::cerr;
+using std::cout;
+using std::endl;
 
 namespace apib {
 
@@ -44,11 +50,6 @@ namespace apib {
 static http_parser_settings ParserSettings;
 
 static regex_t sizeParameter;
-
-static const std::regex kQuestion("\\?");
-static const std::regex kAmpersand("&");
-static const std::regex kEquals("=");
-
 #define SIZE_PARAMETER_REGEX "^size=([0-9]+)"
 
 TestConnection::TestConnection(TestServer* s, int fd) : server_(s), fd_(fd) {}
@@ -61,10 +62,10 @@ static std::string makeData(const int len) {
   return b;
 }
 
-static void printSslError(const char* msg) {
+static void printSslError(const absl::string_view msg) {
   char buf[256];
   ERR_error_string_n(ERR_get_error(), buf, 256);
-  fprintf(stderr, "%s: %s\n", msg, buf);
+  cerr << msg << ": " << buf << endl;
 }
 
 void TestServer::success(int op) {
@@ -79,15 +80,15 @@ void TestServer::socketError() { stats_.socketErrorCount++; }
 
 void TestServer::newConnection() { stats_.connectionCount++; }
 
-int TestConnection::write(const std::string& s) {
+int TestConnection::write(const absl::string_view s) {
   if (ssl_ == NULL) {
     return ::write(fd_, s.data(), s.size());
   }
   return SSL_write(ssl_, s.data(), s.size());
 }
 
-void TestConnection::sendText(int code, const std::string& codestr,
-                              const std::string& msg) {
+void TestConnection::sendText(int code, const absl::string_view codestr,
+                              const absl::string_view msg) {
   std::ostringstream out;
   out << "HTTP/1.1 " << code << ' ' << codestr << "\r\n"
       << "Server: apib test server\r\n"
@@ -98,7 +99,7 @@ void TestConnection::sendText(int code, const std::string& codestr,
   write(out.str());
 }
 
-void TestConnection::sendData(const std::string& msg) {
+void TestConnection::sendData(const absl::string_view msg) {
   std::ostringstream out;
   out << "HTTP/1.1 200 OK\r\n"
       << "Server: apib test server\r\n"
@@ -116,7 +117,9 @@ static int parsedBody(http_parser* p, const char* buf, size_t len) {
   return 0;
 }
 
-void TestConnection::setBody(const std::string& bs) { body_ = bs; }
+void TestConnection::setBody(const absl::string_view bs) {
+  body_ = std::string(bs);
+}
 
 // Called by http_parser when we get the URL.
 static int parsedUrl(http_parser* p, const char* buf, size_t len) {
@@ -125,59 +128,52 @@ static int parsedUrl(http_parser* p, const char* buf, size_t len) {
   return 0;
 }
 
-void TestConnection::setQuery(const std::string& qs) {
-  auto questionIt =
-      std::sregex_token_iterator(qs.cbegin(), qs.cend(), kQuestion, -1);
-  if (questionIt == std::sregex_token_iterator()) {
-    // Invalid input!
+void TestConnection::setQuery(const absl::string_view qs) {
+  const std::vector<std::string> pathQuery = absl::StrSplit(qs, '?');
+  if (pathQuery.empty()) {
+    // Nothing to parse here
     return;
   }
-  path_ = *questionIt;
-  questionIt++;
 
-  if (questionIt == std::sregex_token_iterator()) {
+  path_ = pathQuery[0];
+
+  if (pathQuery.size() == 1) {
     // No query
     return;
   }
 
-  const std::string queryString = *questionIt;
-  for (auto queries = std::sregex_token_iterator(
-           queryString.cbegin(), queryString.cend(), kAmpersand, -1);
-       queries != std::sregex_token_iterator(); queries++) {
-    const std::string query = *queries;
-    auto nv =
-        std::sregex_token_iterator(query.cbegin(), query.cend(), kEquals, -1);
-    if (nv != std::sregex_token_iterator()) {
-      const std::string name = *nv;
-      std::string value;
-      if (nv != std::sregex_token_iterator()) {
-        nv++;
-        value = *nv;
-      }
-      query_[name] = value;
+  const std::vector<std::string> qps = absl::StrSplit(pathQuery[1], '&');
+  for (auto it = qps.cbegin(); it != qps.cend(); it++) {
+    // TODO maybe only split(1)?
+    const std::vector<std::string> nv = absl::StrSplit(*it, '=');
+    const std::string name = nv[0];
+    std::string value;
+    if (nv.size() > 1) {
+      value = nv[1];
     }
+    query_[name] = value;
   }
 }
 
 static int parseComplete(http_parser* p) {
-  auto c = reinterpret_cast<TestConnection*>(p->data);
+  auto c = static_cast<TestConnection*>(p->data);
   c->setParseComplete();
   return 0;
 }
 
 static int parsedHeaderField(http_parser* p, const char* buf, size_t len) {
-  auto c = reinterpret_cast<TestConnection*>(p->data);
-  c->setNextHeaderName(std::string(buf, len));
+  auto c = static_cast<TestConnection*>(p->data);
+  c->setNextHeaderName(absl::string_view(buf, len));
   return 0;
 }
 
 static int parsedHeaderValue(http_parser* p, const char* buf, size_t len) {
-  auto c = reinterpret_cast<TestConnection*>(p->data);
-  c->setHeaderValue(std::string(buf, len));
+  auto c = static_cast<TestConnection*>(p->data);
+  c->setHeaderValue(absl::string_view(buf, len));
   return 0;
 }
 
-void TestConnection::setHeaderValue(const std::string& v) {
+void TestConnection::setHeaderValue(const absl::string_view v) {
   if (eqcase("Connection", nextHeader_) && eqcase("close", v)) {
     shouldClose_ = true;
   } else if (eqcase("Authorization", nextHeader_) &&
@@ -185,7 +181,10 @@ void TestConnection::setHeaderValue(const std::string& v) {
     // Checked for the authorization "test:veryverysecret"
     notAuthorized_ = false;
   } else if (eqcase("X-Sleep", nextHeader_)) {
-    sleepTime_ = stoi(v);
+    int tmpSleep;
+    if (absl::SimpleAtoi(v, &tmpSleep)) {
+      sleepTime_ = tmpSleep;
+    }
   }
 }
 
