@@ -409,75 +409,61 @@ BenchmarkResults ReportResults() {
 void PrintFullResults(std::ostream& out) {
   const BenchmarkResults r = ReportResults();
 
-  out << StrFormat("Duration:             %.3f seconds", r.elapsedTime) << endl;
-  out << StrFormat("Attempted requests:   %i", r.completedRequests) << endl;
-  out << StrFormat("Successful requests:  %i", r.successfulRequests) << endl;
-  out << StrFormat("Non-200 results:      %i", r.unsuccessfulRequests) << endl;
-  out << StrFormat("Connections opened:   %i", r.connectionsOpened) << endl;
-  out << StrFormat("Socket errors:        %i", r.socketErrors) << endl;
-  out << endl;
-  out << StrFormat("Throughput:           %.3f requests/second",
-                   r.averageThroughput)
-      << endl;
-  out << StrFormat("Average latency:      %.3f milliseconds", r.averageLatency)
-      << endl;
-  out << StrFormat("Minimum latency:      %.3f milliseconds", r.latencies[0])
-      << endl;
-  out << StrFormat("Maximum latency:      %.3f milliseconds", r.latencies[100])
-      << endl;
-  out << StrFormat("Latency std. dev:     %.3f milliseconds", r.latencyStdDev)
-      << endl;
-  out << StrFormat("50%% latency:          %.3f milliseconds", r.latencies[50])
-      << endl;
-  out << StrFormat("90%% latency:          %.3f milliseconds", r.latencies[90])
-      << endl;
-  out << StrFormat("98%% latency:          %.3f milliseconds", r.latencies[98])
-      << endl;
-  out << StrFormat("99%% latency:          %.3f milliseconds", r.latencies[99])
-      << endl;
-  out << endl;
+  out << StrFormat("Duration:             %.3f seconds\n", r.elapsedTime);
+  out << StrFormat("Attempted requests:   %i\n", r.completedRequests);
+  out << StrFormat("Successful requests:  %i\n", r.successfulRequests);
+  out << StrFormat("Non-200 results:      %i\n", r.unsuccessfulRequests);
+  out << StrFormat("Connections opened:   %i\n", r.connectionsOpened);
+  out << StrFormat("Socket errors:        %i\n", r.socketErrors);
+  out << '\n';
+  out << StrFormat("Throughput:           %.3f requests/second\n",
+                   r.averageThroughput);
+  out << StrFormat("Average latency:      %.3f milliseconds\n",
+                   r.averageLatency);
+  out << StrFormat("Minimum latency:      %.3f milliseconds\n", r.latencies[0]);
+  out << StrFormat("Maximum latency:      %.3f milliseconds\n",
+                   r.latencies[100]);
+  out << StrFormat("Latency std. dev:     %.3f milliseconds\n",
+                   r.latencyStdDev);
+  out << StrFormat("50%% latency:          %.3f milliseconds\n",
+                   r.latencies[50]);
+  out << StrFormat("90%% latency:          %.3f milliseconds\n",
+                   r.latencies[90]);
+  out << StrFormat("98%% latency:          %.3f milliseconds\n",
+                   r.latencies[98]);
+  out << StrFormat("99%% latency:          %.3f milliseconds\n",
+                   r.latencies[99]);
+  out << '\n';
   if (!clientSamples.empty()) {
-    out << StrFormat("Client CPU average:    %.0f%%",
-                     getAverageCpu(clientSamples) * 100.0)
-        << endl;
-    out << StrFormat("Client CPU max:        %.0f%%",
-                     getMaxCpu(clientSamples) * 100.0)
-        << endl;
+    out << StrFormat("Client CPU average:   %.0f%%\n",
+                     getAverageCpu(clientSamples) * 100.0);
+    out << StrFormat("Client CPU max:       %.0f%%\n",
+                     getMaxCpu(clientSamples) * 100.0);
   }
-  out << StrFormat("Client memory usage:   %.0f%%", clientMem * 100.0) << endl;
+  out << StrFormat("Client memory usage:  %.0f%%\n", clientMem * 100.0);
   if (!remoteSamples.empty()) {
-    out << StrFormat("Remote CPU average:    %.0f%%",
-                     getAverageCpu(remoteSamples) * 100.0)
-        << endl;
-    out << StrFormat("Remote CPU max:        %.0f%%",
-                     getMaxCpu(remoteSamples) * 100.0)
-        << endl;
-    out << StrFormat("Remote memory usage:   %.0f%%", remoteMem * 100.0)
-        << endl;
+    out << StrFormat("Remote CPU average:   %.0f%%\n",
+                     getAverageCpu(remoteSamples) * 100.0);
+    out << StrFormat("Remote CPU max:       %.0f%%\n",
+                     getMaxCpu(remoteSamples) * 100.0);
+    out << StrFormat("Remote memory usage:  %.0f%%\n", remoteMem * 100.0);
   }
   if (!remote2Samples.empty()) {
-    out << StrFormat("Remote 2 CPU average:    %.0f%%",
-                     getAverageCpu(remote2Samples) * 100.0)
-        << endl;
-    out << StrFormat("Remote 2 CPU max:        %.0f%%",
-                     getMaxCpu(remote2Samples) * 100.0)
-        << endl;
-    out << StrFormat("Remote 2 memory usage:   %.0f%%", remote2Mem * 100.0)
-        << endl;
+    out << StrFormat("Remote 2 CPU average:   %.0f%%\n",
+                     getAverageCpu(remote2Samples) * 100.0);
+    out << StrFormat("Remote 2 CPU max:       %.0f%%\n",
+                     getMaxCpu(remote2Samples) * 100.0);
+    out << StrFormat("Remote 2 memory usage:  %.0f%%\n", remote2Mem * 100.0);
   }
-  out << endl;
-  out << StrFormat("Total bytes sent:      %.2f megabytes",
-                   r.totalBytesSent / 1048576.0)
-      << endl;
-  out << StrFormat("Total bytes received:  %.2f megabytes",
-                   r.totalBytesReceived / 1048576.0)
-      << endl;
-  out << StrFormat("Send bandwidth:        %.2f megabits / second",
-                   r.averageSendBandwidth)
-      << endl;
-  out << StrFormat("Receive bandwidth:     %.2f megabits / second",
-                   r.averageReceiveBandwidth)
-      << endl;
+  out << '\n';
+  out << StrFormat("Total bytes sent:     %.2f megabytes\n",
+                   r.totalBytesSent / 1048576.0);
+  out << StrFormat("Total bytes received: %.2f megabytes\n",
+                   r.totalBytesReceived / 1048576.0);
+  out << StrFormat("Send bandwidth:       %.2f megabits / second\n",
+                   r.averageSendBandwidth);
+  out << StrFormat("Receive bandwidth:    %.2f megabits / second\n",
+                   r.averageReceiveBandwidth);
 }
 
 void PrintShortResults(std::ostream& out, const std::string& runName,
@@ -486,19 +472,17 @@ void PrintShortResults(std::ostream& out, const std::string& runName,
 
   // See "PrintReportingHeader for column names
   out << StrFormat(
-             "%s,%.3f,%.3f,%i,%i,%.3f,%i,%i,%i,%i,%.3f,%.3f,%.3f,%.3f,%.3f,%."
-             "3f,%.3f,%.0f,%.0f,%.0f,%.0f,%.0f,%.0f,%.2f,%.2f",
-             runName, r.averageThroughput, r.averageLatency, numThreads,
-             connections, r.elapsedTime, r.completedRequests,
-             r.successfulRequests, r.socketErrors, r.connectionsOpened,
-             r.latencies[0], r.latencies[100], r.latencies[50], r.latencies[90],
-             r.latencies[98], r.latencies[99], r.latencyStdDev,
-             getAverageCpu(clientSamples) * 100.0,
-             getAverageCpu(remoteSamples) * 100.0,
-             getAverageCpu(remote2Samples) * 100.0, clientMem * 100.0,
-             remoteMem * 100.0, remote2Mem * 100.0, r.averageSendBandwidth,
-             r.averageReceiveBandwidth)
-      << endl;
+      "%s,%.3f,%.3f,%i,%i,%.3f,%i,%i,%i,%i,%.3f,%.3f,%.3f,%.3f,%.3f,%."
+      "3f,%.3f,%.0f,%.0f,%.0f,%.0f,%.0f,%.0f,%.2f,%.2f\n",
+      runName, r.averageThroughput, r.averageLatency, numThreads, connections,
+      r.elapsedTime, r.completedRequests, r.successfulRequests, r.socketErrors,
+      r.connectionsOpened, r.latencies[0], r.latencies[100], r.latencies[50],
+      r.latencies[90], r.latencies[98], r.latencies[99], r.latencyStdDev,
+      getAverageCpu(clientSamples) * 100.0,
+      getAverageCpu(remoteSamples) * 100.0,
+      getAverageCpu(remote2Samples) * 100.0, clientMem * 100.0,
+      remoteMem * 100.0, remote2Mem * 100.0, r.averageSendBandwidth,
+      r.averageReceiveBandwidth);
 }
 
 void PrintReportingHeader(std::ostream& out) {
@@ -508,8 +492,7 @@ void PrintReportingHeader(std::ostream& out) {
          "98% Latency,99% Latency,Latency Std Dev,Avg Client CPU,"
          "Avg Server CPU,Avg Server 2 CPU,"
          "Client Mem Usage,Server Mem,Server 2 Mem,"
-         "Avg. Send Bandwidth,Avg. Recv. Bandwidth"
-      << endl;
+         "Avg. Send Bandwidth,Avg. Recv. Bandwidth\n";
 }
 
 void EndReporting() {
