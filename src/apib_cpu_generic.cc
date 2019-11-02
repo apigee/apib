@@ -30,8 +30,8 @@ void cpu_GetUsage(CPUUsage* usage) {
   usage->timestamp = 0;
 }
 
-double cpu_GetInterval(CPUUsage* usage) { return -1.0; }
+double cpu_GetInterval(CPUUsage* usage) { return 0.0; }
 
-double cpu_GetMemoryUsage() { return -1.0; }
+double cpu_GetMemoryUsage() { return 0.0; }
 
 }  // namespace apib
