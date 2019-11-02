@@ -226,8 +226,8 @@ void RecordStart(bool startReporting, const ThreadList& threads) {
 }
 
 void RecordStop(const ThreadList& threads) {
+  SampleCPU();
   clientMem = cpu_GetMemoryUsage();
-
   if (remoteCpuSocket != 0) {
     remoteMem = getRemoteStat(kMemCmd, &remoteCpuSocket);
   }
@@ -273,6 +273,19 @@ BenchmarkIntervalResults ReportIntervalResults(const ThreadList& threads) {
   r.averageThroughput = (double)r.successfulRequests / r.intervalTime;
   intervalStartTime = now;
   return r;
+}
+
+void SampleCPU() {
+  if (remoteCpuSocket != 0) {
+    const double remoteCpu = getRemoteStat(kCPUCmd, &remoteCpuSocket);
+    remoteSamples.push_back(remoteCpu);
+  }
+  if (remote2CpuSocket != 0) {
+    const double remote2Cpu = getRemoteStat(kCPUCmd, &remote2CpuSocket);
+    remote2Samples.push_back(remote2Cpu);
+  }
+  const double cpu = cpu_GetInterval(&cpuUsage);
+  clientSamples.push_back(cpu);
 }
 
 void ReportInterval(std::ostream& out, const ThreadList& threads,

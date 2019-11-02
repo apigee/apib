@@ -103,6 +103,10 @@ extern void PrintFullResults(std::ostream& out);
 // Call ReportIntervalResults and print to a file
 extern void ReportInterval(std::ostream& out, const ThreadList& threads,
                            int totalDuration, bool warmup);
+// If ReportInterval is not being called, call this instead to ensure
+// that the CPU samples are happening regularly so
+// that we get a good average.
+extern void SampleCPU();
 // Print a CSV header for the "short" reporting format
 extern void PrintReportingHeader(std::ostream& out);
 
