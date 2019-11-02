@@ -257,7 +257,9 @@ static void waitAndReport(const apib::ThreadList &threads, int duration,
     }
 
     sleep(toSleep);
-    if (!ShortOutput) {
+    if (ShortOutput) {
+      apib::SampleCPU();
+    } else {
       ReportInterval(std::cout, threads, duration, warmup);
     }
     durationLeft -= toSleep;

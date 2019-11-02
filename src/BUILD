@@ -37,7 +37,6 @@ cc_library(
         "apib_cpu.h",
         "apib_lines.h",
         "apib_rand.h",
-        "apib_reporting.h",
         "apib_time.h",
         "apib_url.h",
         "apib_util.h",
@@ -65,6 +64,7 @@ cc_library(
         "apib_commandqueue.h",
         "apib_iothread.h",
         "apib_oauth.h",
+        "apib_reporting.h",
     ],
     linkopts = [
         "-lpthread",
@@ -72,6 +72,7 @@ cc_library(
     deps = [
         ":common",
         "//third_party:base64",
+        "@absl//absl/strings:str_format",
         "@boringssl//:crypto",
         "@boringssl//:ssl",
         "@httpparser",

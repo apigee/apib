@@ -35,9 +35,11 @@ limitations under the License.
 #include <valarray>
 #include <vector>
 
+#include "absl/strings/str_format.h"
 #include "src/apib_cpu.h"
 #include "src/apib_time.h"
 
+using absl::StrFormat;
 using std::cerr;
 using std::endl;
 
@@ -224,8 +226,8 @@ void RecordStart(bool startReporting, const ThreadList& threads) {
 }
 
 void RecordStop(const ThreadList& threads) {
+  SampleCPU();
   clientMem = cpu_GetMemoryUsage();
-
   if (remoteCpuSocket != 0) {
     remoteMem = getRemoteStat(kMemCmd, &remoteCpuSocket);
   }
@@ -273,6 +275,19 @@ BenchmarkIntervalResults ReportIntervalResults(const ThreadList& threads) {
   return r;
 }
 
+void SampleCPU() {
+  if (remoteCpuSocket != 0) {
+    const double remoteCpu = getRemoteStat(kCPUCmd, &remoteCpuSocket);
+    remoteSamples.push_back(remoteCpu);
+  }
+  if (remote2CpuSocket != 0) {
+    const double remote2Cpu = getRemoteStat(kCPUCmd, &remote2CpuSocket);
+    remote2Samples.push_back(remote2Cpu);
+  }
+  const double cpu = cpu_GetInterval(&cpuUsage);
+  clientSamples.push_back(cpu);
+}
+
 void ReportInterval(std::ostream& out, const ThreadList& threads,
                     int totalDuration, bool warmup) {
   double cpu = 0.0;
@@ -293,14 +308,13 @@ void ReportInterval(std::ostream& out, const ThreadList& threads,
   const BenchmarkIntervalResults r = ReportIntervalResults(threads);
   const std::string warm = (warmup ? "Warming up: " : "");
 
-  out << std::fixed;
-  out << warm << '(' << std::setprecision(0) << r.elapsedTime << " / "
-      << totalDuration << ") " << std::setprecision(3) << r.averageThroughput;
+  out << StrFormat("%s(%.0f / %i) %.3f", warm, r.elapsedTime, totalDuration,
+                   r.averageThroughput);
   if (cpu > 0.0) {
-    out << ' ' << std::setprecision(0) << cpu * 100.0 << "% cpu";
+    out << StrFormat(" %.0f%% cpu", cpu * 100.0);
   }
   if (remoteCpu > 0.0) {
-    out << ' ' << std::setprecision(0) << remoteCpu * 100.0 << "% remote cpu";
+    out << StrFormat(" %.0f%% remote cpu", remoteCpu * 100.0);
   }
   out << endl;
 }
@@ -341,6 +355,9 @@ static double getLatencyStdDev(const std::vector<int_fast64_t>& latencies) {
 }
 
 static double getAverageCpu(const std::vector<double>& s) {
+  if (s.empty()) {
+    return 0.0;
+  }
   double total = 0.0;
   std::for_each(s.cbegin(), s.cend(), [&total](double d) { total += d; });
   return total / s.size();
@@ -392,94 +409,90 @@ BenchmarkResults ReportResults() {
 void PrintFullResults(std::ostream& out) {
   const BenchmarkResults r = ReportResults();
 
-  out << std::fixed << std::setprecision(3);
-  out << "Duration:             " << r.elapsedTime << " seconds" << endl;
-  out << "Attempted requests:   " << r.completedRequests << endl;
-  out << "Successful requests:  " << r.successfulRequests << endl;
-  out << "Non-200 results:      " << r.unsuccessfulRequests << endl;
-  out << "Connections opened:   " << r.connectionsOpened << endl;
-  out << "Socket errors:        " << r.socketErrors << endl;
-  out << endl;
-  out << "Throughput:           " << r.averageThroughput << " requests/second"
-      << endl;
-  out << "Average latency:      " << r.averageLatency << " milliseconds"
-      << endl;
-  out << "Minimum latency:      " << r.latencies[0] << " milliseconds" << endl;
-  out << "Maximum latency:      " << r.latencies[100] << " milliseconds"
-      << endl;
-  out << "Latency std. dev:     " << r.latencyStdDev << " milliseconds" << endl;
-  out << "50% latency:          " << r.latencies[50] << " milliseconds" << endl;
-  out << "90% latency:          " << r.latencies[90] << " milliseconds" << endl;
-  out << "98% latency:          " << r.latencies[98] << " milliseconds" << endl;
-  out << "99% latency:          " << r.latencies[99] << " milliseconds" << endl;
-  out << endl;
-  out << std::setprecision(0);
+  out << StrFormat("Duration:             %.3f seconds\n", r.elapsedTime);
+  out << StrFormat("Attempted requests:   %i\n", r.completedRequests);
+  out << StrFormat("Successful requests:  %i\n", r.successfulRequests);
+  out << StrFormat("Non-200 results:      %i\n", r.unsuccessfulRequests);
+  out << StrFormat("Connections opened:   %i\n", r.connectionsOpened);
+  out << StrFormat("Socket errors:        %i\n", r.socketErrors);
+  out << '\n';
+  out << StrFormat("Throughput:           %.3f requests/second\n",
+                   r.averageThroughput);
+  out << StrFormat("Average latency:      %.3f milliseconds\n",
+                   r.averageLatency);
+  out << StrFormat("Minimum latency:      %.3f milliseconds\n", r.latencies[0]);
+  out << StrFormat("Maximum latency:      %.3f milliseconds\n",
+                   r.latencies[100]);
+  out << StrFormat("Latency std. dev:     %.3f milliseconds\n",
+                   r.latencyStdDev);
+  out << StrFormat("50%% latency:          %.3f milliseconds\n",
+                   r.latencies[50]);
+  out << StrFormat("90%% latency:          %.3f milliseconds\n",
+                   r.latencies[90]);
+  out << StrFormat("98%% latency:          %.3f milliseconds\n",
+                   r.latencies[98]);
+  out << StrFormat("99%% latency:          %.3f milliseconds\n",
+                   r.latencies[99]);
+  out << '\n';
   if (!clientSamples.empty()) {
-    out << "Client CPU average:    " << getAverageCpu(clientSamples) * 100.0
-        << endl;
-    out << "Client CPU max:        " << getMaxCpu(clientSamples) * 100.0
-        << endl;
+    out << StrFormat("Client CPU average:   %.0f%%\n",
+                     getAverageCpu(clientSamples) * 100.0);
+    out << StrFormat("Client CPU max:       %.0f%%\n",
+                     getMaxCpu(clientSamples) * 100.0);
   }
-  out << "Client memory usage:     " << clientMem * 100.0 << endl;
+  out << StrFormat("Client memory usage:  %.0f%%\n", clientMem * 100.0);
   if (!remoteSamples.empty()) {
-    out << "Remote CPU average:    " << getAverageCpu(remoteSamples) * 100.0
-        << endl;
-    out << "Remote CPU max:        " << getMaxCpu(remoteSamples) * 100.0
-        << endl;
-    out << "Remote memory usage:   " << remoteMem * 100.0 << endl;
+    out << StrFormat("Remote CPU average:   %.0f%%\n",
+                     getAverageCpu(remoteSamples) * 100.0);
+    out << StrFormat("Remote CPU max:       %.0f%%\n",
+                     getMaxCpu(remoteSamples) * 100.0);
+    out << StrFormat("Remote memory usage:  %.0f%%\n", remoteMem * 100.0);
   }
   if (!remote2Samples.empty()) {
-    out << "Remote 2 CPU average:    " << getAverageCpu(remote2Samples) * 100.0
-        << '%' << endl;
-    out << "Remote 2 CPU max:        " << getMaxCpu(remote2Samples) * 100.0
-        << '%' << endl;
-    out << "Remote 2 memory usage:   " << remote2Mem * 100.0 << '%' << endl;
+    out << StrFormat("Remote 2 CPU average:   %.0f%%\n",
+                     getAverageCpu(remote2Samples) * 100.0);
+    out << StrFormat("Remote 2 CPU max:       %.0f%%\n",
+                     getMaxCpu(remote2Samples) * 100.0);
+    out << StrFormat("Remote 2 memory usage:  %.0f%%\n", remote2Mem * 100.0);
   }
-  out << endl;
-  out << std::setprecision(2);
-  out << "Total bytes sent:      " << r.totalBytesSent / 1048576.0
-      << " megabytes" << endl;
-  out << "Total bytes received:  " << r.totalBytesReceived / 1048576.0
-      << " megabytes" << endl;
-  out << "Send bandwidth:        " << r.averageSendBandwidth
-      << " megabits / second" << endl;
-  out << "Receive bandwidth:     " << r.averageReceiveBandwidth
-      << " megabits / second" << endl;
+  out << '\n';
+  out << StrFormat("Total bytes sent:     %.2f megabytes\n",
+                   r.totalBytesSent / 1048576.0);
+  out << StrFormat("Total bytes received: %.2f megabytes\n",
+                   r.totalBytesReceived / 1048576.0);
+  out << StrFormat("Send bandwidth:       %.2f megabits / second\n",
+                   r.averageSendBandwidth);
+  out << StrFormat("Receive bandwidth:    %.2f megabits / second\n",
+                   r.averageReceiveBandwidth);
 }
 
 void PrintShortResults(std::ostream& out, const std::string& runName,
                        size_t numThreads, int connections) {
   const BenchmarkResults r = ReportResults();
 
-  /*
-  name,throughput,avg.
-  latency,threads,connections,duration,completed,successful,errors,sockets,min.
-  latency,max. latency,50%,90%,98%,99%
-   */
-  out << std::fixed << std::setprecision(3) << runName << ','
-      << r.averageThroughput << ',' << r.averageLatency << numThreads << ','
-      << connections << ',' << r.elapsedTime << ',' << r.completedRequests
-      << ',' << r.successfulRequests << ',' << r.unsuccessfulRequests << ','
-      << r.connectionsOpened << ',' << r.latencies[0] << ',' << r.latencies[100]
-      << ',' << r.latencies[50] << ',' << r.latencies[90] << ','
-      << r.latencies[98] << ',' << r.latencies[99] << ',' << r.latencyStdDev
-      << std::setprecision(0) << getAverageCpu(clientSamples) * 100.0 << ','
-      << getAverageCpu(remoteSamples) * 100.0 << ','
-      << getAverageCpu(remote2Samples) * 100.0 << ',' << std::setprecision(2)
-      << clientMem * 100.0 << ',' << remoteMem * 100.0 << ','
-      << remote2Mem * 100.0 << ',' << r.averageSendBandwidth << ','
-      << r.averageReceiveBandwidth << endl;
+  // See "PrintReportingHeader for column names
+  out << StrFormat(
+      "%s,%.3f,%.3f,%i,%i,%.3f,%i,%i,%i,%i,%.3f,%.3f,%.3f,%.3f,%.3f,%."
+      "3f,%.3f,%.0f,%.0f,%.0f,%.0f,%.0f,%.0f,%.2f,%.2f\n",
+      runName, r.averageThroughput, r.averageLatency, numThreads, connections,
+      r.elapsedTime, r.completedRequests, r.successfulRequests, r.socketErrors,
+      r.connectionsOpened, r.latencies[0], r.latencies[100], r.latencies[50],
+      r.latencies[90], r.latencies[98], r.latencies[99], r.latencyStdDev,
+      getAverageCpu(clientSamples) * 100.0,
+      getAverageCpu(remoteSamples) * 100.0,
+      getAverageCpu(remote2Samples) * 100.0, clientMem * 100.0,
+      remoteMem * 100.0, remote2Mem * 100.0, r.averageSendBandwidth,
+      r.averageReceiveBandwidth);
 }
 
 void PrintReportingHeader(std::ostream& out) {
   out << "Name,Throughput,Avg. Latency,Threads,Connections,Duration,"
          "Completed,Successful,Errors,Sockets,"
-         "Min. latency,Max. latency,50%% Latency,90%% Latency,"
-         "98%% Latency,99%% Latency,Latency Std Dev,Avg Client CPU,"
+         "Min. latency,Max. latency,50% Latency,90% Latency,"
+         "98% Latency,99% Latency,Latency Std Dev,Avg Client CPU,"
          "Avg Server CPU,Avg Server 2 CPU,"
          "Client Mem Usage,Server Mem,Server 2 Mem,"
-         "Avg. Send Bandwidth,Avg. Recv. Bandwidth"
-      << endl;
+         "Avg. Send Bandwidth,Avg. Recv. Bandwidth\n";
 }
 
 void EndReporting() {
