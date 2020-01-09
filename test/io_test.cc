@@ -16,10 +16,10 @@ limitations under the License.
 
 #include <iostream>
 
-#include "gtest/gtest.h"
 #include "apib/apib_iothread.h"
 #include "apib/apib_reporting.h"
 #include "apib/apib_url.h"
+#include "gtest/gtest.h"
 #include "test/test_server.h"
 
 using apib::BenchmarkResults;

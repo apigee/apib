@@ -1,7 +1,7 @@
 #!/bin/bash
 
 exitCode=0
-for f in src/*.h src/*.cc test/*.h test/*.cc
+for f in apib/*.h apib/*.cc test/*.h test/*.cc
 do
   replacements=`clang-format --style=google --output-replacements-xml ${f} | grep '<replacement ' | wc -l`
   if [ ${replacements} -gt 0 ]
@@ -16,7 +16,7 @@ then
   echo ""
   echo "******"
   echo "Some files need formatting."
-  echo "Run checkformat -i --style=google on each"
+  echo "Run clang-format -i --style=google on each"
   echo "******"
 fi
 

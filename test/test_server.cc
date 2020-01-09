@@ -34,9 +34,9 @@ limitations under the License.
 
 #include "absl/strings/numbers.h"
 #include "absl/strings/str_split.h"
-#include "http_parser.h"
 #include "apib/apib_lines.h"
 #include "apib/apib_util.h"
+#include "http_parser.h"
 
 using std::cerr;
 using std::cout;

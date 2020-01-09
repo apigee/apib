@@ -26,13 +26,13 @@ limitations under the License.
 #include <thread>
 #include <vector>
 
-#include "ev.h"
-#include "http_parser.h"
 #include "apib/apib_commandqueue.h"
 #include "apib/apib_lines.h"
 #include "apib/apib_oauth.h"
 #include "apib/apib_rand.h"
 #include "apib/apib_url.h"
+#include "ev.h"
+#include "http_parser.h"
 
 namespace apib {
 

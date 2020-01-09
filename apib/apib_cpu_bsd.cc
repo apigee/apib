@@ -14,11 +14,13 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-/* Don't let clang-format sort includes, or this will not compile. */
+/* clang-format off */
+/* Won't compile if sorted. */
 #include <sys/types.h>
 #include <sys/sysctl.h>
 #include <sys/times.h>
 #include <unistd.h>
+/* clang-format on */
 
 #include <cstring>
 

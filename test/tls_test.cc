@@ -17,10 +17,10 @@ limitations under the License.
 #include <assert.h>
 #include <openssl/ssl.h>
 
-#include "gtest/gtest.h"
 #include "apib/apib_iothread.h"
 #include "apib/apib_reporting.h"
 #include "apib/apib_url.h"
+#include "gtest/gtest.h"
 #include "test/test_keygen.h"
 #include "test/test_server.h"
 

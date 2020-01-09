@@ -28,9 +28,9 @@ limitations under the License.
 #include <iostream>
 #include <sstream>
 
-#include "http_parser.h"
 #include "apib/apib_lines.h"
 #include "apib/apib_util.h"
+#include "http_parser.h"
 
 #define URL_BUF_LEN 8192
 #define INITIAL_URLS 16

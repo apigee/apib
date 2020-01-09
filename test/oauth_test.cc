@@ -16,8 +16,8 @@ limitations under the License.
 
 #include <regex>
 
-#include "gtest/gtest.h"
 #include "apib/apib_oauth.h"
+#include "gtest/gtest.h"
 
 namespace {
 
