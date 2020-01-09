@@ -19,8 +19,8 @@ limitations under the License.
 
 #include <string>
 
-#include "src/apib_rand.h"
-#include "src/apib_url.h"
+#include "apib/apib_rand.h"
+#include "apib/apib_url.h"
 
 namespace apib {
 

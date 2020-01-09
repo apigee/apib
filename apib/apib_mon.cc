@@ -18,7 +18,7 @@ limitations under the License.
  * This is a program that returns CPU information over the network.
  */
 
-#include "src/apib_mon.h"
+#include "apib/apib_mon.h"
 
 #include <arpa/inet.h>
 #include <fcntl.h>
@@ -33,9 +33,9 @@ limitations under the License.
 #include <iostream>
 #include <sstream>
 
-#include "src/apib_cpu.h"
-#include "src/apib_lines.h"
-#include "src/apib_util.h"
+#include "apib/apib_cpu.h"
+#include "apib/apib_lines.h"
+#include "apib/apib_util.h"
 
 using std::cerr;
 using std::cout;

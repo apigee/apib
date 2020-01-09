@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-#include "src/apib_iothread.h"
+#include "apib/apib_iothread.h"
 
 #include <cassert>
 #include <functional>
@@ -23,12 +23,12 @@ limitations under the License.
 
 #include "absl/strings/str_join.h"
 #include "ev.h"
-#include "src/apib_lines.h"
-#include "src/apib_rand.h"
-#include "src/apib_reporting.h"
-#include "src/apib_time.h"
-#include "src/apib_url.h"
-#include "src/apib_util.h"
+#include "apib/apib_lines.h"
+#include "apib/apib_rand.h"
+#include "apib/apib_reporting.h"
+#include "apib/apib_time.h"
+#include "apib/apib_url.h"
+#include "apib/apib_util.h"
 
 namespace apib {
 

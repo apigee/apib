@@ -15,7 +15,7 @@ limitations under the License.
 */
 
 #include "gtest/gtest.h"
-#include "src/apib_commandqueue.h"
+#include "apib/apib_commandqueue.h"
 
 using apib::Command;
 using apib::CommandQueue;

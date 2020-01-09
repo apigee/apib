@@ -25,10 +25,10 @@ limitations under the License.
 
 #include "absl/strings/numbers.h"
 #include "gtest/gtest.h"
-#include "src/apib_cpu.h"
-#include "src/apib_lines.h"
-#include "src/apib_mon.h"
-#include "src/apib_util.h"
+#include "apib/apib_cpu.h"
+#include "apib/apib_lines.h"
+#include "apib/apib_mon.h"
+#include "apib/apib_util.h"
 
 using std::cout;
 using std::endl;

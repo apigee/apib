@@ -2,23 +2,26 @@
 
 BAZ_OPTS=-c opt --copt='-O3'
 
-all: apib apibmon
-.PHONY: apib apibmon test testserver
+all: bin/apib bin/apibmon
+.PHONY: bin/apib bin/apibmon test bin/testserver
 
-apib:
-	bazel build $(BAZ_OPTS) //src:apib
-	cp ./bazel-bin/src/apib .
-	chmod u+w ./apib
+bin/apib: bin
+	bazel build $(BAZ_OPTS) //apib
+	cp ./bazel-bin/apib/apib ./bin/apib
+	chmod u+w ./bin/apib
 
-apibmon:
-	bazel build $(BAZ_OPTS) //src:apibmon
-	cp ./bazel-bin/src/apibmon .
-	chmod u+w ./apibmon
+bin/apibmon: bin
+	bazel build $(BAZ_OPTS) //apib:apibmon
+	cp ./bazel-bin/apib/apibmon ./bin/apibmon
+	chmod u+w ./bin/apibmon
 
-testserver:
+bin/testserver: bin
 	bazel build $(BAZ_OPTS) //test:testserver
-	cp ./bazel-bin/test/testserver .
-	chmod u+w ./testserver
+	cp ./bazel-bin/test/testserver ./bin/testserver
+	chmod u+w ./bin/testserver
+
+bin:
+	mkdir bin
 
 test:
 	bazel test $(BAZ_OPTS) ...

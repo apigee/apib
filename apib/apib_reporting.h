@@ -23,7 +23,7 @@ limitations under the License.
 #include <string>
 #include <vector>
 
-#include "src/apib_iothread.h"
+#include "apib/apib_iothread.h"
 
 namespace apib {
 

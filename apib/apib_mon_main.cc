@@ -14,24 +14,25 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-#include "src/apib_commandqueue.h"
+#include <iostream>
 
-namespace apib {
+#include "apib/apib_mon.h"
 
-void CommandQueue::Add(Command cmd) {
-  std::lock_guard<std::mutex> l(lock_);
-  commands_.push_back(cmd);
-}
+int main(int argc, char** argv) {
+  apib::MonServer mon;
 
-bool CommandQueue::Pop(Command* dest) {
-  std::lock_guard<std::mutex> l(lock_);
-  if (commands_.empty()) {
-    return false;
+  if (argc != 2) {
+    std::cerr << "Usage: %s " << argv[0] << " <port>" << std::endl;
+    return 2;
   }
 
-  *dest = commands_.front();
-  commands_.pop_front();
-  return true;
-}
+  int err = mon.start("0.0.0.0", atoi(argv[1]));
+  if (err != 0) {
+    std::cerr << "Can't start monitoring server: " << err << std::endl;
+    return 2;
+  }
+  std::cout << "apibmon listening on port " << mon.port() << std::endl;
 
-}  // namespace apib
+  mon.join();
+  return 0;
+}

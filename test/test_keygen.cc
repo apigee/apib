@@ -26,7 +26,7 @@ limitations under the License.
 #include <openssl/x509.h>
 #include <openssl/x509v3.h>
 
-#include "src/apib_util.h"
+#include "apib/apib_util.h"
 
 namespace apib {
 

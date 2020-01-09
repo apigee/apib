@@ -14,24 +14,26 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-#include <unistd.h>
+#include "apib/apib_util.h"
 
-#include "src/apib_cpu.h"
+#include <cassert>
+#include <locale>
 
 namespace apib {
 
-int cpu_Init() { return -1; }
-
-int cpu_Count() { return (int)sysconf(_SC_NPROCESSORS_ONLN); }
-
-void cpu_GetUsage(CPUUsage* usage) {
-  usage->idle = 0;
-  usage->nonIdle = 0;
-  usage->timestamp = 0;
+bool eqcase(const absl::string_view s1, const absl::string_view s2) {
+  if (s1.size() != s2.size()) {
+    return false;
+  }
+  auto i2 = s2.cbegin();
+  for (auto i1 = s1.cbegin(); i1 != s1.cend(); i1++) {
+    assert(i2 != s2.cend());
+    if (tolower(*i1) != tolower(*i2)) {
+      return false;
+    }
+    i2++;
+  }
+  return true;
 }
-
-double cpu_GetInterval(CPUUsage* usage) { return 0.0; }
-
-double cpu_GetMemoryUsage() { return 0.0; }
 
 }  // namespace apib

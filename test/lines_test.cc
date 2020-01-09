@@ -15,7 +15,7 @@ limitations under the License.
 */
 
 #include "gtest/gtest.h"
-#include "src/apib_lines.h"
+#include "apib/apib_lines.h"
 
 using apib::LineState;
 

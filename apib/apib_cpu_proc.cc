@@ -23,9 +23,9 @@ limitations under the License.
 #include <iostream>
 
 #include "absl/strings/numbers.h"
-#include "src/apib_cpu.h"
-#include "src/apib_lines.h"
-#include "src/apib_time.h"
+#include "apib/apib_cpu.h"
+#include "apib/apib_lines.h"
+#include "apib/apib_time.h"
 
 #define PROC_BUF_LEN 8192
 

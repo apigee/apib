@@ -14,25 +14,23 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-#include "src/apib_util.h"
-
-#include <cassert>
-#include <locale>
+#include "apib/apib_commandqueue.h"
 
 namespace apib {
 
-bool eqcase(const absl::string_view s1, const absl::string_view s2) {
-  if (s1.size() != s2.size()) {
+void CommandQueue::Add(Command cmd) {
+  std::lock_guard<std::mutex> l(lock_);
+  commands_.push_back(cmd);
+}
+
+bool CommandQueue::Pop(Command* dest) {
+  std::lock_guard<std::mutex> l(lock_);
+  if (commands_.empty()) {
     return false;
   }
-  auto i2 = s2.cbegin();
-  for (auto i1 = s1.cbegin(); i1 != s1.cend(); i1++) {
-    assert(i2 != s2.cend());
-    if (tolower(*i1) != tolower(*i2)) {
-      return false;
-    }
-    i2++;
-  }
+
+  *dest = commands_.front();
+  commands_.pop_front();
   return true;
 }
 

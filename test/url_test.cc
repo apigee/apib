@@ -23,8 +23,8 @@ limitations under the License.
 #include <memory>
 
 #include "gtest/gtest.h"
-#include "src/apib_rand.h"
-#include "src/apib_url.h"
+#include "apib/apib_rand.h"
+#include "apib/apib_url.h"
 
 using apib::URLInfo;
 

@@ -23,7 +23,7 @@ limitations under the License.
 
 #include "absl/strings/string_view.h"
 #include "ev.h"
-#include "src/apib_cpu.h"
+#include "apib/apib_cpu.h"
 
 namespace apib {
 

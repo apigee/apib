@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-#include "src/apib_oauth.h"
+#include "apib/apib_oauth.h"
 
 #include <assert.h>
 #include <openssl/bio.h>
@@ -28,9 +28,9 @@ limitations under the License.
 
 #include "absl/strings/str_split.h"
 #include "absl/strings/string_view.h"
-#include "src/apib_rand.h"
-#include "src/apib_time.h"
-#include "src/apib_url.h"
+#include "apib/apib_rand.h"
+#include "apib/apib_time.h"
+#include "apib/apib_url.h"
 #include "third_party/base64.h"
 
 #define MAX_NUM_SIZE 256

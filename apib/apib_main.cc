@@ -29,12 +29,12 @@ limitations under the License.
 #include "absl/strings/numbers.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_split.h"
-#include "src/apib_cpu.h"
-#include "src/apib_iothread.h"
-#include "src/apib_oauth.h"
-#include "src/apib_reporting.h"
-#include "src/apib_url.h"
-#include "src/apib_util.h"
+#include "apib/apib_cpu.h"
+#include "apib/apib_iothread.h"
+#include "apib/apib_oauth.h"
+#include "apib/apib_reporting.h"
+#include "apib/apib_url.h"
+#include "apib/apib_util.h"
 #include "third_party/base64.h"
 
 using apib::eqcase;

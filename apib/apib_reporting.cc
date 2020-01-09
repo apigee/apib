@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-#include "src/apib_reporting.h"
+#include "apib/apib_reporting.h"
 
 #include <arpa/inet.h>
 #include <netdb.h>
@@ -36,8 +36,8 @@ limitations under the License.
 #include <vector>
 
 #include "absl/strings/str_format.h"
-#include "src/apib_cpu.h"
-#include "src/apib_time.h"
+#include "apib/apib_cpu.h"
+#include "apib/apib_time.h"
 
 using absl::StrFormat;
 using std::cerr;

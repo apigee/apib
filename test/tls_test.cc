@@ -18,9 +18,9 @@ limitations under the License.
 #include <openssl/ssl.h>
 
 #include "gtest/gtest.h"
-#include "src/apib_iothread.h"
-#include "src/apib_reporting.h"
-#include "src/apib_url.h"
+#include "apib/apib_iothread.h"
+#include "apib/apib_reporting.h"
+#include "apib/apib_url.h"
 #include "test/test_keygen.h"
 #include "test/test_server.h"
 

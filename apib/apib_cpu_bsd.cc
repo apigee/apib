@@ -22,8 +22,8 @@ limitations under the License.
 
 #include <cstring>
 
-#include "src/apib_cpu.h"
-#include "src/apib_time.h"
+#include "apib/apib_cpu.h"
+#include "apib/apib_time.h"
 
 namespace apib {
 

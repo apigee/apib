@@ -26,7 +26,7 @@ limitations under the License.
 #include <cassert>
 #include <iostream>
 
-#include "src/apib_iothread.h"
+#include "apib/apib_iothread.h"
 
 namespace apib {
 

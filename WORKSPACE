@@ -20,7 +20,7 @@ http_archive(
     build_file = "@//:libev.build",
     sha256 = "2d5526fc8da4f072dd5c73e18fbb1666f5ef8ed78b73bba12e195cfdd810344e",
     strip_prefix = "libev-4.27",
-    urls = ["http://dist.schmorp.de/libev/libev-4.27.tar.gz"],
+    urls = ["http://dist.schmorp.de/libev/Attic/libev-4.27.tar.gz"],
 )
 
 http_archive(

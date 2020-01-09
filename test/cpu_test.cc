@@ -15,7 +15,7 @@ limitations under the License.
 */
 
 #include "gtest/gtest.h"
-#include "src/apib_cpu.h"
+#include "apib/apib_cpu.h"
 
 namespace {
 

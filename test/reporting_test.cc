@@ -17,8 +17,8 @@ limitations under the License.
 #include <memory>
 
 #include "gtest/gtest.h"
-#include "src/apib_iothread.h"
-#include "src/apib_reporting.h"
+#include "apib/apib_iothread.h"
+#include "apib/apib_reporting.h"
 
 using apib::BenchmarkIntervalResults;
 using apib::BenchmarkResults;

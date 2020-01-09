@@ -14,24 +14,30 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-#include "gtest/gtest.h"
+#include "apib/apib_time.h"
+
+#include <cassert>
+#include <ctime>
+
 #include "apib/apib_util.h"
 
-using apib::eqcase;
+namespace apib {
 
-namespace {
+static const int64_t kNanosecond = 1000000000LL;
+static const double kNanosecondF = 1000000000.0;
+static const double kMillisecondF = 1000.0;
 
-TEST(Eqcase, Success) {
-  EXPECT_EQ(true, eqcase("", ""));
-  EXPECT_EQ(true, eqcase("Hello", "Hello"));
-  EXPECT_EQ(true, eqcase("Hello", "hello"));
-  EXPECT_EQ(true, eqcase("hello, world!", "HELLO, World!"));
+int64_t GetTime() {
+  struct timespec tp;
+  const int err = clock_gettime(CLOCK_REALTIME, &tp);
+  mandatoryAssert(err == 0);
+  return (((int64_t)tp.tv_sec) * kNanosecond) + tp.tv_nsec;
 }
 
-TEST(Eqcase, Failure) {
-  EXPECT_EQ(false, eqcase("Hello", "Hello, World!"));
-  EXPECT_EQ(false, eqcase("Hello", "ByeNo"));
-  EXPECT_EQ(false, eqcase(" ", ""));
+double Seconds(int64_t t) { return ((double)t) / kNanosecondF; }
+
+double Milliseconds(int64_t t) {
+  return ((double)t) / (kNanosecondF / kMillisecondF);
 }
 
-}  // namespace
+}  // namespace apib

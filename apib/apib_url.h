@@ -25,7 +25,7 @@ limitations under the License.
 #include <vector>
 
 #include "absl/strings/string_view.h"
-#include "src/apib_rand.h"
+#include "apib/apib_rand.h"
 
 namespace apib {
 

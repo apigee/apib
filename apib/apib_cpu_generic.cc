@@ -14,30 +14,24 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-#include "src/apib_time.h"
+#include <unistd.h>
 
-#include <cassert>
-#include <ctime>
-
-#include "src/apib_util.h"
+#include "apib/apib_cpu.h"
 
 namespace apib {
 
-static const int64_t kNanosecond = 1000000000LL;
-static const double kNanosecondF = 1000000000.0;
-static const double kMillisecondF = 1000.0;
+int cpu_Init() { return -1; }
 
-int64_t GetTime() {
-  struct timespec tp;
-  const int err = clock_gettime(CLOCK_REALTIME, &tp);
-  mandatoryAssert(err == 0);
-  return (((int64_t)tp.tv_sec) * kNanosecond) + tp.tv_nsec;
+int cpu_Count() { return (int)sysconf(_SC_NPROCESSORS_ONLN); }
+
+void cpu_GetUsage(CPUUsage* usage) {
+  usage->idle = 0;
+  usage->nonIdle = 0;
+  usage->timestamp = 0;
 }
 
-double Seconds(int64_t t) { return ((double)t) / kNanosecondF; }
+double cpu_GetInterval(CPUUsage* usage) { return 0.0; }
 
-double Milliseconds(int64_t t) {
-  return ((double)t) / (kNanosecondF / kMillisecondF);
-}
+double cpu_GetMemoryUsage() { return 0.0; }
 
 }  // namespace apib

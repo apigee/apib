@@ -28,11 +28,11 @@ limitations under the License.
 
 #include "ev.h"
 #include "http_parser.h"
-#include "src/apib_commandqueue.h"
-#include "src/apib_lines.h"
-#include "src/apib_oauth.h"
-#include "src/apib_rand.h"
-#include "src/apib_url.h"
+#include "apib/apib_commandqueue.h"
+#include "apib/apib_lines.h"
+#include "apib/apib_oauth.h"
+#include "apib/apib_rand.h"
+#include "apib/apib_url.h"
 
 namespace apib {
 
