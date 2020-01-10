@@ -6,12 +6,18 @@ jobs:
     steps:
       - checkout
       - run:
-        command: |
-          apt-get update
-          apt-get install -y g++ git make pkg-config python3 unzip wget zip zlib1g-dev
-          wget https://github.com/bazelbuild/bazel/releases/download/2.0.0/bazel-2.0.0-installer-linux-x86_64.sh
-          bash bazel-2.0.0-installer-linux-x86_64.sh
-
+          name: Install Packages
+          command: |
+            apt-get update
+            apt-get install -y g++ git make pkg-config python3 unzip wget zip zlib1g-dev
+            wget https://github.com/bazelbuild/bazel/releases/download/2.0.0/bazel-2.0.0-installer-linux-x86_64.sh
+            bash bazel-2.0.0-installer-linux-x86_64.sh
+      - restore_cache:
+          key: bazel-cache-v1
       - run:
-        command: bazel version
-        
+          name: Test
+          command: bazel test --disk_cache=/var/tmp/bazel-cache --test_output=all //test/...
+      - save_cache:
+          key: bazel-cache-v1
+          paths:
+          - /var/tmp/bazel-cache
