@@ -1,0 +1,17 @@
+version: 2
+jobs:
+  build:
+    docker:
+      - image: ubuntu:bionic
+    steps:
+      - checkout
+      - run:
+        command: |
+          apt-get update
+          apt-get install -y g++ git make pkg-config python3 unzip wget zip zlib1g-dev
+          wget https://github.com/bazelbuild/bazel/releases/download/2.0.0/bazel-2.0.0-installer-linux-x86_64.sh
+          bash bazel-2.0.0-installer-linux-x86_64.sh
+
+      - run:
+        command: bazel version
+        
