@@ -56,7 +56,7 @@ socklen_t Address::length() const {
       return 0;
     default:
       assert(0);
-      break;
+      return 0;
   }
 }
 
@@ -71,7 +71,7 @@ uint16_t Address::port() const {
       return 0;
     default:
       assert(0);
-      break;
+      return 0;
   }
 }
 
