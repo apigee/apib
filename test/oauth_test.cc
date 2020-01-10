@@ -44,9 +44,9 @@ class OAuthTest : public ::testing::Test {
 };
 
 TEST_F(OAuthTest, Rfc5849BaseAndHmac) {
-  ASSERT_EQ(0,
-            URLInfo::InitOne(
-                "http://example.com/request?b5=%3D%253D&a3=a&c%40=&a2=r%20b"));
+  ASSERT_TRUE(URLInfo::InitOne(
+                  "http://example.com/request?b5=%3D%253D&a3=a&c%40=&a2=r%20b")
+                  .ok());
   const std::string body = "c2&a3=2+q";
   const long timestamp = 137131201;
   const std::string nonce = "7d8f3e4a";
@@ -73,9 +73,9 @@ TEST_F(OAuthTest, Rfc5849BaseAndHmac) {
 }
 
 TEST_F(OAuthTest, QueryString) {
-  ASSERT_EQ(0,
-            URLInfo::InitOne(
-                "http://example.com/request?b5=%3D%253D&a3=a&c%40=&a2=r%20b"));
+  ASSERT_TRUE(URLInfo::InitOne(
+                  "http://example.com/request?b5=%3D%253D&a3=a&c%40=&a2=r%20b")
+                  .ok());
   const std::string body = "c2&a3=2+q";
 
   std::string query =
@@ -92,9 +92,9 @@ TEST_F(OAuthTest, QueryString) {
 }
 
 TEST_F(OAuthTest, AuthHeader) {
-  ASSERT_EQ(0,
-            URLInfo::InitOne(
-                "http://example.com/request?b5=%3D%253D&a3=a&c%40=&a2=r%20b"));
+  ASSERT_TRUE(URLInfo::InitOne(
+                  "http://example.com/request?b5=%3D%253D&a3=a&c%40=&a2=r%20b")
+                  .ok());
   const std::string body = "c2&a3=2+q";
 
   std::string hdr =

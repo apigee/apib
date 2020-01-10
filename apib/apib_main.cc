@@ -488,13 +488,15 @@ int main(int argc, char *const *argv) {
 
   if (!url.empty()) {
     if (url[0] == '@') {
-      if (URLInfo::InitFile(url.substr(1)) != 0) {
-        cerr << "Invalid URL file " << url.substr(1) << endl;
+      const auto s = URLInfo::InitFile(url.substr(1));
+      if (!s.ok()) {
+        cerr << "Error opening URL file: " << s << '\n';
         goto finished;
       }
     } else {
-      if (URLInfo::InitOne(url) != 0) {
-        cerr << "Invalid url: " << url << endl;
+      const auto s = URLInfo::InitOne(url);
+      if (!s.ok()) {
+        cerr << s << '\n';
         goto finished;
       }
     }

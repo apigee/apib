@@ -37,7 +37,13 @@ void ConnectionState::printSslError(const std::string& msg, int err) const {
 }
 
 int ConnectionState::Connect() {
-  fd_ = socket(AF_INET, SOCK_STREAM, 0);
+  const Address addr = url_->address(t_->threadIndex());
+  if (!addr.valid()) {
+    io_Verbose(this, "No addresses to look up\n");
+    return -1;
+  }
+
+  fd_ = socket(addr.family(), SOCK_STREAM, 0);
   assert(fd_ > 0);
 
   int yes = 1;
@@ -63,21 +69,13 @@ int ConnectionState::Connect() {
 
   io_Verbose(this, "Made new TCP connection %i\n", fd_);
 
-  size_t addrLen;
-  const struct sockaddr* addr = url_->address(t_->threadIndex(), &addrLen);
-  if (addr == nullptr) {
-    io_Verbose(this, "No addresses to look up\n");
-    return -2;
-  }
-
   if (t_->verbose) {
-    char hostName[512];
-    getnameinfo(addr, addrLen, hostName, 512, nullptr, 0, NI_NUMERICHOST);
-    io_Verbose(this, "Connecting to %s:%i\n", hostName,
-               ntohs(((struct sockaddr_in*)addr)->sin_port));
+    io_Verbose(this, "Connecting to %s\n", addr.str().c_str());
   }
 
-  err = connect(fd_, addr, addrLen);
+  struct sockaddr_storage netaddr;
+  const auto addrLen = addr.get(&netaddr);
+  err = connect(fd_, (struct sockaddr*)&netaddr, addrLen);
   if ((err != 0) && (errno == EINPROGRESS)) {
     err = 0;
   } else if (err != 0) {

@@ -65,7 +65,7 @@ static void compareReporting() {
 
 TEST_F(IOTest, OneThread) {
   char url[128];
-  sprintf(url, "http://localhost:%i/hello", testServerPort);
+  sprintf(url, "http://127.0.0.1:%i/hello", testServerPort);
   URLInfo::InitOne(url);
 
   IOThread* t = new IOThread();
@@ -83,7 +83,7 @@ TEST_F(IOTest, OneThread) {
 
 TEST_F(IOTest, OneRequest) {
   char url[128];
-  sprintf(url, "http://localhost:%i/hello", testServerPort);
+  sprintf(url, "http://127.0.0.1:%i/hello", testServerPort);
   URLInfo::InitOne(url);
 
   IOThread* t = new IOThread();
@@ -107,7 +107,7 @@ TEST_F(IOTest, OneRequest) {
 
 TEST_F(IOTest, OneThreadNoKeepAlive) {
   char url[128];
-  sprintf(url, "http://localhost:%i/hello", testServerPort);
+  sprintf(url, "http://127.0.0.1:%i/hello", testServerPort);
   URLInfo::InitOne(url);
 
   IOThread* t = new IOThread();
@@ -131,7 +131,7 @@ TEST_F(IOTest, OneThreadNoKeepAlive) {
 
 TEST_F(IOTest, OneThreadThinkTime) {
   char url[128];
-  sprintf(url, "http://localhost:%i/hello", testServerPort);
+  sprintf(url, "http://127.0.0.1:%i/hello", testServerPort);
   URLInfo::InitOne(url);
 
   IOThread* t = new IOThread();
@@ -152,7 +152,7 @@ TEST_F(IOTest, OneThreadThinkTime) {
 
 TEST_F(IOTest, OneThreadThinkTimeNoKeepAlive) {
   char url[128];
-  sprintf(url, "http://localhost:%i/hello", testServerPort);
+  sprintf(url, "http://127.0.0.1:%i/hello", testServerPort);
   URLInfo::InitOne(url);
 
   IOThread* t = new IOThread();
@@ -174,7 +174,7 @@ TEST_F(IOTest, OneThreadThinkTimeNoKeepAlive) {
 
 TEST_F(IOTest, OneThreadLarge) {
   char url[128];
-  sprintf(url, "http://localhost:%i/data?size=4000", testServerPort);
+  sprintf(url, "http://127.0.0.1:%i/data?size=4000", testServerPort);
   URLInfo::InitOne(url);
 
   IOThread* t = new IOThread();
@@ -194,7 +194,7 @@ TEST_F(IOTest, OneThreadLarge) {
 
 TEST_F(IOTest, MoreConnections) {
   char url[128];
-  sprintf(url, "http://localhost:%i/hello", testServerPort);
+  sprintf(url, "http://127.0.0.1:%i/hello", testServerPort);
   URLInfo::InitOne(url);
 
   IOThread* t = new IOThread();
@@ -214,7 +214,7 @@ TEST_F(IOTest, MoreConnections) {
 
 TEST_F(IOTest, ResizeCommand) {
   char url[128];
-  sprintf(url, "http://localhost:%i/hello", testServerPort);
+  sprintf(url, "http://127.0.0.1:%i/hello", testServerPort);
   URLInfo::InitOne(url);
 
   IOThread* t = new IOThread();
@@ -240,7 +240,7 @@ TEST_F(IOTest, ResizeCommand) {
 
 TEST_F(IOTest, ResizeFromZero) {
   char url[128];
-  sprintf(url, "http://localhost:%i/hello", testServerPort);
+  sprintf(url, "http://127.0.0.1:%i/hello", testServerPort);
   URLInfo::InitOne(url);
 
   IOThread* t = new IOThread();
@@ -264,7 +264,7 @@ TEST_F(IOTest, ResizeFromZero) {
 
 TEST_F(IOTest, OneThreadBigPost) {
   char url[128];
-  sprintf(url, "http://localhost:%i/echo", testServerPort);
+  sprintf(url, "http://127.0.0.1:%i/echo", testServerPort);
   URLInfo::InitOne(url);
 
   IOThread* t = new IOThread();
@@ -287,7 +287,7 @@ TEST_F(IOTest, OneThreadBigPost) {
 
 TEST_F(IOTest, OneThreadHeaders) {
   char url[128];
-  sprintf(url, "http://localhost:%i/hello", testServerPort);
+  sprintf(url, "http://127.0.0.1:%i/hello", testServerPort);
   URLInfo::InitOne(url);
 
   IOThread* t = new IOThread();
@@ -306,6 +306,35 @@ TEST_F(IOTest, OneThreadHeaders) {
 
   compareReporting();
   delete t->headers;
+}
+
+TEST_F(IOTest, IP6Address) {
+  // Start and stop a separate server here on a different address and port
+  apib::TestServer testServer6;
+  int err = testServer6.start("::1", 0, "", "");
+  ASSERT_EQ(err, 0);
+
+  char url[128];
+  sprintf(url, "http://[::1]:%i/hello", testServer6.port());
+  URLInfo::InitOne(url);
+
+  IOThread* t = new IOThread();
+  threads.push_back(std::unique_ptr<IOThread>(t));
+  t->numConnections = 1;
+  t->httpVerb = "GET";
+
+  RecordStart(true, threads);
+  t->Start();
+  sleep(1);
+  t->Stop();
+  RecordStop(threads);
+  BenchmarkResults results = ReportResults();
+
+  EXPECT_LT(0, results.successfulRequests);
+  EXPECT_EQ(0, results.unsuccessfulRequests);
+  EXPECT_EQ(0, results.socketErrors);
+
+  testServer6.stop();
 }
 
 }  // namespace
