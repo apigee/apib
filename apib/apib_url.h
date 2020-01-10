@@ -22,12 +22,16 @@ limitations under the License.
 
 #include <memory>
 #include <string>
-#include <vector>
 
 #include "absl/strings/string_view.h"
+#include "apib/addresses.h"
 #include "apib/apib_rand.h"
+#include "apib/status.h"
 
 namespace apib {
+
+class URLInfo;
+typedef std::unique_ptr<URLInfo> URLInfoPtr;
 
 /*
 Code for URL handling. The list of URLs is global. It's
@@ -36,25 +40,26 @@ assumed that code will call either "url_InitFile" or
 for each invocation. There's no locking because the "Get"
 functions don't change state.
 */
-
 class URLInfo {
  public:
   static const std::string kHttp;
   static const std::string kHttps;
 
-  URLInfo();
-  URLInfo(const URLInfo& u);
-  ~URLInfo();
+  URLInfo() {}
+  URLInfo(const URLInfo&) = delete;
+  URLInfo& operator=(const URLInfo&) = delete;
 
   /*
    * Set the following as the one and only one URL for this session.
+   * There will not be an error returned if DNS lookup fails, but
+   * "lookupStatus()" may be queried in that case.
    */
-  static int InitOne(const std::string& urlStr);
+  static Status InitOne(absl::string_view urlStr);
 
   /*
    * Read a list of URLs from a file, one line per URL.
    */
-  static int InitFile(const std::string& fileName);
+  static Status InitFile(absl::string_view fileName);
 
   /*
    * Clear the effects of one of the Init functions. This is helpful
@@ -72,40 +77,42 @@ class URLInfo {
    * Return whether the two URLs refer to the same host and port for the given
    * connection -- we use this to optimize socket management.
    */
-  static bool IsSameServer(const URLInfo& u1, const URLInfo& u2, int index);
+  static bool IsSameServer(const URLInfo& u1, const URLInfo& u2, int sequence);
 
   /*
    * Get the network address for the next request based on which connection is
-   * making it. Using the index number for each connection means that for a host
-   * with multiple IPs, we evenly distribute requests across them without
+   * making it. Using the sequence number for each connection means that for a
+   * host with multiple IPs, we evenly distribute requests across them without
    * opening a new connection for each request.
    */
-  struct sockaddr* address(int index, size_t* len) const;
+  Address address(int sequence) const {
+    return addresses_->get(port_, sequence);
+  }
 
-  unsigned int port() const { return port_; }
+  uint16_t port() const { return port_; }
   bool isSsl() const { return isSsl_; }
   std::string path() const { return path_; }
   std::string pathOnly() const { return pathOnly_; }
   std::string query() const { return query_; }
   std::string hostName() const { return hostName_; }
   std::string hostHeader() const { return hostHeader_; }
-  size_t addressCount() const { return addresses_.size(); }
+  size_t addressCount() const { return addresses_->size(); }
+  Status lookupStatus() const { return lookupStatus_; }
 
  private:
-  int init(const absl::string_view urlStr);
-  int initHost(const absl::string_view hostName);
+  Status init(absl::string_view urlStr);
 
-  std::vector<struct sockaddr*> addresses_;
-  std::vector<socklen_t> addressLengths_;
-  unsigned int port_;
+  uint16_t port_;
   bool isSsl_;
   std::string path_;
   std::string pathOnly_;
   std::string query_;
   std::string hostName_;
   std::string hostHeader_;
+  Status lookupStatus_;
+  AddressesPtr addresses_;
 
-  static std::vector<URLInfo> urls_;
+  static std::vector<URLInfoPtr> urls_;
   static bool initialized_;
 };
 

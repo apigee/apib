@@ -34,6 +34,7 @@ limitations under the License.
 
 #include "absl/strings/numbers.h"
 #include "absl/strings/str_split.h"
+#include "apib/addresses.h"
 #include "apib/apib_lines.h"
 #include "apib/apib_util.h"
 #include "http_parser.h"
@@ -391,20 +392,21 @@ int TestServer::start(const std::string& address, int port,
     }
   }
 
+  auto as = Addresses::lookup(address);
+  if (!as.ok()) {
+    cerr << "Invalid listen address: " << as << '\n';
+    return -1;
+  }
+
+  const Address listenAddr = as.valueref()->get(port);
+
   loop_ = ev_loop_new(EVFLAG_AUTO);
 
-  listenfd_ = socket(AF_INET, SOCK_STREAM, 0);
+  listenfd_ = socket(listenAddr.family(), SOCK_STREAM, 0);
   if (listenfd_ < 0) {
     perror("Cant' create socket");
     return -1;
   }
-
-  struct sockaddr_in addr;
-  addr.sin_family = AF_INET;
-  addr.sin_port = htons(port);
-  // Listen on localhost to avoid weird firewall stuff on Macs
-  // We may have to revisit if we test on platforms with a different address.
-  addr.sin_addr.s_addr = inet_addr(address.c_str());
 
   err = fcntl(listenfd_, F_SETFL, O_NONBLOCK);
   if (err != 0) {
@@ -412,8 +414,9 @@ int TestServer::start(const std::string& address, int port,
     return -2;
   }
 
-  err = bind(listenfd_, (const struct sockaddr*)&addr,
-             sizeof(struct sockaddr_in));
+  struct sockaddr_storage addr;
+  const socklen_t addrlen = listenAddr.get(&addr);
+  err = bind(listenfd_, (const struct sockaddr*)&addr, addrlen);
   if (err != 0) {
     perror("Can't bind to port");
     return -2;
@@ -447,11 +450,12 @@ TestServer::~TestServer() {
 }
 
 int TestServer::port() const {
-  struct sockaddr_in addr;
-  socklen_t addrlen = sizeof(struct sockaddr_in);
+  struct sockaddr_storage addr;
+  socklen_t addrlen = sizeof(struct sockaddr_storage);
 
   getsockname(listenfd_, (struct sockaddr*)&addr, &addrlen);
-  return ntohs(addr.sin_port);
+  const Address a((struct sockaddr*)&addr, addrlen);
+  return a.port();
 }
 
 void TestServer::resetStats() { stats_.reset(); }

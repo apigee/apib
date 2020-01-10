@@ -76,7 +76,7 @@ static SSL_CTX* setUpTLS() {
 
 TEST_F(TLSTest, Basic) {
   char url[128];
-  sprintf(url, "https://localhost:%i/hello", testServerPort);
+  sprintf(url, "https://127.0.0.1:%i/hello", testServerPort);
   URLInfo::InitOne(url);
 
   IOThread* t = new IOThread();
@@ -97,7 +97,7 @@ TEST_F(TLSTest, Basic) {
 
 TEST_F(TLSTest, NoKeepAlive) {
   char url[128];
-  sprintf(url, "https://localhost:%i/hello", testServerPort);
+  sprintf(url, "https://127.0.0.1:%i/hello", testServerPort);
   URLInfo::InitOne(url);
 
   IOThread* t = new IOThread();
@@ -119,7 +119,7 @@ TEST_F(TLSTest, NoKeepAlive) {
 
 TEST_F(TLSTest, Larger) {
   char url[128];
-  sprintf(url, "https://localhost:%i/data?size=8000", testServerPort);
+  sprintf(url, "https://127.0.0.1:%i/data?size=8000", testServerPort);
   URLInfo::InitOne(url);
 
   IOThread* t = new IOThread();
@@ -140,7 +140,7 @@ TEST_F(TLSTest, Larger) {
 
 TEST_F(TLSTest, VerifyPeerFailing) {
   char url[128];
-  sprintf(url, "https://localhost:%i/hello", testServerPort);
+  sprintf(url, "https://127.0.0.1:%i/hello", testServerPort);
   URLInfo::InitOne(url);
 
   IOThread* t = new IOThread();
@@ -164,7 +164,7 @@ TEST_F(TLSTest, VerifyPeerFailing) {
 
 TEST_F(TLSTest, VerifyPeerSuccess) {
   char url[128];
-  sprintf(url, "https://localhost:%i/hello", testServerPort);
+  sprintf(url, "https://127.0.0.1:%i/hello", testServerPort);
   URLInfo::InitOne(url);
 
   IOThread* t = new IOThread();

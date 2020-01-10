@@ -17,11 +17,13 @@ config_setting(
 cc_library(
     name = "common",
     srcs = [
+        "addresses.cc",
         "apib_lines.cc",
         "apib_rand.cc",
         "apib_time.cc",
         "apib_url.cc",
         "apib_util.cc",
+        "status.cc",
     ] + select({
         "apple": [
             "apib_cpu_generic.cc",
@@ -34,12 +36,14 @@ cc_library(
         ],
     }),
     hdrs = [
+        "addresses.h",
         "apib_cpu.h",
         "apib_lines.h",
         "apib_rand.h",
         "apib_time.h",
         "apib_url.h",
         "apib_util.h",
+        "status.h",
     ],
     linkopts = [
     	"-lm",
