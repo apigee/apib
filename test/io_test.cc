@@ -72,6 +72,7 @@ TEST_F(IOTest, OneThread) {
   threads.push_back(std::unique_ptr<IOThread>(t));
   t->numConnections = 1;
   t->httpVerb = "GET";
+  t->verbose = false;
 
   RecordStart(true, threads);
   t->Start();
@@ -312,7 +313,9 @@ TEST_F(IOTest, IP6Address) {
   // Start and stop a separate server here on a different address and port
   apib::TestServer testServer6;
   int err = testServer6.start("::1", 0, "", "");
-  ASSERT_EQ(err, 0);
+  if (err != 0) {
+    GTEST_SKIP() << "Can't listen on IP6";
+  }
 
   char url[128];
   sprintf(url, "http://[::1]:%i/hello", testServer6.port());

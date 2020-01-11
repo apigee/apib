@@ -59,16 +59,19 @@ cc_library(
     srcs = [
         "apib_commandqueue.cc",
         "apib_io_basic.cc",
-        "apib_io_socket.cc",
         "apib_iothread.cc",
         "apib_oauth.cc",
         "apib_reporting.cc",
+        "socket.cc",
+        "tlssocket.cc",
     ],
     hdrs = [
         "apib_commandqueue.h",
         "apib_iothread.h",
         "apib_oauth.h",
         "apib_reporting.h",
+        "socket.h",
+        "tlssocket.h",
     ],
     linkopts = [
         "-lpthread",

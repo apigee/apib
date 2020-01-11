@@ -31,6 +31,8 @@ limitations under the License.
 #include "apib/apib_oauth.h"
 #include "apib/apib_rand.h"
 #include "apib/apib_url.h"
+#include "apib/socket.h"
+#include "apib/tlssocket.h"
 #include "ev.h"
 #include "http_parser.h"
 
@@ -139,15 +141,6 @@ class IOThread {
   std::atomic_uintptr_t counterPtr_;
 };
 
-typedef enum {
-  OK,
-  NEED_READ,
-  NEED_WRITE,
-  FEOF,
-  TLS_ERROR,
-  SOCKET_ERROR
-} IOStatus;
-
 // This is an internal class used per connection.
 class ConnectionState {
  public:
@@ -194,11 +187,6 @@ class ConnectionState {
   void sendAfterDelay(double seconds);
   void recycle(bool closeConn);
   void writeRequest();
-  void printSslError(const std::string& msg, int err) const;
-
-  IOStatus doWrite(const void* buf, size_t count, size_t* written);
-  IOStatus doRead(void* buf, size_t count, size_t* readed);
-  IOStatus doClose();
 
   int singleRead(struct ev_loop* loop, ev_io* w, int revents);
   int singleWrite(struct ev_loop* loop, ev_io* w, int revents);
@@ -210,9 +198,8 @@ class ConnectionState {
 
   const int index_ = 0;
   bool keepRunning_ = 0;
+  std::unique_ptr<Socket> socket_;
   IOThread* t_ = nullptr;
-  int fd_ = 0;
-  SSL* ssl_ = nullptr;
   bool backwardsIo_ = false;
   ev_io io_;
   ev_timer thinkTimer_;

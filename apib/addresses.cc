@@ -143,7 +143,7 @@ Address Addresses::get(uint16_t port, int sequence) const {
     // Empty address, with "AF_UNSPEC" family.
     return Address();
   }
-  const int ix = sequence & addresses_.size();
+  const int ix = sequence % addresses_.size();
   Address ret = addresses_[ix];
   ret.setPort(port);
   return ret;
