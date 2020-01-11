@@ -30,12 +30,6 @@ limitations under the License.
 
 namespace apib {
 
-void ConnectionState::printSslError(const std::string& msg, int err) const {
-  char buf[256];
-  ERR_error_string_n(err, buf, 256);
-  std::cerr << buf << ": " << msg << std::endl;
-}
-
 int ConnectionState::Connect() {
   const Address addr = url_->address(t_->threadIndex());
   if (!addr.valid()) {
@@ -43,66 +37,29 @@ int ConnectionState::Connect() {
     return -1;
   }
 
-  fd_ = socket(addr.family(), SOCK_STREAM, 0);
-  assert(fd_ > 0);
-
-  int yes = 1;
-  // Set NODELAY to minimize latency and because we are not processing
-  // keystrokes
-  int err = setsockopt(fd_, IPPROTO_TCP, TCP_NODELAY, &yes, sizeof(int));
-  assert(err == 0);
-  // Set REUSEADDR for convenience when running lots of tests
-  err = setsockopt(fd_, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(int));
-  assert(err == 0);
-
-  struct linger linger;
-  linger.l_onoff = 0;
-  linger.l_linger = 0;
-  // Disable LINGER so that we don't run out of sockets when testing with
-  // keep-alive disabled. (We'll still need kernel settings often too.)
-  err = setsockopt(fd_, SOL_SOCKET, SO_LINGER, &linger, sizeof(struct linger));
-  assert(err == 0);
-
-  // The socket must be non-blocking or the rest of the logic doesn't work.
-  err = fcntl(fd_, F_SETFL, O_NONBLOCK);
-  assert(err == 0);
-
-  io_Verbose(this, "Made new TCP connection %i\n", fd_);
-
   if (t_->verbose) {
-    io_Verbose(this, "Connecting to %s\n", addr.str().c_str());
+    io_Verbose(this, "Connecting to %s. (TLS = %i)\n", addr.str().c_str(),
+               url_->isSsl());
+  }
+  std::unique_ptr<Socket> sock;
+  Status connectStatus;
+  if (url_->isSsl()) {
+    TLSSocket* ts = new TLSSocket();
+    connectStatus = ts->connectTLS(addr, url_->hostName(), t_->sslCtx);
+    sock.reset(ts);
+  } else {
+    Socket* ps = new Socket();
+    connectStatus = ps->connect(addr);
+    sock.reset(ps);
   }
 
-  struct sockaddr_storage netaddr;
-  const auto addrLen = addr.get(&netaddr);
-  err = connect(fd_, (struct sockaddr*)&netaddr, addrLen);
-  if ((err != 0) && (errno == EINPROGRESS)) {
-    err = 0;
-  } else if (err != 0) {
-    io_Verbose(this, "Error from connect(): %i\n", errno);
+  if (!connectStatus.ok()) {
+    io_Verbose(this, "Error on connect: %s\n", connectStatus.str().c_str());
+    return -1;
   }
 
-  if ((err == 0) && (url_->isSsl())) {
-    io_Verbose(this, "Setting up connection for TLS\n");
-    assert(t_->sslCtx != NULL);
-    ssl_ = SSL_new(t_->sslCtx);
-    if (ssl_ == NULL) {
-      printSslError("Can't create new SSL", ERR_get_error());
-      return -2;
-    }
-    int sslErr = SSL_set_fd(ssl_, fd_);
-    if (sslErr != 1) {
-      printSslError("Can't initialize SSL connection", sslErr);
-      return -2;
-    }
-    sslErr = SSL_set_tlsext_host_name(ssl_, url_->hostName().c_str());
-    if (sslErr != 1) {
-      printSslError("Can't set host name on SSL connection", sslErr);
-      return -3;
-    }
-    SSL_set_connect_state(ssl_);
-  }
-  return err;
+  socket_.swap(sock);
+  return 0;
 }
 
 void ConnectionState::completeShutdown(struct ev_loop* loop, ev_io* w,
@@ -113,23 +70,29 @@ void ConnectionState::completeShutdown(struct ev_loop* loop, ev_io* w,
   io_Verbose(c, "I/O ready on shutdown path: %i\n", revents);
 
   size_t readed;
-  const IOStatus s = c->doRead(NULL, 0, &readed);
+  const auto rs = c->socket_->read(NULL, 0, &readed);
+  if (!rs.ok()) {
+    io_Verbose(c, "Shutdown finished with error: %s\n",
+               rs.status().str().c_str());
+    ev_io_stop(loop, &(c->io_));
+    c->socket_.release();
+    c->CloseDone();
+    return;
+  }
 
-  switch (s) {
+  switch (rs.value()) {
     case OK:
     case FEOF:
-    case SOCKET_ERROR:
-    case TLS_ERROR:
       io_Verbose(c, "Close complete\n");
       ev_io_stop(loop, &(c->io_));
-      c->Reset();
+      c->socket_.release();
       c->CloseDone();
       break;
     case NEED_READ:
       io_Verbose(c, "Close needs read\n");
       if (c->backwardsIo_) {
         ev_io_stop(loop, &(c->io_));
-        ev_io_set(&(c->io_), c->fd_, EV_READ);
+        ev_io_set(&(c->io_), c->socket_->fd(), EV_READ);
         c->backwardsIo_ = false;
         ev_io_start(loop, &(c->io_));
       }
@@ -138,7 +101,7 @@ void ConnectionState::completeShutdown(struct ev_loop* loop, ev_io* w,
       io_Verbose(c, "Close needs write\n");
       if (!c->backwardsIo_) {
         ev_io_stop(loop, &(c->io_));
-        ev_io_set(&(c->io_), c->fd_, EV_WRITE);
+        ev_io_set(&(c->io_), c->socket_->fd(), EV_WRITE);
         c->backwardsIo_ = true;
         ev_io_start(loop, &(c->io_));
       }
@@ -147,20 +110,26 @@ void ConnectionState::completeShutdown(struct ev_loop* loop, ev_io* w,
 }
 
 void ConnectionState::Close() {
-  const IOStatus s = doClose();
-  switch (s) {
+  const auto cs = socket_->close();
+  if (!cs.ok()) {
+    io_Verbose(this, "Close finished with error: %s\n", cs.str().c_str());
+    ev_io_stop(t_->loop(), &io_);
+    socket_.release();
+    CloseDone();
+    return;
+  }
+
+  switch (cs.value()) {
     case OK:
     case FEOF:
-    case SOCKET_ERROR:
-    case TLS_ERROR:
       io_Verbose(this, "Close complete\n");
-      Reset();
+      socket_.release();
       CloseDone();
       break;
     case NEED_READ:
       io_Verbose(this, "Close needs read\n");
       ev_init(&io_, completeShutdown);
-      ev_io_set(&io_, fd_, EV_READ);
+      ev_io_set(&io_, socket_->fd(), EV_READ);
       backwardsIo_ = false;
       io_.data = this;
       ev_io_start(t_->loop(), &io_);
@@ -168,7 +137,7 @@ void ConnectionState::Close() {
     case NEED_WRITE:
       io_Verbose(this, "Close needs write\n");
       ev_init(&io_, completeShutdown);
-      ev_io_set(&io_, fd_, EV_WRITE);
+      ev_io_set(&io_, socket_->fd(), EV_WRITE);
       backwardsIo_ = true;
       io_.data = this;
       ev_io_start(t_->loop(), &io_);
@@ -186,10 +155,17 @@ int ConnectionState::singleWrite(struct ev_loop* loop, ev_io* w, int revents) {
   const size_t len = fullWrite_.size() - fullWritePos_;
   assert(len > 0);
   size_t wrote;
-  const IOStatus writeStatus =
-      doWrite(fullWrite_.data() + fullWritePos_, len, &wrote);
+  const auto writeStatus =
+      socket_->write(fullWrite_.data() + fullWritePos_, len, &wrote);
 
-  switch (writeStatus) {
+  if (!writeStatus.ok()) {
+    io_Verbose(this, "Error on write: %s\n", writeStatus.str().c_str());
+    ev_io_stop(loop, &io_);
+    WriteDone(-1);
+    return -1;
+  }
+
+  switch (writeStatus.value()) {
     case OK:
       io_Verbose(this, "Successfully wrote %zu bytes\n", wrote);
       fullWritePos_ += wrote;
@@ -204,19 +180,13 @@ int ConnectionState::singleWrite(struct ev_loop* loop, ev_io* w, int revents) {
     case FEOF:
       io_Verbose(this, "write wrote zero bytes. Ignoring.\n");
       return 1;
-    case SOCKET_ERROR:
-    case TLS_ERROR:
-      io_Verbose(this, "Error on write");
-      ev_io_stop(loop, &io_);
-      WriteDone(-1);
-      return -1;
     case NEED_WRITE:
       io_Verbose(this, "I/O would block on writing\n");
       if (backwardsIo_) {
         io_Verbose(this, "Restoring I/O direction\n");
         backwardsIo_ = false;
         ev_io_stop(loop, &io_);
-        ev_io_set(&io_, fd_, EV_WRITE);
+        ev_io_set(&io_, socket_->fd(), EV_WRITE);
         ev_io_start(loop, &io_);
       }
       return 0;
@@ -226,7 +196,7 @@ int ConnectionState::singleWrite(struct ev_loop* loop, ev_io* w, int revents) {
         io_Verbose(this, "Switching I/O direction\n");
         backwardsIo_ = true;
         ev_io_stop(loop, &io_);
-        ev_io_set(&io_, fd_, EV_READ);
+        ev_io_set(&io_, socket_->fd(), EV_READ);
         ev_io_start(loop, &io_);
       }
       return 0;
@@ -246,7 +216,7 @@ void ConnectionState::writeReady(struct ev_loop* loop, ev_io* w, int revents) {
 // Set up libev to asychronously write from writeBuf
 void ConnectionState::SendWrite() {
   ev_init(&io_, writeReady);
-  ev_io_set(&io_, fd_, EV_WRITE);
+  ev_io_set(&io_, socket_->fd(), EV_WRITE);
   backwardsIo_ = false;
   io_.data = this;
   ev_io_start(t_->loop(), &io_);
@@ -258,9 +228,19 @@ int ConnectionState::singleRead(struct ev_loop* loop, ev_io* w, int revents) {
   assert(len > 0);
 
   size_t readCount;
-  const IOStatus readStatus = doRead(readBuf_ + readBufPos_, len, &readCount);
+  const auto readStatus =
+      socket_->read(readBuf_ + readBufPos_, len, &readCount);
 
-  if (readStatus == OK) {
+  if (!readStatus.ok()) {
+    // Read error. Stop going.
+    io_Verbose(this, "Error reading from socket: %s\n",
+               readStatus.str().c_str());
+    ev_io_stop(loop, &io_);
+    ReadDone(-3);
+    return -1;
+  }
+
+  if (readStatus.value() == OK) {
     io_Verbose(this, "Successfully read %zu bytes\n", readCount);
     t_->recordRead(readCount);
     // Parse the data we just read plus whatever was left from before
@@ -303,40 +283,32 @@ int ConnectionState::singleRead(struct ev_loop* loop, ev_io* w, int revents) {
     return 1;
   }
 
-  if (readStatus == FEOF) {
+  if (readStatus.value() == FEOF) {
     io_Verbose(this, "EOF. Done = %i\n", readDone_);
     ev_io_stop(loop, &io_);
     ReadDone(readDone_ ? 0 : -2);
     return 0;
   }
 
-  if ((readStatus == SOCKET_ERROR) || (readStatus == TLS_ERROR)) {
-    // Read error. Stop going.
-    io_Verbose(this, "Error reading from socket\n");
-    ev_io_stop(loop, &io_);
-    ReadDone(-3);
-    return -1;
-  }
-
-  if (readStatus == NEED_READ) {
+  if (readStatus.value() == NEED_READ) {
     io_Verbose(this, "I/O would block on read\n");
     if (backwardsIo_) {
       io_Verbose(this, "Restoring I/O direction\n");
       backwardsIo_ = 0;
       ev_io_stop(loop, &io_);
-      ev_io_set(&io_, fd_, EV_READ);
+      ev_io_set(&io_, socket_->fd(), EV_READ);
       ev_io_start(loop, &io_);
     }
     return 0;
   }
 
-  if (readStatus == NEED_WRITE) {
+  if (readStatus.value() == NEED_WRITE) {
     io_Verbose(this, "I/O would block on write while reading\n");
     if (!backwardsIo_) {
       io_Verbose(this, "Switching I/O direction\n");
       backwardsIo_ = 1;
       ev_io_stop(loop, &io_);
-      ev_io_set(&io_, fd_, EV_WRITE);
+      ev_io_set(&io_, socket_->fd(), EV_WRITE);
       ev_io_start(loop, &io_);
     }
     return 0;
@@ -356,7 +328,7 @@ void ConnectionState::readReady(struct ev_loop* loop, ev_io* w, int revents) {
 // Set up libev to asynchronously read to readBuf
 void ConnectionState::SendRead() {
   ev_init(&io_, readReady);
-  ev_io_set(&io_, fd_, EV_READ);
+  ev_io_set(&io_, socket_->fd(), EV_READ);
   io_.data = this;
   backwardsIo_ = 0;
   ev_io_start(t_->loop(), &io_);
