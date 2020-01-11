@@ -46,26 +46,6 @@ bool URLInfo::initialized_ = false;
 const std::string URLInfo::kHttp = "http";
 const std::string URLInfo::kHttps = "https";
 
-/*
-URLInfo::URLInfo(const URLInfo& u) {
-  port_ = u.port_;
-  isSsl_ = u.isSsl_;
-  path_ = u.path_;
-  pathOnly_ = u.pathOnly_;
-  query_ = u.query_;
-  hostName_ = u.hostName_;
-  hostHeader_ = u.hostHeader_;
-
-  for (size_t i = 0; i < u.addresses_.size(); i++) {
-    const auto alen = u.addressLengths_[i];
-    struct sockaddr* addr = (struct sockaddr*)malloc(alen);
-    memcpy(addr, u.addresses_[i], alen);
-    addresses_.push_back(addr);
-    addressLengths_.push_back(alen);
-  }
-}
-*/
-
 static absl::string_view urlPart(const struct http_parser_url* pu,
                                  const absl::string_view urlstr, int part) {
   return urlstr.substr(pu->field_data[part].off, pu->field_data[part].len);

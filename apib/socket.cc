@@ -25,6 +25,12 @@ limitations under the License.
 
 namespace apib {
 
+Socket::~Socket() {
+  if (fd_ != 0) {
+    ::close(fd_);
+  }
+}
+
 Status Socket::connect(const Address& addr) {
   fd_ = socket(addr.family(), SOCK_STREAM, 0);
   if (fd_ <= 0) {
@@ -104,6 +110,7 @@ StatusOr<IOStatus> Socket::read(void* buf, size_t count, size_t* readed) {
 
 StatusOr<IOStatus> Socket::close() {
   const auto cs = ::close(fd_);
+  fd_ = 0;
   if (cs != 0) {
     return Status(Status::SOCKET_ERROR, errno);
   }

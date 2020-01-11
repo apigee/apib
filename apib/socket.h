@@ -33,10 +33,10 @@ typedef enum { OK, NEED_READ, NEED_WRITE, FEOF } IOStatus;
  */
 class Socket {
  public:
-  Socket() {}
+  Socket() :fd_(0) {}
   Socket(const Socket&) = delete;
   Socket& operator=(const Socket&) = delete;
-  virtual ~Socket() {}
+  virtual ~Socket();
 
   int fd() const { return fd_; }
 
@@ -47,7 +47,7 @@ class Socket {
   virtual StatusOr<IOStatus> close();
 
  protected:
-  int fd_ = 0;
+  int fd_;
 };
 
 }  // namespace apib

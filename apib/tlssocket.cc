@@ -16,8 +16,6 @@ limitations under the License.
 
 #include "apib/tlssocket.h"
 
-#include <unistd.h>
-
 #include <cassert>
 
 #include "openssl/err.h"
@@ -119,7 +117,7 @@ StatusOr<IOStatus> TLSSocket::read(void* buf, size_t count, size_t* readed) {
 StatusOr<IOStatus> TLSSocket::close() {
   const int s = SSL_shutdown(ssl_);
   if (s == 1) {
-    ::close(fd_);
+    Socket::close();
     return OK;
   }
   if (s == 0) {

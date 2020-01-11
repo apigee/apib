@@ -75,6 +75,7 @@ void ConnectionState::completeShutdown(struct ev_loop* loop, ev_io* w,
     io_Verbose(c, "Shutdown finished with error: %s\n",
                rs.status().str().c_str());
     ev_io_stop(loop, &(c->io_));
+    c->socket_.reset();
     c->CloseDone();
     return;
   }
@@ -84,6 +85,7 @@ void ConnectionState::completeShutdown(struct ev_loop* loop, ev_io* w,
     case FEOF:
       io_Verbose(c, "Close complete\n");
       ev_io_stop(loop, &(c->io_));
+      c->socket_.reset();
       c->CloseDone();
       break;
     case NEED_READ:
@@ -112,6 +114,7 @@ void ConnectionState::Close() {
   if (!cs.ok()) {
     io_Verbose(this, "Close finished with error: %s\n", cs.str().c_str());
     ev_io_stop(t_->loop(), &io_);
+    socket_.reset();
     CloseDone();
     return;
   }
@@ -120,6 +123,7 @@ void ConnectionState::Close() {
     case OK:
     case FEOF:
       io_Verbose(this, "Close complete\n");
+      socket_.reset();
       CloseDone();
       break;
     case NEED_READ:
