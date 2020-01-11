@@ -41,16 +41,16 @@ int ConnectionState::Connect() {
     io_Verbose(this, "Connecting to %s. (TLS = %i)\n", addr.str().c_str(),
                url_->isSsl());
   }
-  std::unique_ptr<Socket> sock;
+
+  std::unique_ptr<Socket> newSock;
   Status connectStatus;
   if (url_->isSsl()) {
     TLSSocket* ts = new TLSSocket();
     connectStatus = ts->connectTLS(addr, url_->hostName(), t_->sslCtx);
-    sock.reset(ts);
+    newSock.reset(ts);
   } else {
-    Socket* ps = new Socket();
-    connectStatus = ps->connect(addr);
-    sock.reset(ps);
+    newSock.reset(new Socket());
+    connectStatus = newSock->connect(addr);
   }
 
   if (!connectStatus.ok()) {
@@ -58,7 +58,7 @@ int ConnectionState::Connect() {
     return -1;
   }
 
-  socket_.swap(sock);
+  socket_.swap(newSock);
   return 0;
 }
 
@@ -75,7 +75,6 @@ void ConnectionState::completeShutdown(struct ev_loop* loop, ev_io* w,
     io_Verbose(c, "Shutdown finished with error: %s\n",
                rs.status().str().c_str());
     ev_io_stop(loop, &(c->io_));
-    c->socket_.release();
     c->CloseDone();
     return;
   }
@@ -85,7 +84,6 @@ void ConnectionState::completeShutdown(struct ev_loop* loop, ev_io* w,
     case FEOF:
       io_Verbose(c, "Close complete\n");
       ev_io_stop(loop, &(c->io_));
-      c->socket_.release();
       c->CloseDone();
       break;
     case NEED_READ:
@@ -114,7 +112,6 @@ void ConnectionState::Close() {
   if (!cs.ok()) {
     io_Verbose(this, "Close finished with error: %s\n", cs.str().c_str());
     ev_io_stop(t_->loop(), &io_);
-    socket_.release();
     CloseDone();
     return;
   }
@@ -123,7 +120,6 @@ void ConnectionState::Close() {
     case OK:
     case FEOF:
       io_Verbose(this, "Close complete\n");
-      socket_.release();
       CloseDone();
       break;
     case NEED_READ:

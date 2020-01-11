@@ -340,10 +340,6 @@ void IOThread::threadLoop() {
 
   threadLoopBody();
 
-  iothread_Verbose(this, "Cleaning up event loop %i\n", index);
-  for (auto it = connections_.cbegin(); it != connections_.cend(); it++) {
-    delete *it;
-  }
   ev_loop_destroy(loop_);
 }
 
@@ -353,6 +349,9 @@ IOThread::IOThread() {
 }
 
 IOThread::~IOThread() {
+  for (auto it = connections_.cbegin(); it != connections_.cend(); it++) {
+    delete *it;
+  }
   if (sslCtx != nullptr) {
     SSL_CTX_free(sslCtx);
   }
