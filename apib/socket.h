@@ -33,7 +33,7 @@ typedef enum { OK, NEED_READ, NEED_WRITE, FEOF } IOStatus;
  */
 class Socket {
  public:
-  Socket() :fd_(0) {}
+  Socket() : fd_(0) {}
   Socket(const Socket&) = delete;
   Socket& operator=(const Socket&) = delete;
   virtual ~Socket();
