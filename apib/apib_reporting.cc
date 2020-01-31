@@ -31,10 +31,10 @@ limitations under the License.
 #include <iostream>
 #include <mutex>
 #include <numeric>
-#include <regex>
 #include <valarray>
 #include <vector>
 
+#include "absl/strings/numbers.h"
 #include "absl/strings/str_format.h"
 #include "apib/apib_cpu.h"
 #include "apib/apib_time.h"
@@ -47,7 +47,6 @@ namespace apib {
 
 static const std::string kCPUCmd("cpu\n");
 static const std::string kMemCmd("mem\n");
-static const std::regex kHostPort("^([^:]+):([0-9]+)$");
 
 static std::mutex latch;
 static volatile bool reporting = 0;
@@ -81,17 +80,23 @@ static std::string remote2MonitorHost;
 static int64_t totalBytesSent = 0LL;
 static int64_t totalBytesReceived = 0LL;
 
-static void connectMonitor(const std::string& hn, int* fd) {
+static void connectMonitor(absl::string_view hn, int* fd) {
   assert(fd != NULL);
-  std::smatch hostPortMatch;
-  if (!std::regex_match(hn, hostPortMatch, kHostPort)) {
-    cerr << "Invalid monitor host \"" << hn << '\"' << endl;
+
+  const auto colonPos = hn.find(':');
+  if ((colonPos == absl::string_view::npos) || (colonPos == hn.size())) {
+    cerr << "Invalid monitor host \"" << hn << "\"\n";
     return;
   }
 
-  assert(hostPortMatch.size() == 2);
-  const std::string hostName = hostPortMatch[0];
-  const int port = stoi(hostPortMatch[1]);
+  const std::string hostName = std::string(hn.substr(0, colonPos));
+  absl::string_view portStr = hn.substr(colonPos + 1, hn.size() - colonPos - 1);
+  int port;
+  const bool portStrOk = absl::SimpleAtoi(portStr, &port);
+  if (!portStrOk) {
+    cerr << "Invalid monitor host and port \"" << hn << "\"\n";
+    return;
+  }
 
   struct addrinfo hints;
   // For now, look up only IP V4 addresses
