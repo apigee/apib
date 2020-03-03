@@ -31,6 +31,7 @@ limitations under the License.
 #include "apib/apib_oauth.h"
 #include "apib/apib_rand.h"
 #include "apib/apib_url.h"
+#include "apib/eventloop.h"
 #include "apib/socket.h"
 #include "apib/tlssocket.h"
 #include "ev.h"
@@ -95,8 +96,8 @@ class IOThread {
   // with their current requests.
   void SetNumConnections(int newConnections);
 
-  struct ev_loop* loop() {
-    return loop_;
+  EventLoop* loop() {
+    return &loop_;
   }
   int threadIndex() { return index; }
   http_parser_settings* parserSettings() { return &parserSettings_; }
@@ -123,7 +124,7 @@ class IOThread {
   void threadLoopBody();
   static void initializeParser();
   static void processCommands(struct ev_loop* loop, ev_async* a, int revents);
-  static void hardShutdown(struct ev_loop* loop, ev_timer* timer, int revents);
+  void hardShutdown();
   void setNumConnections(size_t newVal);
   Counters* getCounters() {
     return reinterpret_cast<Counters*>(counterPtr_.load());
@@ -134,10 +135,10 @@ class IOThread {
   std::vector<ConnectionState*> connections_;
   std::thread* thread_ = nullptr;
   RandomGenerator rand_;
-  struct ev_loop* loop_ = nullptr;
+  EventLoop loop_;
   ev_async async_;
   CommandQueue commands_;
-  ev_timer shutdownTimer_;
+  Timer shutdownTimer_;
   std::atomic_uintptr_t counterPtr_;
 };
 
@@ -194,7 +195,7 @@ class ConnectionState {
   static void completeShutdown(struct ev_loop* loop, ev_io* w, int revents);
   static void readReady(struct ev_loop* loop, ev_io* w, int revents);
   static void writeReady(struct ev_loop* loop, ev_io* w, int revents);
-  static void thinkingDone(struct ev_loop* loop, ev_timer* t, int revents);
+  void thinkingDone();
 
   const int index_ = 0;
   bool keepRunning_ = 0;
@@ -202,7 +203,7 @@ class ConnectionState {
   IOThread* t_ = nullptr;
   bool backwardsIo_ = false;
   ev_io io_;
-  ev_timer thinkTimer_;
+  Timer thinkTimer_;
   URLInfo* url_ = nullptr;
   bool writeDirty_ = true;
   std::ostringstream writeBuf_;

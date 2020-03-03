@@ -123,11 +123,9 @@ void ConnectionState::ConnectAndSend() {
   SendWrite();
 }
 
-void ConnectionState::thinkingDone(struct ev_loop* loop, ev_timer* t,
-                                   int revents) {
-  ConnectionState* c = (ConnectionState*)t->data;
-  io_Verbose(c, "Think time over\n");
-  c->ConnectAndSend();
+void ConnectionState::thinkingDone() {
+  io_Verbose(this, "Think time over\n");
+  ConnectAndSend();
 }
 
 void ConnectionState::addThinkTime() {
@@ -137,9 +135,7 @@ void ConnectionState::addThinkTime() {
 
 void ConnectionState::sendAfterDelay(double seconds) {
   io_Verbose(this, "Thinking for %.4lf seconds\n", seconds);
-  ev_timer_init(&thinkTimer_, thinkingDone, seconds, 0);
-  thinkTimer_.data = this;
-  ev_timer_start(t_->loop(), &thinkTimer_);
+  thinkTimer_.start(t_->loop(), seconds, std::bind(&ConnectionState::thinkingDone, this));
 }
 
 void ConnectionState::recycle(bool closeConn) {
@@ -263,12 +259,9 @@ void IOThread::setNumConnections(size_t newVal) {
   }
 }
 
-void IOThread::hardShutdown(struct ev_loop* loop, ev_timer* timer,
-                            int revents) {
-  assert(revents & EV_TIMER);
-  IOThread* t = (IOThread*)timer->data;
-  iothread_Verbose(t, "Going down for a hard shutdown\n");
-  ev_break(loop, EVBREAK_ALL);
+void IOThread::hardShutdown() {
+  iothread_Verbose(this, "Going down for a hard shutdown\n");
+  loop_.breakAll();
 }
 
 void IOThread::processCommands(struct ev_loop* loop, ev_async* a, int revents) {
@@ -280,13 +273,11 @@ void IOThread::processCommands(struct ev_loop* loop, ev_async* a, int revents) {
         iothread_Verbose(t, "Marking main loop to stop");
         t->keepRunning = 0;
         // We added this extra ref before we called ev_run
-        ev_unref(t->loop_);
+        t->loop().unref();
         // Set a timer that will fire only in case shutdown takes > 2 seconds
-        ev_timer_init(&(t->shutdownTimer_), hardShutdown, cmd.stopTimeoutSecs,
-                      0.0);
-        t->shutdownTimer_.data = t;
-        ev_timer_start(t->loop_, &(t->shutdownTimer_));
-        ev_unref(t->loop_);
+        t->shutdownTimer_.start(t->loop(), cmd.stopTimeoutSecs,
+          std::bind(&IOThread::hardShutdown, t));
+        t->loop().unref();
         break;
       case SET_CONNECTIONS:
         t->setNumConnections(cmd.newNumConnections);
@@ -304,16 +295,15 @@ void IOThread::threadLoopBody() {
     loopFlags |= EVBACKEND_SELECT;
   }
 
-  loop_ = ev_loop_new(loopFlags);
-  iothread_Verbose(this, "libev backend = %s\n",
-                   GetEvBackends(ev_backend(loop_)).c_str());
+  loop_.init(loopFlags);
+  iothread_Verbose(this, "libev backend = %s\n", loop_.backends().c_str());
 
   // Prepare to receive async events, and be sure that we don't block if there
   // are none.
   ev_async_init(&async_, processCommands);
   async_.data = this;
   ev_async_start(loop_, &async_);
-  ev_unref(loop_);
+  loop_.unref();
 
   for (int i = 0; i < numConnections; i++) {
     // First-time initialization of new connection
@@ -328,9 +318,9 @@ void IOThread::threadLoopBody() {
 
   // Add one more ref count so the loop will stay open even if zero connections
   if (keepRunning) {
-    ev_ref(loop_);
+    loop_.ref();
   }
-  const int ret = ev_run(loop_, 0);
+  const int ret = loop_.run();
   iothread_Verbose(this, "ev_run finished: %i\n", ret);
 }
 
@@ -339,8 +329,6 @@ void IOThread::threadLoop() {
                    index, numConnections);
 
   threadLoopBody();
-
-  ev_loop_destroy(loop_);
 }
 
 IOThread::IOThread() {
@@ -418,32 +406,6 @@ void IOThread::SetNumConnections(int newConnections) {
   commands_.Add(cmd);
   // Wake up the loop and cause the callback to be called.
   ev_async_send(loop_, &async_);
-}
-
-std::string IOThread::GetEvBackends(int b) {
-  std::vector<std::string> formats;
-  if (b & EVBACKEND_SELECT) {
-    formats.push_back("select");
-  }
-  if (b & EVBACKEND_POLL) {
-    formats.push_back("poll");
-  }
-  if (b & EVBACKEND_EPOLL) {
-    formats.push_back("epoll");
-  }
-  if (b & EVBACKEND_LINUXAIO) {
-    formats.push_back("linux AIO");
-  }
-  if (b & EVBACKEND_KQUEUE) {
-    formats.push_back("kqueue");
-  }
-  if (b & EVBACKEND_DEVPOLL) {
-    formats.push_back("/dev/poll");
-  }
-  if (b & EVBACKEND_PORT) {
-    formats.push_back("Solaris event port");
-  }
-  return absl::StrJoin(formats, ", ");
 }
 
 }  // namespace apib
