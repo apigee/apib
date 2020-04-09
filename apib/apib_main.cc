@@ -37,6 +37,8 @@ limitations under the License.
 #include "apib/apib_util.h"
 #include "third_party/base64.h"
 
+static const std::string kApibVersion = "1.2";
+
 using apib::eqcase;
 using apib::IOThread;
 using apib::OAuthInfo;
@@ -74,7 +76,7 @@ static int SetHeaders = 0;
 
 static OAuthInfo *OAuth = nullptr;
 
-static const char *const OPTIONS = "c:d:f:hk:t:u:vw:x:C:F:H:O:K:M:X:N:STVW:1";
+static const char *const OPTIONS = "c:d:f:hk:t:u:vw:x:C:F:H:O:K:M:X:N:STVW:Z1";
 
 static const struct option Options[] = {
     {"concurrency", required_argument, NULL, 'c'},
@@ -85,6 +87,7 @@ static const struct option Options[] = {
     {"content-type", required_argument, NULL, 't'},
     {"username-password", required_argument, NULL, 'u'},
     {"verbose", no_argument, NULL, 'v'},
+    {"version", no_argument, NULL, 'Z'},
     {"warmup", required_argument, NULL, 'w'},
     {"method", required_argument, NULL, 'x'},
     {"cipherlist", required_argument, NULL, 'C'},
@@ -113,6 +116,7 @@ static const char *const USAGE_DOCS =
     "-u --username-password  Credentials for HTTP Basic authentication\n"
     "       in username:password format\n"
     "-v --verbose            Verbose output\n"
+    "   --version            Version information\n"
     "-w --warmup             Warm-up duration, in seconds (default 0)\n"
     "-x --method             HTTP request method (default GET)\n"
     "-C --cipherlist         Cipher list offered to server for HTTPS\n"
@@ -149,14 +153,17 @@ static void printUsage() {
 }
 
 static void printLibraryInfo() {
-  cout << "Using Libev " << ev_version_major() << '.' << ev_version_minor()
-       << endl;
+  cout << "apib " << kApibVersion << '\n';
+  cout << "  (git commit $Id$)\n";
+  cout << "libev " << ev_version_major() << '.' << ev_version_minor() << '\n';
   cout << "  Supported backends: "
-       << IOThread::GetEvBackends(ev_supported_backends()) << endl;
+       << IOThread::GetEvBackends(ev_supported_backends()) << '\n';
   cout << "  Recommended backends: "
-       << IOThread::GetEvBackends(ev_recommended_backends()) << endl;
-  cout << "Using " << OpenSSL_version(OPENSSL_VERSION) << ' '
-       << OPENSSL_VERSION_TEXT << endl;
+       << IOThread::GetEvBackends(ev_recommended_backends()) << '\n';
+  cout << "http_parser " << HTTP_PARSER_VERSION_MAJOR << '.'
+       << HTTP_PARSER_VERSION_MINOR << '.' << HTTP_PARSER_VERSION_PATCH << '\n';
+  cout << OpenSSL_version(OPENSSL_VERSION) << ' ' << OPENSSL_VERSION_TEXT
+       << '\n';
 }
 
 static int setProcessLimits(int numConnections) {
@@ -359,6 +366,7 @@ int main(int argc, char *const *argv) {
   int duration = DefaultDuration;
   int warmupTime = DefaultWarmup;
   bool doHelp = false;
+  bool doVersion = false;
   std::string url;
   std::string monitorHost;
   std::string monitor2Host;
@@ -405,6 +413,9 @@ int main(int argc, char *const *argv) {
         break;
       case 'x':
         Verb = optarg;
+        break;
+      case 'Z':
+        doVersion = true;
         break;
       case 'C':
         SslCipher = optarg;
@@ -465,6 +476,14 @@ int main(int argc, char *const *argv) {
     }
   } while (arg >= 0);
 
+  if (doHelp) {
+    printUsage();
+    return 0;
+  } else if (doVersion) {
+    printLibraryInfo();
+    return 0;
+  }
+
   if (!failed && (optind == (argc - 1))) {
     url = argv[optind];
   } else {
@@ -475,9 +494,6 @@ int main(int argc, char *const *argv) {
   if (failed) {
     printUsage();
     return 1;
-  } else if (doHelp) {
-    printUsage();
-    return 0;
   }
 
   if (!ContentType.empty()) {
