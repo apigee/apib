@@ -123,7 +123,7 @@ void MonServer::acceptOne() {
   int flags = fcntl(fd, F_GETFL);
   flags &= ~O_NONBLOCK;
   int err = fcntl(fd, F_SETFL, flags);
-  assert(err == 0);
+  mandatoryAssert(err == 0);
 
   MonServerConnection* c = new MonServerConnection(fd);
   std::thread ct(std::bind(&MonServerConnection::socketLoop, c));

@@ -337,7 +337,7 @@ void TestServer::acceptOne() {
   int flags = fcntl(fd, F_GETFL);
   flags &= ~O_NONBLOCK;
   int err = fcntl(fd, F_SETFL, flags);
-  assert(err == 0);
+  mandatoryAssert(err == 0);
 
   TestConnection* c = new TestConnection(this, fd);
   std::thread ct(std::bind(&TestConnection::socketLoop, c));

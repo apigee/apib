@@ -64,8 +64,6 @@ static void compareReporting() {
 
   EXPECT_EQ(results.successfulRequests, stats.successCount);
   EXPECT_EQ(results.unsuccessfulRequests, stats.errorCount);
-  EXPECT_EQ(results.socketErrors, stats.socketErrorCount);
-  EXPECT_EQ(results.connectionsOpened, stats.connectionCount);
 }
 
 static SSL_CTX* setUpTLS() {

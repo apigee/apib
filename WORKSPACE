@@ -8,6 +8,7 @@ load(
     "new_git_repository",
 )
 
+# This version contains a patch that fixes things on FreeBSD.
 git_repository(
    name = "rules_foreign_cc",
    commit = "38358597f9380e9098eb5642169ad23c169df98e",
@@ -39,21 +40,22 @@ http_archive(
 http_archive(
     name = "httpparser",
     build_file = "@//:httpparser.build",
-    sha256 = "5199500e352584852c95c13423edc5f0cb329297c81dd69c3c8f52a75496da08",
-    strip_prefix = "http-parser-2.9.2",
-    urls = ["https://github.com/nodejs/http-parser/archive/v2.9.2.tar.gz"],
+    sha256 = "467b9e30fd0979ee301065e70f637d525c28193449e1b13fbcb1b1fab3ad224f",
+    strip_prefix = "http-parser-2.9.4",
+    urls = ["https://github.com/nodejs/http-parser/archive/v2.9.4.tar.gz"],
 )
 
+# Take a commit from the "build-with-bazel" branch
 git_repository(
     name = "boringssl",
-    commit = "e0c35d6c06fd800de1092f0b4d4326570ca2617a",
+    commit = "24193678fd35f7f4f8b9be216cc4e7a76f056081",
     remote = "https://boringssl.googlesource.com/boringssl",
-    shallow_since = "1566966435 +0000",
+    shallow_since = "1586447192 +0000"
 )
 
 http_archive(
     name = "absl",
-    sha256 = "8100085dada279bf3ee00cd064d43b5f55e5d913be0dfe2906f06f8f28d5b37e",
-    strip_prefix = "abseil-cpp-20190808",
-    urls = ["https://github.com/abseil/abseil-cpp/archive/20190808.tar.gz"],
+    sha256 = "0db0d26f43ba6806a8a3338da3e646bb581f0ca5359b3a201d8fb8e4752fd5f8",
+    strip_prefix = "abseil-cpp-20200225.1",
+    urls = ["https://github.com/abseil/abseil-cpp/archive/20200225.1.tar.gz"],
 )

@@ -44,7 +44,7 @@ typedef std::vector<Param> ParamList;
  * RFC5849. */
 static void appendEncoded(std::ostream& o, const absl::string_view str) {
   size_t p = 0;
-  while (str[p] != 0) {
+  while (p < str.size()) {
     if (isalnum(str[p]) || (str[p] == '-') || (str[p] == '.') ||
         (str[p] == '_') || (str[p] == '~')) {
       o << str[p];
