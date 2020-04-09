@@ -4,9 +4,9 @@ cc_library(
     hdrs = ["test_server.h"],
     deps = [
         "//apib:common",
+        "//third_party/libev",
         "@boringssl//:ssl",
         "@httpparser",
-        "@libev",
     ],
 )
 
@@ -112,6 +112,7 @@ cc_test(
         "//apib:io",
         "@gtest",
     ],
+    linkstatic = True,
 )
 
 cc_test(
@@ -123,6 +124,7 @@ cc_test(
         "//apib:io",
         "@gtest",
     ],
+    linkstatic = True,
 )
 
 cc_test(

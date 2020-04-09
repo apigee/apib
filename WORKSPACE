@@ -8,6 +8,19 @@ load(
     "new_git_repository",
 )
 
+git_repository(
+   name = "rules_foreign_cc",
+   commit = "38358597f9380e9098eb5642169ad23c169df98e",
+   remote = "https://github.com/gbrail/rules_foreign_cc.git",
+   shallow_since = "1586453104 -0700"
+)
+load("@rules_foreign_cc//:workspace_definitions.bzl", "rules_foreign_cc_dependencies")
+
+rules_foreign_cc_dependencies([])
+
+# Group the sources of the library so that make rule have access to it
+all_content = """filegroup(name = "all", srcs = glob(["**"]), visibility = ["//visibility:public"])"""
+
 http_archive(
     name = "gtest",
     sha256 = "9dc9157a9a1551ec7a7e43daea9a694a0bb5fb8bec81235d8a1e6ef64c716dcb",
@@ -17,10 +30,10 @@ http_archive(
 
 http_archive(
     name = "libev",
-    build_file = "@//:libev.build",
-    sha256 = "2d5526fc8da4f072dd5c73e18fbb1666f5ef8ed78b73bba12e195cfdd810344e",
-    strip_prefix = "libev-4.27",
-    urls = ["http://dist.schmorp.de/libev/Attic/libev-4.27.tar.gz"],
+    sha256 = "507eb7b8d1015fbec5b935f34ebed15bf346bed04a11ab82b8eee848c4205aea",
+    strip_prefix = "libev-4.33",
+    build_file_content = all_content,
+    urls = ["http://dist.schmorp.de/libev/Attic/libev-4.33.tar.gz"],
 )
 
 http_archive(

@@ -79,11 +79,11 @@ cc_library(
     deps = [
         ":common",
         "//third_party:base64",
+        "//third_party/libev",
         "@absl//absl/strings:str_format",
         "@boringssl//:crypto",
         "@boringssl//:ssl",
         "@httpparser",
-        "@libev",
     ],
 )
 
@@ -97,8 +97,8 @@ cc_library(
     ],
     deps = [
         ":common",
+        "//third_party/libev",
         "@absl//absl/strings",
-        "@libev",
     ],
     linkopts = [
         "-lpthread",
