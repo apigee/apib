@@ -92,7 +92,7 @@ void ConnectionState::completeShutdown(struct ev_loop* loop, ev_io* w,
       io_Verbose(c, "Close needs read\n");
       if (c->backwardsIo_) {
         ev_io_stop(loop, &(c->io_));
-        ev_io_set(&(c->io_), c->socket_->fd(), EV_READ);
+        ev_io_modify(&(c->io_), EV_READ);
         c->backwardsIo_ = false;
         ev_io_start(loop, &(c->io_));
       }
@@ -101,7 +101,7 @@ void ConnectionState::completeShutdown(struct ev_loop* loop, ev_io* w,
       io_Verbose(c, "Close needs write\n");
       if (!c->backwardsIo_) {
         ev_io_stop(loop, &(c->io_));
-        ev_io_set(&(c->io_), c->socket_->fd(), EV_WRITE);
+        ev_io_modify(&(c->io_), EV_WRITE);
         c->backwardsIo_ = true;
         ev_io_start(loop, &(c->io_));
       }
@@ -128,16 +128,14 @@ void ConnectionState::Close() {
       break;
     case NEED_READ:
       io_Verbose(this, "Close needs read\n");
-      ev_init(&io_, completeShutdown);
-      ev_io_set(&io_, socket_->fd(), EV_READ);
+      ev_io_init(&io_, completeShutdown, socket_->fd(), EV_READ);
       backwardsIo_ = false;
       io_.data = this;
       ev_io_start(t_->loop(), &io_);
       break;
     case NEED_WRITE:
       io_Verbose(this, "Close needs write\n");
-      ev_init(&io_, completeShutdown);
-      ev_io_set(&io_, socket_->fd(), EV_WRITE);
+      ev_io_init(&io_, completeShutdown, socket_->fd(), EV_WRITE);
       backwardsIo_ = true;
       io_.data = this;
       ev_io_start(t_->loop(), &io_);
@@ -215,8 +213,7 @@ void ConnectionState::writeReady(struct ev_loop* loop, ev_io* w, int revents) {
 
 // Set up libev to asychronously write from writeBuf
 void ConnectionState::SendWrite() {
-  ev_init(&io_, writeReady);
-  ev_io_set(&io_, socket_->fd(), EV_WRITE);
+  ev_io_init(&io_, writeReady, socket_->fd(), EV_WRITE);
   backwardsIo_ = false;
   io_.data = this;
   ev_io_start(t_->loop(), &io_);
@@ -296,7 +293,7 @@ int ConnectionState::singleRead(struct ev_loop* loop, ev_io* w, int revents) {
       io_Verbose(this, "Restoring I/O direction\n");
       backwardsIo_ = 0;
       ev_io_stop(loop, &io_);
-      ev_io_set(&io_, socket_->fd(), EV_READ);
+      ev_io_modify(&io_, EV_READ);
       ev_io_start(loop, &io_);
     }
     return 0;
@@ -308,7 +305,7 @@ int ConnectionState::singleRead(struct ev_loop* loop, ev_io* w, int revents) {
       io_Verbose(this, "Switching I/O direction\n");
       backwardsIo_ = 1;
       ev_io_stop(loop, &io_);
-      ev_io_set(&io_, socket_->fd(), EV_WRITE);
+      ev_io_modify(&io_, EV_WRITE);
       ev_io_start(loop, &io_);
     }
     return 0;
@@ -327,8 +324,7 @@ void ConnectionState::readReady(struct ev_loop* loop, ev_io* w, int revents) {
 
 // Set up libev to asynchronously read to readBuf
 void ConnectionState::SendRead() {
-  ev_init(&io_, readReady);
-  ev_io_set(&io_, socket_->fd(), EV_READ);
+  ev_io_init(&io_, readReady, socket_->fd(), EV_READ);
   io_.data = this;
   backwardsIo_ = 0;
   ev_io_start(t_->loop(), &io_);
