@@ -31,7 +31,7 @@ limitations under the License.
 #include "apib/apib_rand.h"
 #include "apib/apib_time.h"
 #include "apib/apib_url.h"
-#include "third_party/base64.h"
+#include "third_party/base64/base64.h"
 
 #define MAX_NUM_SIZE 256
 

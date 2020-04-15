@@ -170,7 +170,9 @@ TEST(URL, ParseLocalhost) {
 
 TEST(URL, ParseFile) {
   apib::RandomGenerator rand;
-  EXPECT_TRUE(URLInfo::InitFile("test/data/urls.txt").ok());
+  if (!URLInfo::InitFile("test/data/urls.txt").ok()) {
+    ASSERT_TRUE(URLInfo::InitFile("../../test/data/urls.txt").ok());
+  }
   for (int i = 0; i < 10000; i++) {
     const URLInfo* u = URLInfo::GetNext(&rand);
     ASSERT_NE(nullptr, u);

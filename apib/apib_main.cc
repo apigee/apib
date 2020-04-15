@@ -35,7 +35,7 @@ limitations under the License.
 #include "apib/apib_reporting.h"
 #include "apib/apib_url.h"
 #include "apib/apib_util.h"
-#include "third_party/base64.h"
+#include "third_party/base64/base64.h"
 
 static const std::string kApibVersion = "1.2";
 
