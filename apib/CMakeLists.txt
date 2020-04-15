@@ -18,13 +18,14 @@ add_library(
 )
 target_link_libraries(common http_parser absl::strings absl::str_format)
 
-add_library(
-  cpu 
-  apib_cpu_generic.cc
-)
+if(${CMAKE_SYSTEM_NAME} STREQUAL FreeBSD)
+  add_library(cpu apib_cpu_bsd.cc)
+elseif(${CMAKE_SYSTEM_NAME} STREQUAL Linux)
+  add_library(cpu apib_cpu_proc.cc)
+else()
+  add_library(cpu apib_cpu_generic.cc)
+endif()
 target_link_libraries(cpu common)
-
-# TODO apib_cpu_bsd for bsd, apib_cpu_proc for linux
 
 add_library(
   io 

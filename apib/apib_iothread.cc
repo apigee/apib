@@ -428,21 +428,31 @@ std::string IOThread::GetEvBackends(int b) {
   if (b & EVBACKEND_POLL) {
     formats.push_back("poll");
   }
+ #ifdef EVBACKEND_EPOLL
   if (b & EVBACKEND_EPOLL) {
     formats.push_back("epoll");
   }
+ #endif
+ #ifdef EVBACKEND_LINUXAIO
   if (b & EVBACKEND_LINUXAIO) {
     formats.push_back("linux AIO");
   }
+ #endif
+ #ifdef EVBACKEND_KQUEUE
   if (b & EVBACKEND_KQUEUE) {
     formats.push_back("kqueue");
   }
+ #endif
+ #ifdef EVBACKEND_DEVPOLL
   if (b & EVBACKEND_DEVPOLL) {
     formats.push_back("/dev/poll");
   }
+ #endif
+ #ifdef EVBACKEND_PORT
   if (b & EVBACKEND_PORT) {
     formats.push_back("Solaris event port");
   }
+ #endif
   return absl::StrJoin(formats, ", ");
 }
 
