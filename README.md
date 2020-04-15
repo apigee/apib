@@ -1,7 +1,7 @@
 # apib: API Bench
 
-This is a tool that makes it easy to run performance tests of HTTP API servers. It is built
-using [Bazel](https://www.bazel.build/) and can be built on most Linux platforms, plus Mac OS X and FreeBSD.
+This is a tool that makes it easy to run performance tests of HTTP API servers. It 
+can be built on most Linux platforms, plus Mac OS X and FreeBSD.
 
 ## Status
 
@@ -10,7 +10,7 @@ or pull requests if you find that you'd like it to do more within reason!
 
 ## Current Version
 
-1.0.
+1.2.1.
 
 ## Usage
 

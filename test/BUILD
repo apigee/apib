@@ -4,9 +4,9 @@ cc_library(
     hdrs = ["test_server.h"],
     deps = [
         "//apib:common",
+        "//third_party/http_parser",
         "//third_party/libev",
         "@boringssl//:ssl",
-        "@httpparser",
     ],
 )
 

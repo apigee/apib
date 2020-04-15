@@ -1,7 +1,7 @@
 package(default_visibility = ["//visibility:public"])
 
 cc_library(
-    name = "httpparser",
+    name = "http_parser",
     srcs = [
         "http_parser.c",
     ],
@@ -10,15 +10,5 @@ cc_library(
     ],
     copts = [
         "-DHTTP_PARSER_STRICT=0",
-    ],
-)
-
-cc_test(
-    name = "test",
-    srcs = [
-        "test.c",
-    ],
-    deps = [
-        ":httpparser",
     ],
 )

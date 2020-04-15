@@ -49,8 +49,8 @@ cc_library(
     	"-lm",
     ],
     deps = [
+        "//third_party/http_parser",
         "@absl//absl/strings",
-        "@httpparser",
     ],
 )
 
@@ -78,12 +78,12 @@ cc_library(
     ],
     deps = [
         ":common",
-        "//third_party:base64",
+        "//third_party/base64",
+        "//third_party/http_parser",
         "//third_party/libev",
         "@absl//absl/strings:str_format",
         "@boringssl//:crypto",
         "@boringssl//:ssl",
-        "@httpparser",
     ],
 )
 
@@ -112,7 +112,7 @@ cc_binary(
     ],
     deps = [
         ":io",
-        "//third_party:base64",
+        "//third_party/base64",
     ],
 )
 

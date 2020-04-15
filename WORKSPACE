@@ -37,14 +37,6 @@ http_archive(
     urls = ["http://dist.schmorp.de/libev/Attic/libev-4.33.tar.gz"],
 )
 
-http_archive(
-    name = "httpparser",
-    build_file = "@//:httpparser.build",
-    sha256 = "467b9e30fd0979ee301065e70f637d525c28193449e1b13fbcb1b1fab3ad224f",
-    strip_prefix = "http-parser-2.9.4",
-    urls = ["https://github.com/nodejs/http-parser/archive/v2.9.4.tar.gz"],
-)
-
 # Take a commit from the "build-with-bazel" branch
 git_repository(
     name = "boringssl",
