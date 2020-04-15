@@ -162,8 +162,7 @@ static void printLibraryInfo() {
        << IOThread::GetEvBackends(ev_recommended_backends()) << '\n';
   cout << "http_parser " << HTTP_PARSER_VERSION_MAJOR << '.'
        << HTTP_PARSER_VERSION_MINOR << '.' << HTTP_PARSER_VERSION_PATCH << '\n';
-  cout << OpenSSL_version(OPENSSL_VERSION) << ' ' << OPENSSL_VERSION_TEXT
-       << '\n';
+  cout << OpenSSL_version(OPENSSL_VERSION) << '\n';
 }
 
 static int setProcessLimits(int numConnections) {
