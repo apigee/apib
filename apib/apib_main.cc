@@ -37,7 +37,7 @@ limitations under the License.
 #include "apib/apib_util.h"
 #include "third_party/base64/base64.h"
 
-static const std::string kApibVersion = "1.2";
+static const std::string kApibVersion = "1.2.1";
 
 using apib::eqcase;
 using apib::IOThread;

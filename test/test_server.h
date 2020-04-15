@@ -30,7 +30,7 @@ limitations under the License.
 
 #include "absl/strings/string_view.h"
 #include "ev.h"
-#include "http_parser.h"
+#include "third_party/http_parser/http_parser.h"
 
 namespace apib {
 

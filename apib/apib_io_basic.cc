@@ -28,6 +28,10 @@ limitations under the License.
 
 #include "apib/apib_iothread.h"
 
+#if EV_VERSION_MAJOR > 4 || EV_VERSION_MINOR > 32
+#define HAS_IO_MODIFY 1
+#endif
+
 namespace apib {
 
 int ConnectionState::Connect() {
@@ -92,7 +96,11 @@ void ConnectionState::completeShutdown(struct ev_loop* loop, ev_io* w,
       io_Verbose(c, "Close needs read\n");
       if (c->backwardsIo_) {
         ev_io_stop(loop, &(c->io_));
+#ifdef HAS_IO_MODIFY
         ev_io_modify(&(c->io_), EV_READ);
+#else
+        ev_io_set(&(c->io_), c->socket_->fd(), EV_READ);
+#endif
         c->backwardsIo_ = false;
         ev_io_start(loop, &(c->io_));
       }
@@ -101,7 +109,11 @@ void ConnectionState::completeShutdown(struct ev_loop* loop, ev_io* w,
       io_Verbose(c, "Close needs write\n");
       if (!c->backwardsIo_) {
         ev_io_stop(loop, &(c->io_));
+#ifdef HAS_IO_MODIFY
         ev_io_modify(&(c->io_), EV_WRITE);
+#else
+        ev_io_set(&(c->io_), c->socket_->fd(), EV_WRITE);
+#endif
         c->backwardsIo_ = true;
         ev_io_start(loop, &(c->io_));
       }
@@ -293,7 +305,11 @@ int ConnectionState::singleRead(struct ev_loop* loop, ev_io* w, int revents) {
       io_Verbose(this, "Restoring I/O direction\n");
       backwardsIo_ = 0;
       ev_io_stop(loop, &io_);
+#ifdef HAS_IO_MODIFY
       ev_io_modify(&io_, EV_READ);
+#else
+      ev_io_set(&io_, socket_->fd(), EV_READ);
+#endif
       ev_io_start(loop, &io_);
     }
     return 0;
@@ -305,7 +321,11 @@ int ConnectionState::singleRead(struct ev_loop* loop, ev_io* w, int revents) {
       io_Verbose(this, "Switching I/O direction\n");
       backwardsIo_ = 1;
       ev_io_stop(loop, &io_);
+#ifdef HAS_IO_MODIFY
       ev_io_modify(&io_, EV_WRITE);
+#else
+      ev_io_set(&io_, socket_->fd(), EV_WRITE);
+#endif
       ev_io_start(loop, &io_);
     }
     return 0;

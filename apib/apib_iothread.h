@@ -34,7 +34,7 @@ limitations under the License.
 #include "apib/socket.h"
 #include "apib/tlssocket.h"
 #include "ev.h"
-#include "http_parser.h"
+#include "third_party/http_parser/http_parser.h"
 
 namespace apib {
 

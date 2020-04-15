@@ -37,7 +37,6 @@ limitations under the License.
 #include "apib/addresses.h"
 #include "apib/apib_lines.h"
 #include "apib/apib_util.h"
-#include "http_parser.h"
 
 using std::cerr;
 using std::cout;
