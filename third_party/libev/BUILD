@@ -1,6 +1,6 @@
 package(default_visibility = ["//visibility:public"])
 
-load("@rules_foreign_cc//tools/build_defs:configure.bzl", "configure_make")
+load("@rules_foreign_cc//foreign_cc:defs.bzl", "configure_make")
 
 configure_make(
   name = "libev",
@@ -12,9 +12,9 @@ configure_make(
   ],
   # Without this for some reason Bazel tries to send
   # ar commands to libtool!
-  configure_env_vars = {
+  env = {
     "AR": "",
   },
   # Bazel likes to use the shared libraries for tests
-  static_libraries = ["libev.a"],
+  out_static_libs = ["libev.a"],
 )

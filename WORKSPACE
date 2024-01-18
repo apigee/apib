@@ -11,13 +11,12 @@ load(
 # This version contains a patch that fixes things on FreeBSD.
 git_repository(
    name = "rules_foreign_cc",
-   commit = "38358597f9380e9098eb5642169ad23c169df98e",
-   remote = "https://github.com/gbrail/rules_foreign_cc.git",
-   shallow_since = "1586453104 -0700"
+   commit = "c2e097455d2bbf92b2ae71611d1261ba79eb8aa8",
+   remote = "https://github.com/bazelbuild/rules_foreign_cc",
 )
-load("@rules_foreign_cc//:workspace_definitions.bzl", "rules_foreign_cc_dependencies")
+load("@rules_foreign_cc//foreign_cc:repositories.bzl", "rules_foreign_cc_dependencies")
 
-rules_foreign_cc_dependencies([])
+rules_foreign_cc_dependencies()
 
 # Group the sources of the library so that make rule have access to it
 all_content = """filegroup(name = "all", srcs = glob(["**"]), visibility = ["//visibility:public"])"""
@@ -40,14 +39,12 @@ http_archive(
 # Take a commit from the "build-with-bazel" branch
 git_repository(
     name = "boringssl",
-    commit = "24193678fd35f7f4f8b9be216cc4e7a76f056081",
+    commit = "02802f26d75830f8e3041aa210c3a9cd27cc94d4",
     remote = "https://boringssl.googlesource.com/boringssl",
-    shallow_since = "1586447192 +0000"
 )
 
-http_archive(
+git_repository(
     name = "absl",
-    sha256 = "0db0d26f43ba6806a8a3338da3e646bb581f0ca5359b3a201d8fb8e4752fd5f8",
-    strip_prefix = "abseil-cpp-20200225.1",
-    urls = ["https://github.com/abseil/abseil-cpp/archive/20200225.1.tar.gz"],
+    commit = "fb3621f4f897824c0dbe0615fa94543df6192f30",
+    remote = "https://github.com/abseil/abseil-cpp",
 )
